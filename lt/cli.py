@@ -1,39 +1,14 @@
 import asyncio
-from pathlib import Path
 from sys import argv
 
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-from claude_agent_sdk.types import (
-    HookMatcher,
-)
-
-from lt.display import display_message
-from lt.hooks import check_bash_command
+from lt.agent import run_agent
 
 
 async def run():
-    options = ClaudeAgentOptions(
-        hooks={
-            "PreToolUse": [
-                HookMatcher(matcher="Bash", hooks=[check_bash_command]),
-            ],
-        },
-        setting_sources=["user", "project"],
-        permission_mode="acceptEdits",
-        cwd=Path(__file__).parent,
-    )
-
     if len(argv) < 2:
         print("Usage: lt <prompt>")
         return
-
-    prompt = argv[1]
-
-    async with ClaudeSDKClient(options=options) as client:
-        await client.query(prompt=prompt)
-
-        async for msg in client.receive_response():
-            display_message(msg)
+    await run_agent(prompt=argv[1])
 
 
 def main():
