@@ -9,7 +9,8 @@ from lt.display import display_message
 from lt.hooks import check_bash_command
 
 
-async def run_agent(*, prompt: str) -> None:
+async def run_agent(*, prompt: str, cwd: Path) -> None:
+    print(">>>", cwd)
     options = ClaudeAgentOptions(
         hooks={
             "PreToolUse": [
@@ -18,7 +19,7 @@ async def run_agent(*, prompt: str) -> None:
         },
         setting_sources=["user", "project"],
         permission_mode="acceptEdits",
-        cwd=Path(__file__).parent,
+        cwd=cwd,
     )
 
     async with ClaudeSDKClient(options=options) as client:
