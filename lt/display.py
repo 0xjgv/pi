@@ -1,5 +1,4 @@
 import json
-import logging
 
 from claude_agent_sdk.types import (
     AssistantMessage,
@@ -9,8 +8,6 @@ from claude_agent_sdk.types import (
     TextBlock,
 )
 
-logger = logging.getLogger(__name__)
-
 
 def display_message(msg: Message) -> None:
     """Standardized message display function."""
@@ -19,10 +16,12 @@ def display_message(msg: Message) -> None:
             if isinstance(block, TextBlock):
                 print(block.text)
     elif isinstance(msg, ResultMessage):
-        print("\n[Done]")
+        print("[Done]")
     elif isinstance(msg, SystemMessage):
         # Iterate over the attributes of the SystemMessage
         print(f"[System] {json.dumps(msg.data, indent=2)}")
     else:
-        print(f"[Error] Unknown message type: {type(msg)}", file=__import__('sys').stderr)
-        print(msg, file=__import__('sys').stderr)
+        print(
+            f"[Error] Unknown message type: {type(msg)}", file=__import__("sys").stderr
+        )
+        print(msg, file=__import__("sys").stderr)
