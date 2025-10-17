@@ -15,15 +15,15 @@ help:
 
 format:
 	@echo "Formatting code with ruff..."
-	uv run ruff format linus/ tests/
+	uv run ruff format .
 
 lint:
 	@echo "Linting code with ruff..."
-	uv run ruff check linus/ tests/
+	uv run ruff check .
 
 fix:
 	@echo "Fixing lint errors with ruff..."
-	uv run ruff check --fix linus/ tests/
+	uv run ruff check --fix .
 
 test:
 	@echo "Running tests with pytest..."

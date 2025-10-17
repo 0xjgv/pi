@@ -1,7 +1,7 @@
 [project]
 name = "lt"
 version = "0.1.0"
-description = "Add your description here"
+description = "LT CLI"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -12,3 +12,16 @@ dependencies = [
 dev = [
     "ruff>=0.14.1",
 ]
+
+[project.scripts]
+lt = "lt.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lt"]
+
+[tool.uv]
+package = true
