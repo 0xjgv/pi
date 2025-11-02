@@ -1,26 +1,26 @@
 ---
 description: Review existing implementation plans for completeness and accuracy
-model: haiku
+model: sonnet
 ---
 
 # Review Implementation Plan
 
-You are tasked with reviewing existing implementation plans for completeness and accuracy using the review-plan skill. You should be skeptical, thorough, and ensure changes are grounded in actual codebase reality.
+You are tasked with reviewing existing implementation plans for completeness and accuracy through systematic verification. You should be skeptical, thorough, and ensure changes are grounded in actual codebase reality.
 
 ## Purpose and Scope
 
 **What this command does**:
 
-- Invokes the `review-plan` skill to get independent feedback from multiple AI reviewers
-- Combines and prioritizes feedback from Codex and Claude reviewers
+- Performs systematic verification against a comprehensive checklist
 - Identifies gaps, inconsistencies, and areas requiring validation through codebase research
+- Categorizes findings by priority (blocking, high, optional, clarification needed)
 - Systematically addresses blocking and high-priority issues
 - Updates plans with verified, actionable improvements
 
 **What this command does NOT do**:
 
-- Create new plans from scratch (use `2_create_plan.md` for that)
-- Implement code changes (use `3_implement_plan.md` for that)
+- Create new plans from scratch (use `create_plan.md` for that)
+- Implement code changes (use `implement_plan.md` for that)
 - Replace human judgment on plan approval
 - Make arbitrary changes without reviewer guidance
 
@@ -40,7 +40,7 @@ You are tasked with reviewing existing implementation plans for completeness and
 /review_plan thoughts/plans/2025-10-XX-feature-name.md
 ```
 
-**Workflow**: Read → Review → Research → Confirm → Update → Sync
+**Workflow**: Read → Verify → Research → Confirm → Update → Sync
 
 ## Initial Response
 
@@ -65,83 +65,65 @@ When this command is invoked:
    - Note the success criteria and implementation approach
    - Identify the plan's stated goals and constraints
 
-### Step 2: Run Review Skill
+### Step 2: Perform Verification Checklist
 
-1. **Invoke the review skill in parallel**:
+1. **Go through the verification checklist systematically**:
 
-   Use the `prompt-codex` and `prompt-claude` skills to run both reviewers simultaneously:
+   Evaluate the plan against each verification criterion (in order of priority):
 
-   ```bash
-   # Codex reviewer (using prompt-codex skill)
-   codex exec "Review the following technical plan for completeness and accuracy and provide feedback.
-   Things to evaluate for (in order of priority):
+   **1. Libraries and Tools Verification**:
+   - Check if libraries mentioned have specific versions
+   - Verify tools are not deprecated or have known issues
+   - Identify any missing dependency specifications
 
-   - Verify the libraries and tools used in the technical plan are up to date and not deprecated
-   - Verify that the technical plan is aligned with the current codebase and product goals
-   - Verify the assumptions and dependencies in the technical plan are valid
-   - Verify the risks and mitigations in the technical plan are valid
-   - Verify the alignment and scope in the technical plan is valid
-   - Verify that the technical plan is complete and accurate
-   
-   Return a list of feedback items in the following format:
-   - [ ] [section/component/file:line] Feedback comment 1
-   - [ ] [section/component/file:line] Feedback comment 2
-   - [ ] [section/component/file:line] Feedback comment 3
-   
-   Answer only with the list of feedback items.
-   Plan to review: <absolute-path-to-plan.md>"
+   **2. Codebase Alignment Verification**:
+   - Verify the plan references actual files and components in the codebase
+   - Check if the proposed approach matches existing patterns
+   - Identify any conflicts with current architecture
 
-   # Claude reviewer (using prompt-claude skill)
-   claude -p "Review the following technical plan for completeness and accuracy and provide feedback.
-   Things to evaluate for (in order of priority):
+   **3. Assumptions and Dependencies Verification**:
+   - Review all stated assumptions for validity
+   - Check if dependencies are properly documented
+   - Identify any missing or unclear dependencies
 
-   - Verify the libraries and tools used in the technical plan are up to date and not deprecated
-   - Verify that the technical plan is aligned with the current codebase and product goals
-   - Verify the assumptions and dependencies in the technical plan are valid
-   - Verify the risks and mitigations in the technical plan are valid
-   - Verify the alignment and scope in the technical plan is valid
-   - Verify that the technical plan is complete and accurate
-   
-   Return a list of feedback items in the following format:
-   - [ ] [section/component/file:line] Feedback comment 1
-   - [ ] [section/component/file:line] Feedback comment 2
-   - [ ] [section/component/file:line] Feedback comment 3
-   
-   Answer only with the list of feedback items.
-   Plan to review: <absolute-path-to-plan.md>"
+   **4. Risks and Mitigations Verification**:
+   - Verify risks are realistic and relevant
+   - Check if mitigations are actionable
+   - Identify any missing risk considerations
+
+   **5. Scope and Alignment Verification**:
+   - Verify "What We're NOT Doing" section is complete
+   - Check if scope is clearly defined
+   - Identify any scope creep or ambiguity
+
+   **6. Completeness and Accuracy Verification**:
+   - Check if all phases have clear steps
+   - Verify success criteria are measurable
+   - Check if file:line references are specific
+   - Identify any vague or unclear sections
+
+2. **Document findings as feedback items**:
+
+   For each issue found, create a feedback item in the format:
+   ```
+   - [ ] [section/component/file:line] Feedback comment
    ```
 
-   **Key execution points**:
-   - Use the `prompt-claude` skill (`skills/prompt-claude/SKILL.md`) for Claude review
-   - Use the `prompt-codex` skill (`skills/prompt-codex/SKILL.md`) for Codex review
-   - Use absolute paths to the plan file
-   - Include the full plan content or path for context
-   - Add any user-specified focus areas at the end of the prompt
-   - Execute both commands in parallel for efficiency
-   - If the agent requests additional information, submit an answer to the question based on what the plan overview and contents indicate.
+   **Categorize each item by priority**:
+   - **Blocking**: Issues that prevent implementation or violate critical constraints
+   - **High**: Important gaps or inaccuracies that should be addressed
+   - **Optional**: Suggestions for improvement
+   - **Clarification Needed**: Items requiring more context
 
-2. **Wait for both reviewers to complete**:
-   - Wait for both the `prompt-claude` and `prompt-codex` skills to complete (timeout of 2 minutes)
-   - Ensure both reviewers have completed their reviews
-   - Ensure both reviewers have provided their feedback
-
-3. **Combine reviewer outputs**:
-   - Merge the checklists from Codex and Claude into a single list, marking duplicates as IMPORTANT to review (a duplicate finding means that both reviewers found the same issue, making it more likely to be a valid issue).
-   - Categorize each item by priority:
-     - **Blocking**: Issues that prevent implementation or violate critical constraints
-     - **High**: Important gaps or inaccuracies that should be addressed
-     - **Optional**: Suggestions for improvement
-     - **Clarification Needed**: Items requiring more context
-
-4. **Organize findings by plan section**:
+3. **Organize findings by plan section**:
    - Group feedback by the plan sections they affect (assumptions, phases, success criteria, etc.)
    - This makes it easier to apply updates systematically
 
-### Step 3: Research Gaps Identified by Reviewers
+### Step 3: Research Gaps Identified During Verification
 
-**Only spawn research tasks if reviewer findings require validation or additional technical understanding.**
+**Only spawn research tasks if verification findings require validation or additional technical understanding.**
 
-If reviewers surfaced questions about code patterns, dependencies, or technical feasibility:
+If verification surfaced questions about code patterns, dependencies, or technical feasibility:
 
 1. **Create a research todo list** using TodoWrite for tracking
 
@@ -157,14 +139,28 @@ If reviewers surfaced questions about code patterns, dependencies, or technical 
    - **thoughts-locator** - To find related research or decisions
    - **thoughts-analyzer** - To extract insights from documents
 
+   **For external validation (use conditionally):**
+   - **web-search-researcher** - To validate libraries, tools, and external dependencies
+
+   **When to use web-search-researcher**:
+   - Plan mentions specific library versions (check if deprecated/vulnerable)
+   - Questions about external APIs or third-party services
+   - Security concerns about dependencies
+   - Unfamiliar technologies that need validation
+   - Verifying best practices for specific tools
+
+   **When NOT to use web-search-researcher**:
+   - Internal architecture decisions
+   - Codebase-specific patterns
+   - Every review (adds latency)
+   - Questions answerable from codebase alone
+
    **Be EXTREMELY specific about directories**:
-   - If the change involves "WUI", specify `humanlayer-wui/` directory
-   - If it involves "daemon", specify `hld/` directory
    - Include full path context in prompts
 
 3. **Read any new files identified by research**:
    - Read them FULLY into the main context
-   - Cross-reference with the reviewer findings
+   - Cross-reference with the verification findings
 
 4. **Wait for ALL sub-tasks to complete** before proceeding
 
@@ -267,34 +263,35 @@ Should I proceed with these updates?
 
 ## Important Guidelines
 
-1. **Review First, Act Second**:
-   - Always run the review skill before making changes
-   - Let reviewer feedback guide what needs fixing
-   - Don't assume what's wrong - let the reviewers tell you
+1. **Verify First, Act Second**:
+   - Always complete the verification checklist before making changes
+   - Let verification findings guide what needs fixing
+   - Don't assume what's wrong - systematically check each criterion
    - Research to validate findings, not to guess at solutions
 
 2. **Be Skeptical**:
-   - Don't blindly accept reviewer feedback without validation
-   - If a finding seems wrong, research to verify
-   - Question vague feedback - ask reviewers or user for clarification
-   - Verify technical feasibility with code research before updating plan
-   - Point out potential conflicts between reviewer suggestions
+   - Don't create findings without evidence
+   - If something seems unclear, research to verify
+   - Question vague sections in the plan - ask user for clarification
+   - Verify technical feasibility with code research before flagging issues
+   - Distinguish between actual problems and alternative approaches
 
 3. **Be Surgical**:
    - Make precise edits, not wholesale rewrites
    - Preserve good content that doesn't need changing
-   - Only research what's necessary to address reviewer findings
+   - Only research what's necessary to address verification findings
    - Don't over-engineer the updates
 
 4. **Be Thorough**:
-   - Read the entire existing plan before running review
+   - Read the entire existing plan before verification
+   - Go through each verification criterion systematically
    - Address all blocking and high-priority findings
-   - Research code patterns to validate reviewer concerns
+   - Research code patterns to validate verification concerns
    - Ensure updated sections maintain quality standards
    - Verify success criteria are measurable after updates
 
 5. **Be Interactive**:
-   - Present review findings before making changes
+   - Present verification findings before making changes
    - Show what you plan to change and why
    - Allow user to prioritize or deprioritize findings
    - Communicate progress during research phases
@@ -305,7 +302,7 @@ Should I proceed with these updates?
    - Mark tasks complete when addressed
 
 7. **No Open Questions**:
-   - If a reviewer finding is unclear, ask for clarification
+   - If a verification finding is unclear, research or ask for clarification
    - If research is inconclusive, escalate to user
    - Do NOT update the plan with unresolved questions
    - Every change must be complete and actionable
@@ -348,8 +345,8 @@ When spawning research sub-tasks:
 
 ```markdown
 User: /review_plan thoughts/plans/2025-10-16-feature.md
-Assistant: [Reads plan, runs review skill with both codex and claude]
-Assistant: Review complete. Found 3 blocking issues, 5 high-priority items...
+Assistant: [Reads plan, performs verification checklist]
+Assistant: Verification complete. Found 3 blocking issues, 5 high-priority items...
 [Presents organized findings]
 User: Yes, please fix all blocking and high-priority issues
 Assistant: [Makes targeted edits, syncs, presents results]
@@ -359,8 +356,8 @@ Assistant: [Makes targeted edits, syncs, presents results]
 
 ```markdown
 User: /review_plan thoughts/plans/2025-10-17-api-changes.md
-Assistant: [Reads plan, runs review]
-Assistant: Reviewers question whether the authentication flow matches current implementation.
+Assistant: [Reads plan, performs verification]
+Assistant: Verification identified that the authentication flow references may not match current implementation.
 Let me research the actual auth patterns...
 Assistant: [Spawns codebase-analyzer for auth directory]
 Assistant: [Presents findings with validated information]
@@ -372,20 +369,37 @@ Assistant: [Updates plan with accurate technical details]
 
 ```markdown
 User: /review_plan thoughts/plans/2025-10-18-db-migration.md - I'm worried about the success criteria
-Assistant: [Reads plan, runs review with focus on success criteria]
-Assistant: Review complete. Reviewers also flagged the success criteria as unmeasurable.
+Assistant: [Reads plan, performs verification with focus on success criteria]
+Assistant: Verification complete. Success criteria are indeed unmeasurable.
 Additionally found assumptions about database version that may be outdated...
 [Shows prioritized findings]
 User: Fix the success criteria and verify the DB version assumption
 Assistant: [Researches DB version, updates plan systematically]
 ```
 
-### Scenario 4: Plan is already high quality
+### Scenario 4: Review with external validation needed
+
+```markdown
+User: /review_plan thoughts/plans/2025-10-20-upgrade-dependencies.md
+Assistant: [Reads plan, performs verification]
+Assistant: Verification found the plan mentions upgrading to React 18.2.0 and Express 4.x.
+Let me research if these versions are current and check for any security advisories...
+Assistant: [Spawns web-search-researcher for React and Express versions]
+Assistant: Research found:
+- React 18.2.0 is current but 18.3.1 is available with bug fixes
+- Express 4.x has a security advisory - should specify 4.19.2+
+
+I'll update the plan with these findings.
+User: Good catch, proceed
+Assistant: [Updates plan with correct versions and security notes]
+```
+
+### Scenario 5: Plan is already high quality
 
 ```markdown
 User: /review_plan thoughts/plans/2025-10-19-refactor.md
-Assistant: [Reads plan, runs review]
-Assistant: Great news! The review found only minor optional improvements:
+Assistant: [Reads plan, performs verification]
+Assistant: Great news! Verification found only minor optional improvements:
 - Optional: Consider adding performance benchmarks to success criteria
 - Optional: Link to similar past refactors in thoughts/
 
@@ -396,22 +410,23 @@ Assistant: Plan approved. Ready for implementation!
 
 ## Troubleshooting
 
-### Issue: Reviewers return empty or vague feedback
+### Issue: Verification finds no issues in a clearly incomplete plan
 
 **Solution**:
 
-- Ensure the plan file is readable and contains substantial content
-- Verify the absolute path to the plan is correct
-- Check that the plan follows expected structure (phases, success criteria, etc.)
-- Try adding specific focus areas in the prompt: "Pay special attention to [section]"
+- Review the verification checklist more carefully
+- Check each section of the plan systematically
+- Don't rush through the verification process
+- Ask user if they have specific concerns to investigate
 
-### Issue: Duplicate feedback items flagged but not actually duplicates
+### Issue: Too many findings make it hard to prioritize
 
 **Solution**:
 
-- This indicates conceptual similarity even if wording differs
-- Treat as a signal that the issue is particularly important
-- Investigate both perspectives to get complete understanding
+- Focus on blocking and high-priority items first
+- Ask user which areas they care about most
+- Consider addressing optional items in a follow-up review
+- Document deferred items in plan's "Future Improvements" section
 
 ### Issue: Research tasks return irrelevant results
 
@@ -422,32 +437,26 @@ Assistant: Plan approved. Ready for implementation!
 - Request file:line references explicitly
 - Spawn follow-up clarification tasks
 
-### Issue: Conflicting feedback between reviewers
+### Issue: Uncertain whether something is actually an issue
 
 **Solution**:
 
-- This is expected - different perspectives are valuable
-- Research the codebase to determine which is correct
-- Document both perspectives if both have merit
-- Escalate to user if unresolvable
-
-### Issue: Too many optional findings, hard to prioritize
-
-**Solution**:
-
-- Focus on blocking and high-priority items first
-- Ask user which optional items they care about most
-- Consider deferring optional items to a follow-up review
-- Document deferred items in plan's "Future Improvements" section
+- Research the codebase to verify
+- Mark as "Clarification Needed" if still uncertain
+- Ask user for their perspective
+- Escalate ambiguous findings rather than making assumptions
 
 ## Related Commands
 
-- **`2_create_plan.md`**: Create new implementation plans from scratch
-- **`2.5_iterate_plan.md`**: Iterate on plans based on user-requested changes
-- **`3_implement_plan.md`**: Execute the implementation of a reviewed plan
-- **`5_validate_plan.md`**: Validate plan assumptions against codebase
+- **`create_plan.md`**: Create new implementation plans from scratch
+- **`iterate_plan.md`**: Iterate on plans based on user-requested changes
+- **`implement_plan.md`**: Execute the implementation of a reviewed plan
+- **`validate_plan.md`**: Validate plan assumptions against codebase
 
 ## References
 
-- **Research Agents**: `agents/codebase-*.md`, `agents/thoughts-*.md`, `agents/web-search-*.md`
+- **Research Agents**:
+  - Code: `codebase-locator`, `codebase-analyzer`, `codebase-pattern-finder`
+  - Historical: `thoughts-locator`, `thoughts-analyzer`
+  - External: `web-search-researcher` (conditional use)
 - **Plan Template**: Check existing plans in `thoughts/plans/` for structure
