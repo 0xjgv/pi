@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 from sys import argv
 
-from lt.agent import run_agent
+from lt.workflow import run_workflow
 
 cwd = Path(__file__).parent.parent
 
@@ -11,7 +11,11 @@ async def run():
     if len(argv) < 2:
         print('Usage: lt "<prompt>"')
         return
-    await run_agent(prompt=argv[1].strip('"'), cwd=cwd)
+    result = await run_workflow(
+        prompt=argv[1].strip('"'),
+        cwd=cwd,
+    )
+    print(f"Result: {result}")
 
 
 def main():
