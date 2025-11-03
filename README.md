@@ -36,28 +36,23 @@ pip install -e .
 ## Run
 
 ```bash
-python main.py "Summarize the project files"
+π "Summarize the project files" # or: uv run π "Summarize the project files"
 ```
 
 Claude receives the prompt, works within the current directory, and streams output back to the terminal.
 
 ## Configuration
 
-Key defaults live in `main.py`:
-
 - `permission_mode="acceptEdits"` — auto-applies file changes suggested by Claude
 - `stream=True` — prints tokens as they arrive
 - Working directory is whatever path you launch the CLI from
-
-Adjust these values directly in `main.py` if you need a different behavior.
 
 ## Development
 
 Common tasks are bundled into the `Makefile`:
 
+- `make install` – install pyproject deps
 - `make format` – format with Ruff
-- `make lint` – run Ruff lint
-- `make test` – execute pytest suite
 - `make check` – lint plus tests
 - `make clean` – drop build artifacts and caches
 
