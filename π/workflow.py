@@ -7,7 +7,7 @@ from claude_agent_sdk.types import (
 
 from π.agent import run_agent
 from π.hooks import check_bash_command, check_file_format
-from π.utils import create_workflow_log_dir, generate_workflow_id, load_prompt
+from π.utils import create_workflow_dir, generate_workflow_id, load_prompt
 
 
 def _get_options(*, cwd: Path, model: str | None = None) -> ClaudeAgentOptions:
@@ -31,10 +31,14 @@ async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
     # Generate unique workflow ID
     workflow_id = generate_workflow_id()
 
-    # Create workflow-specific log directory
+    # Create workflow-specific thoughts & log directories
+    thoughts_base = cwd / Path("thoughts")
     logs_base = cwd / Path(".logs")
-    workflow_log_dir = create_workflow_log_dir(logs_base, workflow_id)
 
+    workflow_thoughts_dir = create_workflow_dir(thoughts_base, workflow_id)
+    workflow_log_dir = create_workflow_dir(logs_base, workflow_id)
+
+    print(f"Thoughts directory: {workflow_thoughts_dir}\n")
     print(f"Logs directory: {workflow_log_dir}\n")
     print(f"Workflow ID: {workflow_id}")
 
@@ -73,8 +77,8 @@ async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
     )
     review_plan_result = await run_agent(
         prompt=f"{review_prompt}\n\n{create_plan_result}",
-        log_file=workflow_log_dir / "review.log",
         options=_get_options(cwd=cwd, model=review_model),
+        log_file=workflow_log_dir / "review.log",
     )
 
     # Iterate plan

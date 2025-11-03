@@ -154,19 +154,19 @@ def generate_workflow_id() -> str:
     return str(uuid.uuid4())
 
 
-def create_workflow_log_dir(base_dir: Path, workflow_id: str) -> Path:
+def create_workflow_dir(base_dir: Path, workflow_id: str) -> Path:
     """Create a log directory for a workflow run.
 
     Args:
-        base_dir: Base directory (typically .logs)
+        base_dir: Base directory (typically .logs or /thoughts)
         workflow_id: The UUID of the workflow run
 
     Returns:
-        Path to the created workflow log directory
+        Path to the created workflow directory
     """
-    log_dir = base_dir / workflow_id
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir
+    dir_path = base_dir / workflow_id
+    dir_path.mkdir(parents=True, exist_ok=True)
+    return dir_path
 
 
 def write_to_log(log_file: Path, content: str) -> None:

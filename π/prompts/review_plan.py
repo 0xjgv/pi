@@ -35,7 +35,7 @@ You are tasked with reviewing existing implementation plans for completeness and
 **Typical invocation**:
 
 ```bash
-/review_plan thoughts/plans/2025-10-XX-feature-name.md
+/review_plan thoughts/{workflow_id}/plan-feature-name.md
 ```
 
 **Workflow**: Read → Verify → Research → Confirm → Update → Sync
@@ -45,7 +45,7 @@ You are tasked with reviewing existing implementation plans for completeness and
 When this command is invoked:
 
 1. **Parse the input to identify**:
-   - Plan file path (e.g., `thoughts/plans/2025-10-16-feature.md`)
+   - Plan file path (e.g., `thoughts/{workflow_id}/plan-feature.md`)
    - Any specific areas of concern the user wants reviewed
 
 2. **Handle different input scenarios**:
@@ -237,7 +237,7 @@ Should I proceed with these updates?
    ```markdown
    ## Review Complete - Plan Updated
 
-   I've updated the plan at `thoughts/plans/[filename].md`
+   I've updated the plan at `thoughts/{workflow_id}/[filename].md`
 
    ### Issues Addressed:
    ✅ [Blocking issue 1] - Fixed by [specific change]
@@ -342,7 +342,7 @@ When spawning research sub-tasks:
 ### Scenario 1: Standard review with findings
 
 ```markdown
-User: /review_plan thoughts/plans/2025-10-16-feature.md
+User: /review_plan thoughts/{workflow_id}/plan-feature.md
 Assistant: [Reads plan, performs verification checklist]
 Assistant: Verification complete. Found 3 blocking issues, 5 high-priority items...
 [Presents organized findings]
@@ -353,7 +353,7 @@ Assistant: [Makes targeted edits, syncs, presents results]
 ### Scenario 2: Review with research needed
 
 ```markdown
-User: /review_plan thoughts/plans/2025-10-17-api-changes.md
+User: /review_plan thoughts/{workflow_id}/plan-api-changes.md
 Assistant: [Reads plan, performs verification]
 Assistant: Verification identified that the authentication flow references may not match current implementation.
 Let me research the actual auth patterns...
@@ -366,7 +366,7 @@ Assistant: [Updates plan with accurate technical details]
 ### Scenario 3: User has specific concerns
 
 ```markdown
-User: /review_plan thoughts/plans/2025-10-18-db-migration.md - I'm worried about the success criteria
+User: /review_plan thoughts/{workflow_id}/plan-db-migration.md - I'm worried about the success criteria
 Assistant: [Reads plan, performs verification with focus on success criteria]
 Assistant: Verification complete. Success criteria are indeed unmeasurable.
 Additionally found assumptions about database version that may be outdated...
@@ -378,7 +378,7 @@ Assistant: [Researches DB version, updates plan systematically]
 ### Scenario 4: Review with external validation needed
 
 ```markdown
-User: /review_plan thoughts/plans/2025-10-20-upgrade-dependencies.md
+User: /review_plan thoughts/{workflow_id}/plan-upgrade-dependencies.md
 Assistant: [Reads plan, performs verification]
 Assistant: Verification found the plan mentions upgrading to React 18.2.0 and Express 4.x.
 Let me research if these versions are current and check for any security advisories...
@@ -395,7 +395,7 @@ Assistant: [Updates plan with correct versions and security notes]
 ### Scenario 5: Plan is already high quality
 
 ```markdown
-User: /review_plan thoughts/plans/2025-10-19-refactor.md
+User: /review_plan thoughts/{workflow_id}/plan-refactor.md
 Assistant: [Reads plan, performs verification]
 Assistant: Great news! Verification found only minor optional improvements:
 - Optional: Consider adding performance benchmarks to success criteria
@@ -457,5 +457,5 @@ Assistant: Plan approved. Ready for implementation!
   - Code: `codebase-locator`, `codebase-analyzer`, `codebase-pattern-finder`
   - Historical: `thoughts-locator`, `thoughts-analyzer`
   - External: `web-search-researcher` (conditional use)
-- **Plan Template**: Check existing plans in `thoughts/plans/` for structure
+- **Plan Template**: Check existing plans in `thoughts/{workflow_id}/` for structure
 """
