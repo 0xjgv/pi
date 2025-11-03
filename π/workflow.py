@@ -7,10 +7,10 @@ from claude_agent_sdk.types import (
 
 from π.agent import run_agent
 from π.hooks import check_bash_command, check_file_format
-from π.utils import create_workflow_log_dir, generate_workflow_id
+from π.utils import create_workflow_log_dir, generate_workflow_id, load_prompt
 
 
-def _get_options(*, cwd: Path) -> ClaudeAgentOptions:
+def _get_options(*, cwd: Path, model: str | None = None) -> ClaudeAgentOptions:
     return ClaudeAgentOptions(
         hooks={
             "PostToolUse": [
@@ -22,6 +22,7 @@ def _get_options(*, cwd: Path) -> ClaudeAgentOptions:
         },
         permission_mode="acceptEdits",
         setting_sources=["project"],
+        model=model,
         cwd=cwd,
     )
 
@@ -37,36 +38,56 @@ async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
     print(f"Logs directory: {workflow_log_dir}\n")
     print(f"Workflow ID: {workflow_id}")
 
-    # Agent options
-    options = _get_options(cwd=cwd)
-    prompt = prompt.strip()
+    # User prompt
+    user_prompt = prompt.strip()
 
     # Research codebase
+    research_prompt_template, research_model = load_prompt("research_codebase")
+    research_prompt = research_prompt_template.format(
+        workflow_id=workflow_id,
+        log_dir=workflow_log_dir,
+    )
     research_codebase_result = await run_agent(
+        options=_get_options(cwd=cwd, model=research_model),
+        prompt=f"{research_prompt}\n\n{user_prompt}",
         log_file=workflow_log_dir / "research.log",
-        prompt=f"/research_codebase {prompt}",
-        options=options,
     )
 
-    # # Create plan
+    # Create plan
+    plan_prompt_template, plan_model = load_prompt("create_plan")
+    plan_prompt = plan_prompt_template.format(
+        workflow_id=workflow_id,
+        log_dir=workflow_log_dir,
+    )
     create_plan_result = await run_agent(
-        prompt=f"/create_plan {research_codebase_result}",
+        prompt=f"{plan_prompt}\n\n{research_codebase_result}",
+        options=_get_options(cwd=cwd, model=plan_model),
         log_file=workflow_log_dir / "plan.log",
-        options=options,
     )
 
-    # # Review plan
+    # Review plan
+    review_prompt_template, review_model = load_prompt("review_plan")
+    review_prompt = review_prompt_template.format(
+        workflow_id=workflow_id,
+        log_dir=workflow_log_dir,
+    )
     review_plan_result = await run_agent(
-        prompt=f"/review_plan {create_plan_result}",
+        prompt=f"{review_prompt}\n\n{create_plan_result}",
         log_file=workflow_log_dir / "review.log",
-        options=options,
+        options=_get_options(cwd=cwd, model=review_model),
     )
 
-    # # Iterate plan
+    # Iterate plan
+    iterate_prompt_template, iterate_model = load_prompt("iterate_plan")
+    iterate_prompt = iterate_prompt_template.format(
+        workflow_id=workflow_id,
+        log_dir=workflow_log_dir,
+    )
+
     iterate_plan_result = await run_agent(
-        prompt=f"/iterate_plan {review_plan_result}",
+        prompt=f"{iterate_prompt}\n\n{review_plan_result}",
         log_file=workflow_log_dir / "iterate.log",
-        options=options,
+        options=_get_options(cwd=cwd, model=iterate_model),
     )
 
     # # Implement plan
