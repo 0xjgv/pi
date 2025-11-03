@@ -38,8 +38,9 @@ async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
     workflow_thoughts_dir = create_workflow_dir(thoughts_base, workflow_id)
     workflow_log_dir = create_workflow_dir(logs_base, workflow_id)
 
-    print(f"Thoughts directory: {workflow_thoughts_dir}\n")
-    print(f"Logs directory: {workflow_log_dir}\n")
+    print("=" * 50)
+    print(f"Thoughts directory: {workflow_thoughts_dir}")
+    print(f"Logs directory: {workflow_log_dir}")
     print(f"Workflow ID: {workflow_id}")
 
     # User prompt

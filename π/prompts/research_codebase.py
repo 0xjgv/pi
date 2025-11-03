@@ -158,7 +158,7 @@ Then wait for the user's research query.
    - Check if on main branch or if commit is pushed: `git branch --show-current` and `git status`
    - If on main/master or pushed, generate GitHub permalinks:
      - Get repo info: `gh repo view --json owner,name`
-     - Create permalinks: `https://github.com/{owner}/{repo}/blob/{commit}/{file}#L{line}`
+     - Create permalinks: `https://github.com/<owner>/<repo>/blob/<commit>/<file>#L<line>`
    - Replace local file references with permalinks in the document
 
 8. **Sync and present findings:**
