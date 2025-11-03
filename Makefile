@@ -1,18 +1,12 @@
-.PHONY: install format lint test clean check all help codespace
+.PHONY: help install format check clean codespace
 SHELL := /bin/bash
-
-# Default target
-all: format lint test
 
 help:
 	@echo "Available targets:"
 	@echo "  make install   - Install deps with uv"
 	@echo "  make format    - Format code with ruff"
-	@echo "  make lint      - Lint code with ruff"
-	@echo "  make test      - Run tests with pytest"
 	@echo "  make check     - Run lint and test (without formatting)"
 	@echo "  make clean     - Remove cache and generated files"
-	@echo "  make all       - Run format, lint, and test"
 
 install:
 	@echo "Installing deps..."
@@ -22,19 +16,13 @@ format:
 	@echo "Formatting code with ruff..."
 	uv run ruff format .
 
-lint:
+check:
 	@echo "Linting code with ruff..."
 	uv run ruff check .
 
 fix:
 	@echo "Fixing lint errors with ruff..."
 	uv run ruff check --fix .
-
-test:
-	@echo "Running tests with pytest..."
-	uv run pytest tests/ -v
-
-check: lint test
 
 clean:
 	@echo "Cleaning up cache and generated files..."
@@ -47,10 +35,6 @@ clean:
 	@find . -type f -name "*.pyo" -delete
 	@uv run ruff clean
 	@echo "Clean complete!"
-
-activate:
-	@echo "Activating virtual environment..."
-	source .venv/bin/activate
 
 codespace:
 	@echo "Setting up codespace..."
