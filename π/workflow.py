@@ -13,10 +13,12 @@ from π.utils import create_workflow_log_dir, generate_workflow_id
 def _get_options(*, cwd: Path) -> ClaudeAgentOptions:
     return ClaudeAgentOptions(
         hooks={
+            "PostToolUse": [
+                HookMatcher(matcher="Write|MultiEdit|Edit", hooks=[check_file_format])
+            ],
             "PreToolUse": [
                 HookMatcher(matcher="Bash", hooks=[check_bash_command]),
             ],
-            "PostToolUse": [HookMatcher(matcher="*", hooks=[check_file_format])],
         },
         permission_mode="acceptEdits",
         setting_sources=["project"],
