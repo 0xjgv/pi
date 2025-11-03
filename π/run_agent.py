@@ -17,8 +17,37 @@ from claude_agent_sdk.types import (
 from π.utils import write_to_log
 
 
+class AgentStats:
+    """Track tool usage statistics for an agent run."""
+
+    def __init__(self):
+        self.tool_counts: dict[str, int] = {}
+        self.total_tools = 0
+        self.errors = 0
+
+    def record_tool(self, tool_name: str):
+        self.tool_counts[tool_name] = self.tool_counts.get(tool_name, 0) + 1
+        self.total_tools += 1
+
+    def record_error(self):
+        self.errors += 1
+
+    def get_summary(self) -> str:
+        if not self.total_tools:
+            return "No tools used"
+        top_tools = sorted(self.tool_counts.items(), key=lambda x: x[1], reverse=True)[
+            :3
+        ]
+        tools_str = ", ".join(f"{name}({count})" for name, count in top_tools)
+        error_str = f", {self.errors} errors" if self.errors else ""
+        return f"{self.total_tools} tools executed: {tools_str}{error_str}"
+
+
 def handle_message(
-    msg: Message, log_file: Path | None = None, verbose: bool = True
+    msg: Message,
+    log_file: Path | None = None,
+    verbose: bool = True,
+    stats: AgentStats | None = None,
 ) -> None | str:
     instance_label = type(msg).__name__
     message_parts: list[str] = []
@@ -28,8 +57,7 @@ def handle_message(
         for block in msg.content:
             if isinstance(block, TextBlock):
                 message_parts.append(block.text)
-                if verbose and block.text.strip():
-                    cli_output.append(f"  💬 {block.text[:100]}...")
+                # Only show assistant text in verbose mode
             elif isinstance(block, ThinkingBlock):
                 message_parts.append(block.thinking)
                 # Don't show thinking in CLI unless verbose
@@ -42,14 +70,21 @@ def handle_message(
                     )
                     tool_info += f" ({params})"
                 message_parts.append(tool_info)
-                cli_output.append(f"  🔧 {tool_info}")
+                # Track tool usage in stats
+                if stats:
+                    stats.record_tool(block.name)
+                # Don't show individual tools in simplified mode
             elif isinstance(block, ToolResultBlock):
                 result_info = f"Result for tool {block.tool_use_id}"
                 if block.is_error:
                     result_info += " [ERROR]"
+                    if stats:
+                        stats.record_error()
                 message_parts.append(result_info)
+                # Only show errors in simplified mode
                 if block.is_error and block.content:
-                    cli_output.append(f"  ❌ Error: {str(block.content)[:100]}")
+                    error_content = str(block.content)[:200]
+                    cli_output.append(f"  ❌ Error: {error_content}")
             else:
                 message_parts.append(repr(block))
     elif isinstance(msg, ResultMessage):
@@ -65,18 +100,16 @@ def handle_message(
         content = msg.content
         if isinstance(content, str):
             message_parts.append(content)
-            cli_output.append(f"  👤 {content[:100]}...")
+            # Don't show subagent prompts in simplified mode
         else:
             blocks = content if isinstance(content, (list, tuple)) else [content]
             for block in blocks:
                 if isinstance(block, TextBlock):
                     message_parts.append(block.text)
-                    cli_output.append(f"  👤 {block.text[:100]}...")
                 elif isinstance(block, ThinkingBlock):
                     message_parts.append(block.thinking)
                 elif isinstance(block, str):
                     message_parts.append(block)
-                    cli_output.append(f"  👤 {block[:100]}...")
                 else:
                     message_parts.append(repr(block))
     elif isinstance(msg, SystemMessage):
@@ -93,7 +126,7 @@ def handle_message(
     if log_file:
         write_to_log(log_file, compound_message)
 
-    # Simplified CLI output (only show tool usage and errors by default)
+    # Simplified CLI output (only show errors by default)
     if not verbose and cli_output:
         for line in cli_output:
             print(line)
@@ -109,20 +142,22 @@ async def run_agent(
     options: ClaudeAgentOptions,
     verbose: bool = True,
     prompt: str,
-) -> str:
+) -> tuple[str, AgentStats]:
+    """Run agent and return the last message along with stats."""
     if log_file:
         write_to_log(log_file, f"[Prompt] {prompt}\n{'=' * 80}\n")
 
+    stats = AgentStats()
     last_message = ""
     async with ClaudeSDKClient(options=options) as client:
         await client.query(prompt=prompt)
 
         async for msg in client.receive_response():
-            result = handle_message(msg, log_file, verbose=verbose)
+            result = handle_message(msg, log_file, verbose=verbose, stats=stats)
             if result:
                 last_message = result
 
-    return last_message
+    return last_message, stats
 
 
 async def get_server_info(*, options: ClaudeAgentOptions) -> dict[str, Any] | None:
