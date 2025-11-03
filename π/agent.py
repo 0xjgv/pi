@@ -12,7 +12,7 @@ from claude_agent_sdk.types import (
     UserMessage,
 )
 
-from lt.utils import write_to_log
+from π.utils import write_to_log
 
 
 def handle_message(msg: Message, log_file: Path | None = None) -> None | str:

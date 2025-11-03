@@ -1,7 +1,7 @@
 [project]
-name = "lt"
+name = "pi"
 version = "0.1.0"
-description = "LT CLI"
+description = "∏ CLI"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -14,14 +14,14 @@ dev = [
 ]
 
 [project.scripts]
-lt = "lt.cli:main"
+"π" = "π.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.25.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["lt"]
+packages = ["π"]
 
 [tool.uv]
 package = true

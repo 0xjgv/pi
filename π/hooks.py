@@ -22,7 +22,7 @@ async def check_bash_command(
 
     for pattern in block_patterns:
         if command.startswith(pattern) or pattern in command:
-            print(f"[LT-CLI] Blocked command: {command}")
+            print(f"[∏-CLI] Blocked command: {command}")
             return {
                 "hookSpecificOutput": {
                     "permissionDecisionReason": f"Command contains invalid pattern: {pattern}",
