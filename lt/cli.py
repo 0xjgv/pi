@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 from sys import argv
 
+from lt.utils import prevent_sleep
 from lt.workflow import run_workflow
 
 cwd = Path(__file__).parent.parent
@@ -18,5 +19,6 @@ async def run():
     print(f"Result: {result}")
 
 
+@prevent_sleep
 def main():
     asyncio.run(run())

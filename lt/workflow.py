@@ -31,8 +31,8 @@ async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
     logs_base = cwd / Path(".logs")
     workflow_log_dir = create_workflow_log_dir(logs_base, workflow_id)
 
-    print(f"Workflow ID: {workflow_id}")
     print(f"Logs directory: {workflow_log_dir}\n")
+    print(f"Workflow ID: {workflow_id}")
 
     # Agent options
     options = _get_options(cwd=cwd)

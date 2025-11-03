@@ -1,5 +1,7 @@
 import re
 import uuid
+from functools import wraps
+from os import getpid, system
 from pathlib import Path
 
 
@@ -135,3 +137,15 @@ def write_to_log(log_file: Path, content: str) -> None:
         f.write(content)
         if not content.endswith("\n"):
             f.write("\n")
+
+
+def prevent_sleep(func):
+    """Prevents the system from sleeping while the function is running"""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        pid = getpid()
+        system(f"caffeinate -disuw {pid}&")
+        return func(*args, **kwargs)
+
+    return wrapper
