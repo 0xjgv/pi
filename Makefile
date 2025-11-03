@@ -1,4 +1,4 @@
-.PHONY: format lint test clean check all help codespace
+.PHONY: install format lint test clean check all help codespace
 SHELL := /bin/bash
 
 # Default target
@@ -6,12 +6,17 @@ all: format lint test
 
 help:
 	@echo "Available targets:"
+	@echo "  make install   - Install deps with uv"
 	@echo "  make format    - Format code with ruff"
 	@echo "  make lint      - Lint code with ruff"
 	@echo "  make test      - Run tests with pytest"
 	@echo "  make check     - Run lint and test (without formatting)"
 	@echo "  make clean     - Remove cache and generated files"
 	@echo "  make all       - Run format, lint, and test"
+
+install:
+	@echo "Installing deps..."
+	uv sync
 
 format:
 	@echo "Formatting code with ruff..."

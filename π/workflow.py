@@ -5,8 +5,8 @@ from claude_agent_sdk.types import (
     HookMatcher,
 )
 
-from π.agent import run_agent
 from π.hooks import check_bash_command, check_file_format
+from π.run_agent import run_agent
 from π.utils import (
     create_workflow_dir,
     find_file_starting_with,

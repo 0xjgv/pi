@@ -27,7 +27,7 @@ async def check_bash_command(
 
     for pattern in block_patterns:
         if command.startswith(pattern) or pattern in command:
-            print(f"[∏-CLI] Blocked command: {command}")
+            print(f"[π-CLI] Blocked command: {command}")
             return cast(
                 HookJSONOutput,
                 {
