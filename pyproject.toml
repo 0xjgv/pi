@@ -1,7 +1,7 @@
 [project]
 name = "pi"
 version = "0.1.0"
-description = "∏ CLI"
+description = "π CLI"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
