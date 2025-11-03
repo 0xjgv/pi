@@ -15,17 +15,15 @@ You are tasked with conducting comprehensive research across the codebase to ans
 - ONLY describe what exists, where it exists, how it works, and how components interact
 - You are creating a technical map/documentation of the existing system
 
-## Initial Setup
+## User Research Query
 
-When this command is invoked, respond with:
+{user_query}
 
-```markdown
-I'm ready to research the codebase. Please provide your research question or area of interest, and I'll analyze it thoroughly by exploring relevant components and connections.
-```
+## Workflow Directory (!IMPORTANT: save the research doc in this dir)
 
-Then wait for the user's research query.
+`thoughts/{workflow_id}/`
 
-## Steps to follow after receiving the research query
+## Steps to follow with the user research query
 
 1. **Read any directly mentioned files first:**
    - If the user mentions specific files (tickets, docs, JSON), read them FULLY first

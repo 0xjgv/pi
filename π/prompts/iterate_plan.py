@@ -5,45 +5,14 @@ prompt = """# Iterate Implementation Plan
 
 You are tasked with updating existing implementation plans based on user feedback. You should be skeptical, thorough, and ensure changes are grounded in actual codebase reality.
 
-## Initial Response
+## User Research Query
+{user_query}
 
-When this command is invoked:
+## Plan Document
+{plan_document}
 
-1. **Parse the input to identify**:
-   - Plan file path (e.g., `thoughts/{workflow_id}/plan-feature.md`)
-   - Requested changes/feedback
-
-2. **Handle different input scenarios**:
-
-   **If NO plan file provided**:
-
-   ```markdown
-   I'll help you iterate on an existing implementation plan.
-
-   Which plan would you like to update? Please provide the path to the plan file (e.g., `thoughts/{workflow_id}/plan-feature.md`).
-
-   Tip: You can list recent plans with `ls -lt thoughts/*/plan-*.md | head`
-   ```
-
-   Wait for user input, then re-check for feedback.
-
-   **If plan file provided but NO feedback**:
-
-   ```markdown
-   I've found the plan at [path]. What changes would you like to make?
-
-   For example:
-   - "Add a phase for migration handling"
-   - "Update the success criteria to include performance tests"
-   - "Adjust the scope to exclude feature X"
-   - "Split Phase 2 into two separate phases"
-   ```
-
-   Wait for user input.
-
-   **If BOTH plan file AND feedback provided**:
-   - Proceed immediately to Step 1
-   - No preliminary questions needed
+## Plan Review
+{plan_review}
 
 ## Process Steps
 
@@ -213,33 +182,4 @@ When spawning research sub-tasks:
 5. **Request specific file:line references** in responses
 6. **Wait for all tasks to complete** before synthesizing
 7. **Verify sub-task results** - if something seems off, spawn follow-up tasks
-
-## Example Interaction Flows
-
-**Scenario 1: User provides everything upfront**
-
-```markdown
-User: /iterate_plan thoughts/{workflow_id}/plan-feature.md - add phase for error handling
-Assistant: [Reads plan, researches error handling patterns, updates plan]
-```
-
-**Scenario 2: User provides just plan file**
-
-```markdown
-User: /iterate_plan thoughts/{workflow_id}/plan-feature.md
-Assistant: I've found the plan. What changes would you like to make?
-User: Split Phase 2 into two phases - one for backend, one for frontend
-Assistant: [Proceeds with update]
-```
-
-**Scenario 3: User provides no arguments**
-
-```markdown
-User: /iterate_plan
-Assistant: Which plan would you like to update? Please provide the path...
-User: thoughts/{workflow_id}/plan-feature.md
-Assistant: I've found the plan. What changes would you like to make?
-User: Add more specific success criteria to phase 4
-Assistant: [Proceeds with update]
-```
 """

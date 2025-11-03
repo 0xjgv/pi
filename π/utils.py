@@ -71,6 +71,47 @@ def create_workflow_dir(base_dir: Path, workflow_id: str) -> Path:
     return dir_path
 
 
+def find_file_starting_with(*, base_dir: Path, start_text: str) -> Path:
+    """Find the first file whose name starts with the given text.
+
+    Searches non-recursively in the provided directory first for performance,
+    then falls back to a recursive search if not found.
+
+    Args:
+        base_dir: Directory to search within.
+        start_text: Filename prefix to match.
+
+    Returns:
+        Path to the first matching file.
+
+    Raises:
+        FileNotFoundError: If the directory doesn't exist/isn't a directory or no match is found.
+    """
+    if not base_dir.exists() or not base_dir.is_dir():
+        raise FileNotFoundError(f"Directory not found: {base_dir}")
+
+    # Prefer a quick, shallow search first
+    immediate_matches = sorted(
+        (
+            p
+            for p in base_dir.iterdir()
+            if p.is_file() and p.name.startswith(start_text)
+        ),
+        key=lambda p: p.name,
+    )
+    if immediate_matches:
+        return immediate_matches[0]
+
+    # Fallback: recursive search
+    for p in base_dir.rglob("*"):
+        if p.is_file() and p.name.startswith(start_text):
+            return p
+
+    raise FileNotFoundError(
+        f"No file starting with '{start_text}' found under {base_dir}"
+    )
+
+
 def write_to_log(log_file: Path, content: str) -> None:
     """Append content to a log file.
 

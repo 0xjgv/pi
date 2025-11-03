@@ -4,34 +4,17 @@ model = "opus"
 
 prompt = """# Create Implementation Plan
 
-You are tasked with creating detailed implementation plans through an interactive, iterative process. You should be skeptical, thorough, and work collaboratively with the user to produce high-quality technical specifications.
+You are tasked with creating detailed implementation plans through an iterative process. You should be skeptical, thorough, and work collaboratively with the user to produce high-quality technical specifications.
 
-## Initial Response
+## User Research Query
+{user_query}
 
-When this command is invoked:
+## Research Document
+{research_document}
 
-1. **Check if parameters were provided**:
-   - If a file path or ticket reference was provided as a parameter, skip the default message
-   - Immediately read any provided files FULLY
-   - Begin the research process
+## Workflow Directory (!IMPORTANT: save the plan doc in this dir)
 
-2. **If no parameters provided**, respond with:
-
-```markdown
-I'll help you create a detailed implementation plan. Let me start by understanding what we're building.
-
-Please provide:
-1. The task/ticket description (or reference to a ticket file)
-2. Any relevant context, constraints, or specific requirements
-3. Links to related research or previous implementations
-
-I'll analyze this information and work with you to create a comprehensive plan.
-
-Tip: You can also invoke this command with a ticket file directly: `/create_plan thoughts/juan/tickets/eng_1234.md`
-For deeper analysis, try: `/create_plan think deeply about thoughts/juan/tickets/eng_1234.md`
-```
-
-Then wait for the user's input.
+`thoughts/{workflow_id}/`
 
 ## Process Steps
 

@@ -7,7 +7,12 @@ from claude_agent_sdk.types import (
 
 from π.agent import run_agent
 from π.hooks import check_bash_command, check_file_format
-from π.utils import create_workflow_dir, generate_workflow_id, load_prompt
+from π.utils import (
+    create_workflow_dir,
+    find_file_starting_with,
+    generate_workflow_id,
+    load_prompt,
+)
 
 
 def _get_options(*, cwd: Path, model: str | None = None) -> ClaudeAgentOptions:
@@ -38,62 +43,93 @@ async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
     workflow_thoughts_dir = create_workflow_dir(thoughts_base, workflow_id)
     workflow_log_dir = create_workflow_dir(logs_base, workflow_id)
 
-    print("=" * 50)
-    print(f"Thoughts directory: {workflow_thoughts_dir}")
-    print(f"Logs directory: {workflow_log_dir}")
+    print("=" * 80)
     print(f"Workflow ID: {workflow_id}")
+    print(f"Thoughts: {workflow_thoughts_dir}")
+    print(f"Logs: {workflow_log_dir}")
+    print("=" * 80)
 
-    # User prompt
-    user_prompt = prompt.strip()
+    # User query
+    user_query = prompt.strip()
 
-    # Research codebase
+    # 1. Research codebase
+    print("\n🔍 Stage 1/4: Researching codebase...")
     research_prompt_template, research_model = load_prompt("research_codebase")
     research_prompt = research_prompt_template.format(
         workflow_id=workflow_id,
-        log_dir=workflow_log_dir,
+        user_query=user_query,
     )
     research_codebase_result = await run_agent(
         options=_get_options(cwd=cwd, model=research_model),
-        prompt=f"{research_prompt}\n\n{user_prompt}",
         log_file=workflow_log_dir / "research.log",
+        prompt=f"{research_prompt}",
+        verbose=False,
     )
+    research_document = find_file_starting_with(
+        base_dir=workflow_thoughts_dir,
+        start_text="research",
+    )
+    print(f"✓ Research completed → {research_document.name}")
 
-    # Create plan
+    # 2. Create plan
+    print("\n📝 Stage 2/4: Creating implementation plan...")
     plan_prompt_template, plan_model = load_prompt("create_plan")
     plan_prompt = plan_prompt_template.format(
+        research_document=research_document,
         workflow_id=workflow_id,
-        log_dir=workflow_log_dir,
+        user_query=user_query,
     )
     create_plan_result = await run_agent(
         prompt=f"{plan_prompt}\n\n{research_codebase_result}",
         options=_get_options(cwd=cwd, model=plan_model),
         log_file=workflow_log_dir / "plan.log",
+        verbose=False,
     )
+    plan_document = find_file_starting_with(
+        base_dir=workflow_thoughts_dir,
+        start_text="plan",
+    )
+    print(f"✓ Plan created → {plan_document.name}")
 
-    # Review plan
+    # 3. Review plan
+    print("\n🔎 Stage 3/4: Reviewing plan...")
     review_prompt_template, review_model = load_prompt("review_plan")
     review_prompt = review_prompt_template.format(
+        research_document=research_document,
+        plan_document=plan_document,
         workflow_id=workflow_id,
-        log_dir=workflow_log_dir,
+        user_query=user_query,
     )
     review_plan_result = await run_agent(
         prompt=f"{review_prompt}\n\n{create_plan_result}",
         options=_get_options(cwd=cwd, model=review_model),
         log_file=workflow_log_dir / "review.log",
+        verbose=False,
     )
+    print("✓ Plan reviewed")
 
-    # Iterate plan
+    # 4. Iterate plan (optional)
+    print("\n🔄 Stage 4/4: Iterating on plan...")
     iterate_prompt_template, iterate_model = load_prompt("iterate_plan")
     iterate_prompt = iterate_prompt_template.format(
+        research_document=research_document,
+        plan_document=plan_document,
         workflow_id=workflow_id,
-        log_dir=workflow_log_dir,
+        user_query=user_query,
     )
-
     iterate_plan_result = await run_agent(
         prompt=f"{iterate_prompt}\n\n{review_plan_result}",
-        log_file=workflow_log_dir / "iterate.log",
         options=_get_options(cwd=cwd, model=iterate_model),
+        log_file=workflow_log_dir / "iterate.log",
+        verbose=False,
     )
+    print("✓ Plan iteration completed")
+
+    print("\n" + "=" * 80)
+    print("✅ Workflow completed successfully!")
+    print(f"Final plan: {plan_document}")
+    print(f"Full logs: {workflow_log_dir}")
+    print("=" * 80)
 
     # # Implement plan
     # implement_plan_result = await run_agent(

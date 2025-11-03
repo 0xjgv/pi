@@ -5,6 +5,15 @@ prompt = """# Review Implementation Plan
 
 You are tasked with reviewing existing implementation plans for completeness and accuracy through systematic verification. You should be skeptical, thorough, and ensure changes are grounded in actual codebase reality.
 
+## User Research Query
+{user_query}
+
+## Research Document
+{research_document}
+
+## Plan Document
+{plan_document}
+
 ## Purpose and Scope
 
 **What this command does**:
