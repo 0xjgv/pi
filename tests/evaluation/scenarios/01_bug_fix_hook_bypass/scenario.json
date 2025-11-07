@@ -1,0 +1,35 @@
+{
+  "id": "01_bug_fix_hook_bypass",
+  "type": "solo_developer",
+  "category": "bug_fix",
+  "difficulty": "medium",
+  "description": "Fix a bug where dangerous bash commands can bypass pre-tool hooks",
+  "prompt": "There's a security bug where dangerous bash commands with certain flags can bypass our pre-tool hooks. Find and fix this vulnerability.",
+  "expected_outcomes": {
+    "files_modified": [
+      "π/hooks.py"
+    ],
+    "key_changes": [
+      "Expand dangerous command patterns to catch variants",
+      "Add flag-aware command parsing",
+      "Add test cases for bypass attempts"
+    ],
+    "success_criteria": [
+      "All dangerous command variants are blocked",
+      "Hook tests pass with 100% coverage of dangerous patterns",
+      "No false positives on safe commands"
+    ],
+    "testing_strategy": [
+      "Unit tests for hook validation",
+      "Integration tests with actual bash commands",
+      "Edge case testing with obfuscated commands"
+    ]
+  },
+  "quality_baseline": {
+    "completeness": 35,
+    "correctness": 30,
+    "testability": 20,
+    "clarity": 15
+  },
+  "notes": "Tests if tool can identify security issues and propose comprehensive fixes"
+}

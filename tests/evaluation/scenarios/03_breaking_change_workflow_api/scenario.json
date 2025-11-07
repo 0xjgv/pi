@@ -1,0 +1,52 @@
+{
+  "id": "03_breaking_change_workflow_api",
+  "type": "team",
+  "category": "breaking_change",
+  "difficulty": "high",
+  "description": "Refactor workflow to support custom stage injection while maintaining backward compatibility",
+  "prompt": "We need to allow users to inject custom stages into the workflow (e.g., add a 'deploy' stage after iteration). Refactor the workflow system to support this while maintaining backward compatibility for existing code. Provide a migration guide for teams already using π.",
+  "expected_outcomes": {
+    "files_modified": [
+      "π/workflow.py",
+      "π/cli.py"
+    ],
+    "files_created": [
+      "π/stages.py",
+      "docs/MIGRATION_CUSTOM_STAGES.md",
+      "examples/custom_stage_example.py"
+    ],
+    "key_changes": [
+      "Extract stage logic into pluggable Stage classes",
+      "Add stage registration system",
+      "Update workflow runner to use dynamic stages",
+      "Maintain default 4-stage behavior",
+      "Create migration guide for teams"
+    ],
+    "success_criteria": [
+      "Existing workflows work without changes (backward compat)",
+      "Custom stages can be registered and executed",
+      "Stage order is configurable",
+      "Documentation includes migration examples",
+      "Integration tests cover both old and new APIs"
+    ],
+    "testing_strategy": [
+      "Backward compatibility tests with old workflow calls",
+      "Custom stage registration and execution tests",
+      "Integration tests for multi-stage custom workflows",
+      "Documentation examples are executable"
+    ],
+    "migration_considerations": [
+      "No breaking changes to existing CLI usage",
+      "Optional opt-in for custom stages",
+      "Clear deprecation timeline if needed",
+      "Team communication template"
+    ]
+  },
+  "quality_baseline": {
+    "completeness": 35,
+    "correctness": 30,
+    "testability": 20,
+    "clarity": 15
+  },
+  "notes": "Tests ability to handle team-scale concerns: API design, migration, backward compatibility"
+}

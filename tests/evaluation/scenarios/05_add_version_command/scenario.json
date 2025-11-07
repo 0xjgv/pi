@@ -1,0 +1,42 @@
+{
+  "id": "05_add_version_command",
+  "type": "solo_developer",
+  "category": "new_feature",
+  "difficulty": "low",
+  "description": "Add --version flag to display CLI version information",
+  "prompt": "Add a --version flag to the CLI that displays the version number, Python version, and Claude API model being used.",
+  "expected_outcomes": {
+    "files_modified": [
+      "π/cli.py",
+      "pyproject.toml"
+    ],
+    "files_created": [
+      "tests/test_version_command.py"
+    ],
+    "key_changes": [
+      "Add --version argument to CLI parser",
+      "Read version from pyproject.toml",
+      "Display formatted version information",
+      "Exit after showing version (don't run workflow)"
+    ],
+    "success_criteria": [
+      "π --version displays version, Python version, model",
+      "Version matches pyproject.toml",
+      "Returns exit code 0",
+      "Workflow does not execute when --version is used"
+    ],
+    "testing_strategy": [
+      "Unit test for version formatting",
+      "Integration test for --version flag",
+      "Verify version string matches expected format",
+      "Test that workflow doesn't run with --version"
+    ]
+  },
+  "quality_baseline": {
+    "completeness": 35,
+    "correctness": 30,
+    "testability": 20,
+    "clarity": 15
+  },
+  "notes": "Simple feature to test baseline plan quality for straightforward tasks"
+}

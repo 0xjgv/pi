@@ -1,0 +1,44 @@
+{
+  "id": "02_new_feature_dry_run",
+  "type": "solo_developer",
+  "category": "new_feature",
+  "difficulty": "high",
+  "description": "Add a --dry-run flag that shows what would happen without executing",
+  "prompt": "Add a --dry-run mode to the CLI that shows the workflow stages and tool calls that would be made without actually executing them. This helps users preview what π will do before committing.",
+  "expected_outcomes": {
+    "files_modified": [
+      "π/cli.py",
+      "π/agent.py",
+      "π/workflow.py"
+    ],
+    "files_created": [
+      "tests/test_dry_run.py"
+    ],
+    "key_changes": [
+      "Add --dry-run flag to CLI argument parser",
+      "Implement dry-run mode in agent execution",
+      "Mock tool calls in dry-run mode",
+      "Display preview output with clear formatting",
+      "Ensure no side effects in dry-run mode"
+    ],
+    "success_criteria": [
+      "Dry-run shows all 4 stages without executing",
+      "No files modified or API calls made in dry-run",
+      "Output clearly indicates preview mode",
+      "Integration tests verify no side effects"
+    ],
+    "testing_strategy": [
+      "Unit tests for dry-run flag parsing",
+      "Integration tests comparing dry-run vs actual run",
+      "Verify no file system modifications",
+      "Test with various prompt types"
+    ]
+  },
+  "quality_baseline": {
+    "completeness": 35,
+    "correctness": 30,
+    "testability": 20,
+    "clarity": 15
+  },
+  "notes": "Tests ability to design cross-cutting features affecting multiple modules"
+}

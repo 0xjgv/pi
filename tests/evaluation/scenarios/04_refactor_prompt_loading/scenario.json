@@ -1,0 +1,42 @@
+{
+  "id": "04_refactor_prompt_loading",
+  "type": "solo_developer",
+  "category": "refactoring",
+  "difficulty": "medium",
+  "description": "Refactor prompt loading to support prompt inheritance and composition",
+  "prompt": "The current prompt loading system requires duplicating common sections across prompts. Refactor it to support a base prompt that can be extended by specific prompts, allowing composition and reducing duplication.",
+  "expected_outcomes": {
+    "files_modified": [
+      "π/utils.py"
+    ],
+    "files_created": [
+      "π/prompts/base.txt",
+      "tests/test_prompt_loading.py"
+    ],
+    "key_changes": [
+      "Extract common prompt sections into base.txt",
+      "Implement prompt inheritance/composition in load_prompt()",
+      "Update existing prompts to extend base",
+      "Maintain backward compatibility",
+      "Add tests for composition logic"
+    ],
+    "success_criteria": [
+      "All existing prompts work without changes to call sites",
+      "New prompts can extend base using special syntax",
+      "Tests cover inheritance and composition cases",
+      "No duplication of common prompt sections"
+    ],
+    "testing_strategy": [
+      "Unit tests for prompt loading with inheritance",
+      "Integration tests that existing workflow stages still work",
+      "Verify composed prompts contain all expected sections"
+    ]
+  },
+  "quality_baseline": {
+    "completeness": 35,
+    "correctness": 30,
+    "testability": 20,
+    "clarity": 15
+  },
+  "notes": "Tests ability to design clean refactoring with backward compatibility"
+}
