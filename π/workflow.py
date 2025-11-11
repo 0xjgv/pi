@@ -1,35 +1,10 @@
 from pathlib import Path
 
-from claude_agent_sdk import ClaudeAgentOptions
-from claude_agent_sdk.types import (
-    HookMatcher,
-)
-
-from π.agent import run_agent
-from π.hooks import check_bash_command, check_file_format
 from π.utils import (
     create_workflow_dir,
-    find_file_starting_with,
     generate_workflow_id,
-    load_prompt,
+    run_stage,
 )
-
-
-def _get_options(*, cwd: Path, model: str | None = None) -> ClaudeAgentOptions:
-    return ClaudeAgentOptions(
-        hooks={
-            "PostToolUse": [
-                HookMatcher(matcher="Write|MultiEdit|Edit", hooks=[check_file_format])
-            ],
-            "PreToolUse": [
-                HookMatcher(matcher="Bash", hooks=[check_bash_command]),
-            ],
-        },
-        permission_mode="acceptEdits",
-        setting_sources=["project"],
-        model=model,
-        cwd=cwd,
-    )
 
 
 async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
@@ -49,99 +24,155 @@ async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
     print(f"Logs: {workflow_log_dir}")
     print("=" * 80)
 
-    # User query
     user_query = prompt.strip()
 
     # 1. Research codebase
-    print("\n🔍 Stage 1/4: Researching codebase...")
-    research_prompt_template, research_model = load_prompt("research_codebase")
-    research_prompt = research_prompt_template.format(
-        workflow_id=workflow_id,
-        user_query=user_query,
+    print("\n🔍 Stage 1/7: Researching codebase...")
+    exit_code, research_result = run_stage(
+        stage_name="research",
+        args=[workflow_id, user_query, str(workflow_log_dir), str(workflow_thoughts_dir)],
+        cwd=cwd,
+        retry=True
     )
-    research_codebase_result, research_stats = await run_agent(
-        options=_get_options(cwd=cwd, model=research_model),
-        log_file=workflow_log_dir / "research.log",
-        prompt=f"{research_prompt}",
-        verbose=False,
-    )
-    research_document = find_file_starting_with(
-        base_dir=workflow_thoughts_dir,
-        start_text="research",
-    )
-    print(f"✓ Research completed → {research_document.name}")
-    print(f"  📊 {research_stats.get_summary()}")
+    if exit_code != 0 or not research_result:
+        print("❌ Research stage failed")
+        return None
+    research_document = research_result.document
+    print(f"✓ Research completed → {Path(research_document).name if research_document else 'N/A'}")
 
     # 2. Create plan
-    print("\n📝 Stage 2/4: Creating implementation plan...")
-    plan_prompt_template, plan_model = load_prompt("create_plan")
-    plan_prompt = plan_prompt_template.format(
-        research_document=research_document,
-        workflow_id=workflow_id,
-        user_query=user_query,
+    print("\n📝 Stage 2/7: Creating implementation plan...")
+    exit_code, plan_result = run_stage(
+        stage_name="plan",
+        args=[
+            workflow_id,
+            user_query,
+            str(workflow_log_dir),
+            str(workflow_thoughts_dir),
+            research_document or "",
+            research_result.result
+        ],
+        cwd=cwd,
+        retry=True
     )
-    create_plan_result, plan_stats = await run_agent(
-        prompt=f"{plan_prompt}\n\n{research_codebase_result}",
-        options=_get_options(cwd=cwd, model=plan_model),
-        log_file=workflow_log_dir / "plan.log",
-        verbose=False,
-    )
-    plan_document = find_file_starting_with(
-        base_dir=workflow_thoughts_dir,
-        start_text="plan",
-    )
-    print(f"✓ Plan created → {plan_document.name}")
-    print(f"  📊 {plan_stats.get_summary()}")
+    if exit_code != 0 or not plan_result:
+        print("❌ Plan stage failed")
+        return None
+    plan_document = plan_result.document
+    print(f"✓ Plan created → {Path(plan_document).name if plan_document else 'N/A'}")
 
     # 3. Review plan
-    print("\n🔎 Stage 3/4: Reviewing plan...")
-    review_prompt_template, review_model = load_prompt("review_plan")
-    review_prompt = review_prompt_template.format(
-        research_document=research_document,
-        plan_document=plan_document,
-        workflow_id=workflow_id,
-        user_query=user_query,
+    print("\n🔎 Stage 3/7: Reviewing plan...")
+    exit_code, review_result = run_stage(
+        stage_name="review",
+        args=[
+            workflow_id,
+            user_query,
+            str(workflow_log_dir),
+            research_document or "",
+            plan_document or "",
+            plan_result.result
+        ],
+        cwd=cwd,
+        retry=True
     )
-    review_plan_result, review_stats = await run_agent(
-        prompt=f"{review_prompt}\n\n{create_plan_result}",
-        options=_get_options(cwd=cwd, model=review_model),
-        log_file=workflow_log_dir / "review.log",
-        verbose=False,
-    )
+    if exit_code != 0 or not review_result:
+        print("❌ Review stage failed")
+        return None
     print("✓ Plan reviewed")
-    print(f"  📊 {review_stats.get_summary()}")
 
-    # 4. Iterate plan (optional)
-    print("\n🔄 Stage 4/4: Iterating on plan...")
-    iterate_prompt_template, iterate_model = load_prompt("iterate_plan")
-    iterate_prompt = iterate_prompt_template.format(
-        research_document=research_document,
-        plan_document=plan_document,
-        workflow_id=workflow_id,
-        user_query=user_query,
+    # 4. Iterate plan
+    print("\n🔄 Stage 4/7: Iterating on plan...")
+    exit_code, iterate_result = run_stage(
+        stage_name="iterate",
+        args=[
+            workflow_id,
+            user_query,
+            str(workflow_log_dir),
+            research_document or "",
+            plan_document or "",
+            review_result.result
+        ],
+        cwd=cwd,
+        retry=True
     )
-    iterate_plan_result, iterate_stats = await run_agent(
-        prompt=f"{iterate_prompt}\n\n{review_plan_result}",
-        options=_get_options(cwd=cwd, model=iterate_model),
-        log_file=workflow_log_dir / "iterate.log",
-        verbose=False,
-    )
+    if exit_code != 0 or not iterate_result:
+        print("❌ Iterate stage failed")
+        return None
     print("✓ Plan iteration completed")
-    print(f"  📊 {iterate_stats.get_summary()}")
 
-    # Calculate total stats
-    total_tools = (
-        research_stats.total_tools
-        + plan_stats.total_tools
-        + review_stats.total_tools
-        + iterate_stats.total_tools
+    # 5. Implement plan
+    print("\n⚙️  Stage 5/7: Implementing plan...")
+    exit_code, implement_result = run_stage(
+        stage_name="implement",
+        args=[
+            workflow_id,
+            str(workflow_log_dir),
+            plan_document or "",
+            iterate_result.result
+        ],
+        cwd=cwd,
+        retry=True
     )
-    total_errors = (
-        research_stats.errors
-        + plan_stats.errors
-        + review_stats.errors
-        + iterate_stats.errors
+    if exit_code != 0 or not implement_result:
+        print("❌ Implementation stage failed")
+        return None
+    print("✓ Implementation completed")
+
+    # 6. Commit changes
+    print("\n💾 Stage 6/7: Committing changes...")
+    exit_code, commit_result = run_stage(
+        stage_name="commit",
+        args=[
+            workflow_id,
+            str(workflow_log_dir),
+            implement_result.result
+        ],
+        cwd=cwd,
+        retry=True
     )
+    if exit_code != 0 or not commit_result:
+        print("❌ Commit stage failed")
+        return None
+    print("✓ Changes committed")
+
+    # 7. Validate plan
+    print("\n✅ Stage 7/7: Validating implementation...")
+    exit_code, validate_result = run_stage(
+        stage_name="validate",
+        args=[
+            workflow_id,
+            str(workflow_log_dir),
+            plan_document or "",
+            commit_result.result
+        ],
+        cwd=cwd,
+        retry=True
+    )
+    if exit_code != 0 or not validate_result:
+        print("❌ Validation stage failed")
+        return None
+    print("✓ Validation completed")
+
+    # Calculate total stats from all stages
+    total_tools = sum([
+        research_result.stats.get("total_tools", 0),
+        plan_result.stats.get("total_tools", 0),
+        review_result.stats.get("total_tools", 0),
+        iterate_result.stats.get("total_tools", 0),
+        implement_result.stats.get("total_tools", 0),
+        commit_result.stats.get("total_tools", 0),
+        validate_result.stats.get("total_tools", 0),
+    ])
+    total_errors = sum([
+        research_result.stats.get("errors", 0),
+        plan_result.stats.get("errors", 0),
+        review_result.stats.get("errors", 0),
+        iterate_result.stats.get("errors", 0),
+        implement_result.stats.get("errors", 0),
+        commit_result.stats.get("errors", 0),
+        validate_result.stats.get("errors", 0),
+    ])
 
     print("\n" + "=" * 80)
     print("✅ Workflow completed successfully!")
@@ -150,27 +181,4 @@ async def run_workflow(*, prompt: str, cwd: Path) -> None | str:
     print(f"Total: {total_tools} tools executed, {total_errors} errors")
     print("=" * 80)
 
-    # # Implement plan
-    # implement_plan_result = await run_agent(
-    #     prompt=f"/implement_plan {iterate_plan_result}",
-    #     log_file=workflow_log_dir / "implement.log",
-    #     options=options,
-    # )
-
-    # # Commit changes
-    # Commit asks the user for input
-    # commit_result = await run_agent(
-    #     prompt=f"/commit {implement_plan_result}",
-    #     options=options,
-    #     log_file=workflow_log_dir / "commit.log",
-    # )
-
-    # # Validate plan
-    # implement_plan_result = await run_agent(
-    #     prompt=f"/validate_plan {implement_plan_result}",
-    #     options=options,
-    #     log_file=workflow_log_dir / "validate.log",
-    # )
-
-    # # Commit changes
-    return iterate_plan_result  # Return just the string result, not the stats
+    return validate_result.result

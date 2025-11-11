@@ -125,6 +125,72 @@ def write_to_log(log_file: Path, content: str) -> None:
             f.write("\n")
 
 
+def run_stage(
+    stage_name: str,
+    args: list[str],
+    cwd: Path,
+    retry: bool = True
+):
+    """Run a workflow stage script and parse its JSON output.
+
+    Args:
+        stage_name: Name of the stage (e.g., "research")
+        args: Command-line arguments to pass to the stage
+        cwd: Working directory
+        retry: Whether to retry once on failure
+
+    Returns:
+        Tuple of (exit_code, StageResult or None)
+    """
+    import json
+    import subprocess
+    import sys
+
+    from π.stages import StageResult
+
+    command = [sys.executable, f"π/stages/{stage_name}.py"] + args
+
+    # First attempt
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        text=True
+    )
+
+    # Retry once if failed and retry enabled
+    if result.returncode != 0 and retry:
+        print(f"⚠️  Stage {stage_name} failed, retrying once...")
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True
+        )
+
+    # Log stderr (stats and progress info)
+    if result.stderr:
+        print(result.stderr.strip())
+
+    # Parse JSON output
+    if result.returncode == 0:
+        try:
+            data = json.loads(result.stdout)
+            stage_result = StageResult.from_dict(data)
+            return (0, stage_result)
+        except json.JSONDecodeError as e:
+            print(f"❌ Failed to parse stage output: {e}")
+            return (1, None)
+    else:
+        # Try to parse error result
+        try:
+            data = json.loads(result.stdout)
+            stage_result = StageResult.from_dict(data)
+            return (result.returncode, stage_result)
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return (result.returncode, None)
+
+
 def prevent_sleep(func):
     """Prevents the system from sleeping while the function is running"""
 
