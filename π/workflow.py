@@ -1,3 +1,36 @@
+"""Workflow orchestration via external stage processes.
+
+Architecture:
+
+    run_workflow()
+         |
+         ├─> [research.py] ──> research.md
+         |        ↓
+         ├─> [plan.py] ────> plan.md
+         |        ↓
+         ├─> [review.py]
+         |        ↓
+         ├─> [iterate.py]
+         |        ↓
+         ├─> [implement.py]
+         |        ↓
+         ├─> [commit.py]
+         |        ↓
+         └─> [validate.py]
+
+Each stage:
+  - Runs as external Python subprocess
+  - Receives context via CLI arguments
+  - Outputs JSON to stdout
+  - Logs progress to stderr
+  - Returns StageResult with status/stats
+
+Data flow:
+  - Sequential execution (no parallelism)
+  - Previous stage result passed to next
+  - Document paths tracked across stages
+  - Retry once on failure
+"""
 from pathlib import Path
 
 from π.utils import (

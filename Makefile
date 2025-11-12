@@ -1,11 +1,12 @@
-.PHONY: help install format check clean codespace
+.PHONY: help install format test check clean codespace
 SHELL := /bin/bash
 
 help:
 	@echo "Available targets:"
 	@echo "  make install   - Install deps with uv"
 	@echo "  make format    - Format code with ruff"
-	@echo "  make check     - Run lint and test (without formatting)"
+	@echo "  make test      - Run tests with pytest"
+	@echo "  make check     - Run lint and tests"
 	@echo "  make clean     - Remove cache and generated files"
 
 install:
@@ -16,9 +17,15 @@ format:
 	@echo "Formatting code with ruff..."
 	uv run ruff format .
 
+test:
+	@echo "Running tests with pytest..."
+	uv run pytest tests/ -v
+
 check:
 	@echo "Linting code with ruff..."
 	uv run ruff check .
+	@echo "Running tests..."
+	uv run pytest tests/ -v
 
 fix:
 	@echo "Fixing lint errors with ruff..."
