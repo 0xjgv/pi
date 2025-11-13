@@ -1,263 +1,166 @@
+# conversation_queue_async.py
 import asyncio
-import contextlib
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Literal
 
-from claude_agent_sdk import ClaudeAgentOptions
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk.types import (
+    AssistantMessage,
+    HookMatcher,
+    Message,
+    ResultMessage,
+    SystemMessage,
+    TextBlock,
+    UserMessage,
+)
 
-from π.agent import run_agent
+from π.hooks import check_bash_command, check_file_format
 
-AgentMessage = tuple[str, str]
-PromptBuilder = Callable[["AgentParticipant", AgentMessage, "ConversationState"], str]
-
-
-class ConversationState:
-    """In-memory transcript for a dual-agent exchange."""
-
-    def __init__(self) -> None:
-        self.history: list[AgentMessage] = []
-
-    def append(self, speaker: str, content: str) -> None:
-        self.history.append((speaker, content))
-
-    def render(self) -> str:
-        if not self.history:
-            return ""
-        return "\n".join(f"{speaker}: {content}" for speaker, content in self.history)
-
-    def copy(self) -> list[AgentMessage]:
-        return list(self.history)
-
-    def __len__(self) -> int:
-        return len(self.history)
+CWD = Path.cwd().parent
+DEFAULT_MODEL = "sonnet"
 
 
-@dataclass(slots=True)
-class AgentParticipant:
-    """Configuration for a single conversational agent."""
-
-    name: str
-    options: ClaudeAgentOptions
-    prompt_builder: PromptBuilder | None = None
-    log_file: Path | None = None
-    verbose: bool = False
-
-    def build_prompt(self, incoming: AgentMessage, state: ConversationState) -> str:
-        builder = self.prompt_builder or _default_prompt_builder
-        return builder(self, incoming, state)
-
-
-@dataclass(slots=True)
-class ConversationResult:
-    """Final transcript for a conversation."""
-
-    transcript: list[AgentMessage]
-
-    def as_text(self) -> str:
-        if not self.transcript:
-            return ""
-        return "\n".join(
-            f"{speaker}: {content}" for speaker, content in self.transcript
-        )
-
-
-def _default_prompt_builder(
-    participant: AgentParticipant,
-    incoming: AgentMessage,
-    state: ConversationState,
-) -> str:
-    sender, message = incoming
-    transcript = state.render()
-    if transcript:
-        transcript_block = transcript
-    else:
-        transcript_block = f"{sender}: {message}"
-
-    return (
-        f"You are {participant.name}. Continue the dialogue below.\n\n"
-        f"{transcript_block}\n\n"
-        f"Most recent message from {sender}: {message}\n"
-        f"Reply in the voice of {participant.name}:"
+def get_agent_options(
+    *,
+    system_prompt: str | None = None,
+    fork_session: bool = False,
+    model: str = DEFAULT_MODEL,
+    cwd: Path = CWD,
+) -> ClaudeAgentOptions:
+    return ClaudeAgentOptions(
+        hooks={
+            "PostToolUse": [
+                HookMatcher(matcher="Write|MultiEdit|Edit", hooks=[check_file_format])
+            ],
+            "PreToolUse": [
+                HookMatcher(matcher="Bash", hooks=[check_bash_command]),
+            ],
+        },
+        permission_mode="acceptEdits",
+        system_prompt=system_prompt,
+        setting_sources=["project"],
+        fork_session=fork_session,
+        model=model,
+        cwd=cwd,
     )
 
 
-async def _agent_worker(
-    participant: AgentParticipant,
+def extract_message_content(msg: Message | ResultMessage) -> str | None:
+    if isinstance(msg, ResultMessage):
+        return msg.result
+    if isinstance(msg, SystemMessage):
+        return None
+    if isinstance(msg, (UserMessage, AssistantMessage)):
+        content = msg.content
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            # Extract text from TextBlock items
+            texts = []
+            for block in content:
+                if isinstance(block, TextBlock):
+                    texts.append(block.text)
+            return "\n".join(texts) if texts else None
+    return None
+
+
+async def run_agent(
     *,
-    inbox: asyncio.Queue[AgentMessage | None],
-    state: ConversationState,
-    transcript_queue: asyncio.Queue[AgentMessage],
-    stop_event: asyncio.Event,
-) -> None:
-    while True:
-        payload = await inbox.get()
-        if payload is None:
-            break
-        if stop_event.is_set():
-            continue
-
-        prompt = participant.build_prompt(payload, state)
-
-        try:
-            reply_text = await run_agent(
-                log_file=participant.log_file,
-                options=participant.options,
-                verbose=participant.verbose,
-                prompt=prompt,
-            )
-        except asyncio.CancelledError:
-            stop_event.set()
-            raise
-        except Exception:
-            stop_event.set()
-            raise
-
-        await transcript_queue.put((participant.name, reply_text))
+    options: ClaudeAgentOptions,
+    prompt: str,
+    name: str,
+) -> str | None:
+    async with ClaudeSDKClient(options=options) as client:
+        result = await query_agent(client=client, prompt=prompt, name=name)
+        return result
 
 
-async def run_agent_conversation(
+async def query_agent(
     *,
-    first_responder: Literal["agent_a", "agent_b"] = "agent_b",
-    per_turn_timeout: float | None = None,
-    initial_sender: str | None = None,
-    agent_a: AgentParticipant,
-    agent_b: AgentParticipant,
-    initial_message: str,
-    turns: int = 4,
-) -> ConversationResult:
-    """Run a bounded asynchronous conversation between two agents.
+    client: ClaudeSDKClient,
+    prompt: str,
+    name: str,
+) -> str | None:
+    messages: list[str] = []
+    await client.query(prompt=prompt)
+    async for msg in client.receive_response():
+        print(f"[{name}] MESSAGE:", msg.__class__.__name__)
+        content = extract_message_content(msg)
+        if content is not None:
+            messages.append(content)
 
-    Args:
-        agent_a: First agent participant.
-        agent_b: Second agent participant.
-        initial_message: Seed message inserted at the start of the exchange.
-        turns: Number of run_agent calls (responses) to collect.
-        first_responder: Which agent receives the initial message.
-        initial_sender: Logical speaker for the initial message. Defaults to the
-            opposing agent's name.
-        per_turn_timeout: Optional timeout (seconds) per response.
+    return messages[-1] if len(messages) > 0 else None
 
-    Returns:
-        ConversationResult containing the full transcript (including initial
-        message).
 
-    Raises:
-        ValueError: If configuration values are invalid.
-        asyncio.TimeoutError: If per_turn_timeout expires before collecting all turns.
-    """
-    if turns < 1:
-        raise ValueError("turns must be at least 1")
-    if first_responder not in {"agent_a", "agent_b"}:
-        raise ValueError("first_responder must be 'agent_a' or 'agent_b'")
+async def agent(
+    *,
+    client: ClaudeSDKClient,
+    outbox: asyncio.Queue,
+    inbox: asyncio.Queue,
+    name: str,
+):
+    while (message := await inbox.get()) is not None:
+        print(f"[{name}] received: {message[-700:] if message else ''}")
+        msg_result = await query_agent(client=client, prompt=message, name=name)
+        # print(f"[{name}] responds: {msg_result[-700:] if msg_result else ''}")
+        await outbox.put(msg_result)
 
-    transcript_queue: asyncio.Queue[AgentMessage] = asyncio.Queue()
-    stop_event = asyncio.Event()
-    state = ConversationState()
+    # Signal the end of the conversation
+    outbox.put_nowait(None)
 
-    a_inbox: asyncio.Queue[AgentMessage | None] = asyncio.Queue()
-    b_inbox: asyncio.Queue[AgentMessage | None] = asyncio.Queue()
 
-    workers = [
-        asyncio.create_task(
-            _agent_worker(
-                agent_a,
-                transcript_queue=transcript_queue,
-                stop_event=stop_event,
-                inbox=a_inbox,
-                state=state,
-            ),
-            name=f"{agent_a.name}-worker",
-        ),
-        asyncio.create_task(
-            _agent_worker(
-                agent_b,
-                transcript_queue=transcript_queue,
-                stop_event=stop_event,
-                inbox=b_inbox,
-                state=state,
-            ),
-            name=f"{agent_b.name}-worker",
-        ),
-    ]
+async def main():
+    teacher_inbox, student_inbox = asyncio.Queue(), asyncio.Queue()
 
-    pending_response: asyncio.Task | None = None
-    responses_collected = 0
+    # HERE: we want to start the async context for the teacher & student agents
+    # the student agent should start a new session for each conversation
+    # we want to figure out how to delegate the tasks of starting a new session to the teacher agent (later)
+    # the teacher maintains the content of the conversation
+    # the student learns though starts over when the lesson ends and things change.
+    # the teacher keeps track of the previous lessons (history) and can use it to help guide the student.
 
-    try:
-        default_sender = agent_b.name if first_responder == "agent_a" else agent_a.name
-        receiver_queue = a_inbox if first_responder == "agent_a" else b_inbox
-        seeded_sender = initial_sender or default_sender
+    teacher_options = get_agent_options(system_prompt="You are the teacher")
+    student_options = get_agent_options(
+        system_prompt="You are the student",
+        fork_session=True,  # start a new session for the student
+    )
 
-        receiver_queue.put_nowait((seeded_sender, initial_message))
-        state.append(seeded_sender, initial_message)
-
-        pending_response = asyncio.create_task(transcript_queue.get())
-
-        while responses_collected < turns:
-            wait_set: set[asyncio.Task] = {pending_response, *workers}
-            done, _ = await asyncio.wait(
-                wait_set,
-                timeout=per_turn_timeout,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
-            if not done:
-                raise asyncio.TimeoutError(
-                    f"Timed out waiting for turn {responses_collected + 1}."
+    async with (
+        ClaudeSDKClient(options=teacher_options) as teacher_client,
+        ClaudeSDKClient(options=student_options) as student_client,
+    ):
+        tasks = [
+            asyncio.create_task(
+                agent(
+                    client=teacher_client,
+                    outbox=student_inbox,
+                    inbox=teacher_inbox,
+                    name="teacher",
                 )
+            ),
+            asyncio.create_task(
+                agent(
+                    client=student_client,
+                    outbox=teacher_inbox,
+                    inbox=student_inbox,
+                    name="student",
+                )
+            ),
+        ]
 
-            for worker in workers:
-                if worker in done:
-                    exc = worker.exception()
-                    if exc is not None:
-                        stop_event.set()
-                        raise exc
-                    stop_event.set()
-                    raise RuntimeError(
-                        f"Worker '{worker.get_name()}' exited unexpectedly."
-                    )
+        await teacher_inbox.put(
+            "ask the student to complete the word one character at a time: 'apple'"
+        )
+        # wait for the student to respond
+        minutes = 7
+        print(f"waiting for {minutes} minutes...")
+        await asyncio.sleep(minutes * 60)
 
-            if pending_response in done:
-                speaker, reply_text = pending_response.result()
-                state.append(speaker, reply_text)
-                responses_collected += 1
+        await asyncio.gather(
+            teacher_inbox.put(None),
+            student_inbox.put(None),
+        )
+        await asyncio.gather(*tasks)
 
-                if responses_collected >= turns:
-                    pending_response = None
-                    break
 
-                if speaker == agent_a.name:
-                    next_queue = b_inbox
-                elif speaker == agent_b.name:
-                    next_queue = a_inbox
-                else:
-                    stop_event.set()
-                    raise RuntimeError(f"Unknown speaker '{speaker}' in transcript")
-
-                next_queue.put_nowait((speaker, reply_text))
-                pending_response = asyncio.create_task(transcript_queue.get())
-
-        stop_event.set()
-
-    except asyncio.TimeoutError as exc:
-        stop_event.set()
-        for worker in workers:
-            worker.cancel()
-        raise asyncio.TimeoutError(
-            f"Timed out waiting for turn {responses_collected + 1}."
-        ) from exc
-
-    finally:
-        stop_event.set()
-        a_inbox.put_nowait(None)
-        b_inbox.put_nowait(None)
-        if pending_response is not None and not pending_response.done():
-            pending_response.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await pending_response
-        await asyncio.gather(*workers, return_exceptions=True)
-
-    return ConversationResult(
-        transcript=state.copy(),
-    )
+if __name__ == "__main__":
+    asyncio.run(main())
