@@ -21,12 +21,31 @@ from claude_agent_sdk.types import (
 
 from π.hooks import check_bash_command, check_file_format
 
+ALLOWED_TOOLS = [
+    "Task",
+    "Bash",
+    "Glob",
+    "Grep",
+    "ExitPlanMode",
+    "Read",
+    "Edit",
+    "Write",
+    "NotebookEdit",
+    "WebFetch",
+    "TodoWrite",
+    "WebSearch",
+    "BashOutput",
+    "KillShell",
+    "Skill",
+    "SlashCommand",
+]
+
 
 def get_agent_options(
     *,
+    extra_allowed_tools: list[str] = [],
     mcp_servers: dict[str, Any] = {},
     system_prompt: str | None = None,
-    allowed_tools: list[str] = [],
     cwd: Path = Path.cwd(),
 ) -> ClaudeAgentOptions:
     return ClaudeAgentOptions(
@@ -40,7 +59,7 @@ def get_agent_options(
         },
         permission_mode="acceptEdits",
         system_prompt=system_prompt,
-        allowed_tools=allowed_tools,
+        allowed_tools=[*ALLOWED_TOOLS, *extra_allowed_tools],
         setting_sources=["project"],
         mcp_servers=mcp_servers,
         cwd=cwd,  # helps to find the project .claude dir
@@ -144,13 +163,13 @@ async def main():
     # Create agent options for the lead and engineer
     lead_options = get_agent_options(
         system_prompt=f"You are the tech lead and you call the shots. Use the tools to follow the workflow. \n{available_tools}",
+        extra_allowed_tools=allowed_mcp_server_tools,
         mcp_servers={mcp_server_name: mcp_server},
-        allowed_tools=allowed_mcp_server_tools,
     )
     engineer_options = get_agent_options(
         system_prompt=f"You are the engineer and you follow the instructions of the tech lead. \n{available_tools}",
+        extra_allowed_tools=allowed_mcp_server_tools,
         mcp_servers={mcp_server_name: mcp_server},
-        allowed_tools=allowed_mcp_server_tools,
     )
 
     # Create named queues for the agents to communicate with each other
