@@ -1,3 +1,4 @@
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -23,16 +24,31 @@ async def check_bash_command(
         return {}
 
     command = tool_input.get("command", "")
-    block_patterns = ["rm", "rm -rf", "rm -rf *", "rm -rf **/*"]
+    block_patterns = [
+        ("rm",),
+        ("rm", "-rf"),
+        ("rm", "-rf", "*"),
+        ("rm", "-rf", "**/*"),
+    ]
 
-    for pattern in block_patterns:
-        if command.startswith(pattern) or pattern in command:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+
+    for pattern_tokens in block_patterns:
+        pattern_length = len(pattern_tokens)
+        for idx in range(len(tokens) - pattern_length + 1):
+            if tuple(tokens[idx : idx + pattern_length]) != pattern_tokens:
+                continue
+
+            matched_pattern = " ".join(pattern_tokens)
             print(f"[π-CLI] Blocked command: {command}")
             return cast(
                 HookJSONOutput,
                 {
                     "hookSpecificOutput": {
-                        "permissionDecisionReason": f"Command contains invalid pattern: {pattern}",
+                        "permissionDecisionReason": f"Command contains invalid pattern: {matched_pattern}",
                         "hookEventName": "PreToolUse",
                         "permissionDecision": "deny",
                     }
