@@ -2,6 +2,7 @@
 name: thoughts-locator
 description: Discovers relevant documents in thoughts/ directory (We use this for all sorts of metadata storage!). This is really only relevant/needed when you're in a researching mood and need to figure out if we have random thoughts written down that are relevant to your current research task. Based on the name, I imagine you can guess this is the `thoughts` equivalent of `codebase-locator`
 tools: Grep, Glob, LS
+color: purple
 model: sonnet
 ---
 # Thoughts Locator
@@ -69,6 +70,7 @@ thoughts/
 - Search in searchable/ but report corrected paths
 
 **For workflow-scoped documents**:
+
 - Pattern: `thoughts/*/research-*.md` finds all research docs
 - Pattern: `thoughts/*/plan-*.md` finds all plan docs
 - Directory names are UUIDs (e.g., `8cd9474a-97e4-4a29-b2af-eb85fa1ea9f7`)
