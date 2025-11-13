@@ -1,5 +1,6 @@
 # conversation_queue_async.py
 import asyncio
+from itertools import cycle
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +17,6 @@ from claude_agent_sdk.types import (
     ResultMessage,
     SystemMessage,
     TextBlock,
-    ThinkingBlock,
-    ToolResultBlock,
     UserMessage,
 )
 
@@ -29,8 +28,9 @@ DEFAULT_MODEL = "sonnet"
 
 def get_agent_options(
     *,
-    continue_conversation: bool = False,
+    mcp_servers: dict[str, Any] = {},
     system_prompt: str | None = None,
+    allowed_tools: list[str] = [],
     model: str = DEFAULT_MODEL,
     cwd: Path = CWD,
 ) -> ClaudeAgentOptions:
@@ -43,10 +43,11 @@ def get_agent_options(
                 HookMatcher(matcher="Bash", hooks=[check_bash_command]),
             ],
         },
-        continue_conversation=continue_conversation,
         permission_mode="acceptEdits",
         system_prompt=system_prompt,
         setting_sources=["project"],
+        allowed_tools=allowed_tools,
+        mcp_servers=mcp_servers,
         model=model,
         cwd=cwd,
     )
@@ -68,11 +69,8 @@ def extract_message_content(msg: Message | ResultMessage) -> str | None:
             for block in content:
                 if isinstance(block, TextBlock):
                     texts.append(block.text)
-                elif isinstance(block, ThinkingBlock):
-                    texts.append(block.thinking)
-                elif isinstance(block, ToolResultBlock):
-                    texts.append(block.content)
-            return "\n".join(texts) if texts else None
+            return "\n".join(texts) if len(texts) > 0 else None
+        return None
     return None
 
 
@@ -117,98 +115,82 @@ class NamedQueue(asyncio.Queue[Any]):
 
 
 async def main():
-    teacher_inbox, student_inbox = NamedQueue("teacher"), NamedQueue("student")
+    # Create a cycle of workflow steps
+    workflow = ("research", "plan", "review", "implement", "commit", "validate")
+    workflow_iter = cycle(workflow)
 
-    teacher_options = get_agent_options(
-        system_prompt="You are the teacher, use mcp tools to communicate with the student."
-    )
-    student_options = get_agent_options(
-        system_prompt="You are the student, use mcp tools to communicate with the teacher."
-    )
+    # Create an MCP server tools for the workflow
+    @tool("get_step", "Get the current step of the workflow", {})
+    async def get_step(_: Any) -> dict[str, Any]:
+        current_step = next(workflow_iter)
+        return {"content": [{"type": "text", "text": f"Workflow step: {current_step}"}]}
 
-    queue_map = {
-        teacher_inbox.name: teacher_inbox,
-        student_inbox.name: student_inbox,
-    }
-    available_agents = list(queue_map.keys())
-
-    @tool(
-        "send_message",
-        "Send a message to an agent",
-        {
-            "type": "object",
-            "properties": {
-                "to": {"type": "string", "enum": available_agents},
-                "message": {"type": "string"},
-            },
-            "required": ["to", "message"],
-        },
-    )
-    async def send_message(args: dict[str, str]) -> dict[str, Any]:
-        print(f"[send_message] called {available_agents}")
-        print(f"[send_message] called with args: {args}")
-        to_agent = args["to"]
-        inbox = queue_map[to_agent]
-        await inbox.put(args["message"])
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": f"Message sent to {to_agent}",
-                }
-            ]
-        }
-
-    tools = [send_message]
-    mcp_server_name = "agents_comm"
+    # Create an MCP server tools for the agents
+    mcp_server_name = "workflow"
+    tools = [get_step]
     mcp_server = create_sdk_mcp_server(
         name=mcp_server_name,
-        version="1.0.0",
+        version="0.1.0",
         tools=tools,
     )
+    allowed_mcp_server_tools = [
+        f"mcp__{mcp_server_name}__{tool.name}" for tool in tools
+    ]
 
-    allowed_mcp_servers = [f"mcp__{mcp_server_name}__{tool.name}" for tool in tools]
+    # Extra prompt for the agents to know the available tools
+    available_tools = f"## Available tools: {', '.join(allowed_mcp_server_tools)}"
 
-    teacher_options.mcp_servers = {mcp_server_name: mcp_server}
-    teacher_options.allowed_tools = allowed_mcp_servers
+    # Create agent options for the lead and engineer
+    lead_options = get_agent_options(
+        system_prompt=f"You are the tech lead \n{available_tools}",
+        mcp_servers={mcp_server_name: mcp_server},
+        allowed_tools=allowed_mcp_server_tools,
+    )
+    engineer_options = get_agent_options(
+        system_prompt=f"You are the engineer \n{available_tools}",
+        mcp_servers={mcp_server_name: mcp_server},
+        allowed_tools=allowed_mcp_server_tools,
+    )
 
-    student_options.mcp_servers = {mcp_server_name: mcp_server}
-    student_options.allowed_tools = allowed_mcp_servers
+    # Create named queues for the agents to communicate with each other
+    lead_agent, engineer_agent = NamedQueue("lead"), NamedQueue("engineer")
 
     async with (
-        ClaudeSDKClient(options=teacher_options) as teacher_client,
-        ClaudeSDKClient(options=student_options) as student_client,
+        ClaudeSDKClient(options=engineer_options) as engineer_client,
+        ClaudeSDKClient(options=lead_options) as lead_client,
     ):
         tasks = [
             asyncio.create_task(
                 agent(
-                    client=teacher_client,
-                    outbox=student_inbox,
-                    inbox=teacher_inbox,
-                    name="teacher",
-                )
+                    outbox=engineer_agent,
+                    client=lead_client,
+                    inbox=lead_agent,
+                    name="lead",
+                ),
+                name="lead",
             ),
             asyncio.create_task(
                 agent(
-                    client=student_client,
-                    outbox=teacher_inbox,
-                    inbox=student_inbox,
-                    name="student",
-                )
+                    client=engineer_client,
+                    inbox=engineer_agent,
+                    outbox=lead_agent,
+                    name="engineer",
+                ),
+                name="engineer",
             ),
         ]
 
-        await teacher_inbox.put(
-            "ask the student to complete the word one character at a time: 'apple'"
+        await lead_agent.put(
+            "Mission, go through each step of the workflow and complete it. Task: Evaluate the current state of the codebase in terms of production readiness."
         )
-        # wait for the student to respond
+
         minutes = 7
         print(f"waiting for {minutes} minutes...")
         await asyncio.sleep(minutes * 60)
 
         await asyncio.gather(
-            teacher_inbox.put(None),
-            student_inbox.put(None),
+            engineer_agent.put(None),
+            lead_agent.put(None),
         )
         await asyncio.gather(*tasks)
 
