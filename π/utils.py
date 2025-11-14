@@ -1,50 +1,15 @@
-import importlib
 import uuid
 from functools import wraps
 from os import getpid, system
 from pathlib import Path
 
-
-def load_prompt(step_name: str) -> tuple[str, str | None]:
-    """Dynamically import a prompt module and extract its exports.
-
-    Args:
-        step_name: Name of the prompt (e.g., 'research_codebase')
-
-    Returns:
-        Tuple of (prompt_template, model_name)
-
-    Raises:
-        ImportError: If prompt module doesn't exist
-        AttributeError: If module missing required 'prompt' attribute
-    """
-    try:
-        # Use Python's import system for proper caching and validation
-        module = importlib.import_module(f"π.prompts.{step_name}")
-
-        # Validate required attribute exists
-        if not hasattr(module, "prompt"):
-            raise AttributeError(
-                f"Prompt module '{step_name}' missing required 'prompt' attribute"
-            )
-
-        # Extract exports with type validation
-        prompt = module.prompt
-        model = getattr(module, "model", None)
-
-        if not isinstance(prompt, str):
-            raise TypeError(f"Expected 'prompt' to be str, got {type(prompt)}")
-
-        if model is not None and not isinstance(model, str):
-            raise TypeError(f"Expected 'model' to be str or None, got {type(model)}")
-
-        return prompt, model
-
-    except ImportError as e:
-        raise ImportError(
-            f"Prompt module 'π.prompts.{step_name}' not found. "
-            f"Available prompts: research_codebase, create_plan, iterate_plan, etc."
-        ) from e
+from claude_agent_sdk.types import (
+    AssistantMessage,
+    Message,
+    ResultMessage,
+    TextBlock,
+    UserMessage,
+)
 
 
 def generate_workflow_id() -> str:
@@ -71,47 +36,6 @@ def create_workflow_dir(base_dir: Path, workflow_id: str) -> Path:
     return dir_path
 
 
-def find_file_starting_with(*, base_dir: Path, start_text: str) -> Path:
-    """Find the first file whose name starts with the given text.
-
-    Searches non-recursively in the provided directory first for performance,
-    then falls back to a recursive search if not found.
-
-    Args:
-        base_dir: Directory to search within.
-        start_text: Filename prefix to match.
-
-    Returns:
-        Path to the first matching file.
-
-    Raises:
-        FileNotFoundError: If the directory doesn't exist/isn't a directory or no match is found.
-    """
-    if not base_dir.exists() or not base_dir.is_dir():
-        raise FileNotFoundError(f"Directory not found: {base_dir}")
-
-    # Prefer a quick, shallow search first
-    immediate_matches = sorted(
-        (
-            p
-            for p in base_dir.iterdir()
-            if p.is_file() and p.name.startswith(start_text)
-        ),
-        key=lambda p: p.name,
-    )
-    if immediate_matches:
-        return immediate_matches[0]
-
-    # Fallback: recursive search
-    for p in base_dir.rglob("*"):
-        if p.is_file() and p.name.startswith(start_text):
-            return p
-
-    raise FileNotFoundError(
-        f"No file starting with '{start_text}' found under {base_dir}"
-    )
-
-
 def write_to_log(log_file: Path, content: str) -> None:
     """Append content to a log file.
 
@@ -135,3 +59,32 @@ def prevent_sleep(func):
         return func(*args, **kwargs)
 
     return wrapper
+
+
+def extract_message_content(msg: Message | ResultMessage) -> str | None:
+    if isinstance(msg, ResultMessage):
+        return msg.result
+    if isinstance(msg, (UserMessage, AssistantMessage)):
+        content = msg.content
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            texts = []
+            for block in content:
+                if isinstance(block, TextBlock):
+                    texts.append(block.text)
+            return "\n".join(texts) if len(texts) > 0 else None
+        return None
+    return None
+
+
+def load_claude_commands() -> list[str]:
+    """Load Claude commands from the commands directory.
+
+    Returns:
+        An ordered list of command names
+    """
+    commands_dir = Path.cwd() / ".claude" / "commands"
+    if not commands_dir.exists():
+        raise FileNotFoundError(f"Commands directory not found: {commands_dir}")
+    return sorted(command_file.stem for command_file in commands_dir.glob("*.md"))

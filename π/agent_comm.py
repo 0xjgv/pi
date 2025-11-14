@@ -10,22 +10,11 @@ from claude_agent_sdk import (
     tool,
 )
 from claude_agent_sdk.types import (
-    AssistantMessage,
     HookMatcher,
-    Message,
-    ResultMessage,
-    TextBlock,
-    UserMessage,
 )
 
 from π.hooks import check_bash_command, check_file_format, check_file_write
-
-
-class AgentQueue(asyncio.Queue[Any]):
-    def __init__(self, name: str):
-        self.name: str = name
-        super().__init__()
-
+from π.utils import extract_message_content
 
 ALLOWED_TOOLS = [
     "Task",
@@ -45,6 +34,12 @@ ALLOWED_TOOLS = [
     "Skill",
     "SlashCommand",
 ]
+
+
+class AgentQueue(asyncio.Queue[Any]):
+    def __init__(self, name: str):
+        self.name: str = name
+        super().__init__()
 
 
 def get_agent_options(
@@ -73,26 +68,6 @@ def get_agent_options(
         mcp_servers=mcp_servers,
         cwd=cwd,  # helps to find the project .claude dir
     )
-
-
-def extract_message_content(msg: Message | ResultMessage) -> str | None:
-    # if isinstance(msg, SystemMessage):
-    #     # print(f"SYSTEM MESSAGE: {msg.data}")
-    #     ...
-    if isinstance(msg, ResultMessage):
-        return msg.result
-    if isinstance(msg, (UserMessage, AssistantMessage)):
-        content = msg.content
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            texts = []
-            for block in content:
-                if isinstance(block, TextBlock):
-                    texts.append(block.text)
-            return "\n".join(texts) if len(texts) > 0 else None
-        return None
-    return None
 
 
 async def query_agent(
@@ -127,9 +102,8 @@ async def agent(
     inbox: AgentQueue,
 ):
     while (message := await inbox.get()) is not None:
-        print(f"[{inbox.name}] RECEIVED MESSAGE: {message if message else ''}")
         msg_result = await query_agent(client=client, prompt=message, name=inbox.name)
-        # print(f"[{inbox.name}] responds: {msg_result[-700:] if msg_result else ''}")
+        print(f"[{inbox.name}] RESULT: {msg_result if msg_result else ''}\n")
         await outbox.put(msg_result)
 
     # Signal the end of the conversation
