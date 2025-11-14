@@ -1,4 +1,4 @@
-.PHONY: help install format check clean codespace
+.PHONY: help install format check fix clean codespace
 SHELL := /bin/bash
 
 help:
