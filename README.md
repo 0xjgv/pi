@@ -27,8 +27,9 @@
 
 1. **Research**: Comprehensive codebase analysis with parallel sub-agents
 2. **Create Plan**: Implementation planning based on research findings
-3. **Review Plan**: Validation and quality assessment of the plan
-4. **Iterate Plan**: Refinement and improvement of the plan
+3. **Validate Plan**: Technical validation and feasibility assessment
+4. **Review Plan**: Validation and quality assessment of the plan
+5. **Iterate Plan**: Refinement and improvement of the plan
 
 ## Prerequisites
 
