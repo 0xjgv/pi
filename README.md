@@ -145,10 +145,9 @@ make fix
 
 # Clean build artifacts and caches
 make clean
-
-# Setup development environment (GitHub Codespaces)
-make codespace
 ```
+
+Note: `make codespace` is available but not shown in help target.
 
 ### Project Structure
 ```
