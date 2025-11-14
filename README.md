@@ -82,9 +82,10 @@ uv run π "Implement dark mode toggle"
 1. **Workflow Initialization**: Generates unique workflow ID and directories
 2. **Research Stage**: Analyzes codebase structure and relevant components
 3. **Planning Stage**: Creates detailed implementation plan
-4. **Review Stage**: Validates plan completeness and correctness
-5. **Iteration Stage**: Refines plan based on review feedback
-6. **Results**: Outputs final plan with statistics and file references
+4. **Validation Stage**: Technical validation and feasibility assessment
+5. **Review Stage**: Validates plan completeness and correctness
+6. **Iteration Stage**: Refines plan based on review feedback
+7. **Results**: Outputs final plan with statistics and file references
 
 ## Safety Features
 
