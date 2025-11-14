@@ -11,56 +11,7 @@ from claude_agent_sdk.types import (
 )
 
 
-async def check_bash_command(
-    input_data: HookInput, _tool_use_id: str | None, _context: HookContext
-) -> HookJSONOutput:
-    """Prevent certain bash commands from being executed."""
-    if "tool_input" not in input_data or "tool_name" not in input_data:
-        return {}
-
-    tool_input = input_data["tool_input"]
-    tool_name = input_data["tool_name"]
-    if tool_name != "Bash":
-        return {}
-
-    command = tool_input.get("command", "")
-    block_patterns = [
-        ("rm",),
-        ("rm", "-rf"),
-        ("rm", "-rf", "*"),
-        ("rm", "-rf", "**/*"),
-    ]
-
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        tokens = command.split()
-
-    for pattern_tokens in block_patterns:
-        pattern_length = len(pattern_tokens)
-        for idx in range(len(tokens) - pattern_length + 1):
-            if tuple(tokens[idx : idx + pattern_length]) != pattern_tokens:
-                continue
-
-            matched_pattern = " ".join(pattern_tokens)
-            print(f"[π-CLI] Blocked command: {command}")
-            return cast(
-                HookJSONOutput,
-                {
-                    "hookSpecificOutput": {
-                        "permissionDecisionReason": f"Command contains invalid pattern: {matched_pattern}",
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                    }
-                },
-            )
-
-    return {}
-
-
 # === Helper Functions ===
-
-
 def _compact_path(path: Path | str) -> str:
     """Make a path more compact for display."""
     path = Path(path)
@@ -104,8 +55,6 @@ def _find_project_root(start_path: Path, marker_files: list[str]) -> Path | None
 
 
 # === Language Checkers ===
-
-
 def check_python(path: Path) -> tuple[int, str]:
     """Run Python-specific checks - ruff only."""
     print(f"🐍 Running Python checks for {_compact_path(path)}...")
@@ -228,17 +177,18 @@ def check_go(path: Path) -> tuple[int, str]:
 
 # Language registry mapping file extensions to checker functions
 LANGUAGE_REGISTRY = {
-    ".py": check_python,
-    ".pyx": check_python,
-    ".ts": check_typescript,
-    ".tsx": check_typescript,
-    ".js": check_typescript,
     ".jsx": check_typescript,
+    ".tsx": check_typescript,
+    ".ts": check_typescript,
+    ".js": check_typescript,
+    ".pyx": check_python,
+    ".py": check_python,
     ".rs": check_rust,
     ".go": check_go,
 }
 
 
+# === Hooks===
 async def check_file_format(
     input_data: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
@@ -276,5 +226,66 @@ async def check_file_format(
                     },
                 },
             )
+
+    return {}
+
+
+async def check_bash_command(
+    input_data: HookInput, _tool_use_id: str | None, _context: HookContext
+) -> HookJSONOutput:
+    """Prevent certain bash commands from being executed."""
+    if "tool_input" not in input_data or "tool_name" not in input_data:
+        return {}
+
+    tool_input = input_data["tool_input"]
+    tool_name = input_data["tool_name"]
+    if tool_name != "Bash":
+        return {}
+
+    command = tool_input.get("command", "")
+    block_patterns = [
+        ("rm",),
+        ("rm", "-rf"),
+        ("rm", "-rf", "*"),
+        ("rm", "-rf", "**/*"),
+    ]
+
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+
+    for pattern_tokens in block_patterns:
+        pattern_length = len(pattern_tokens)
+        for idx in range(len(tokens) - pattern_length + 1):
+            if tuple(tokens[idx : idx + pattern_length]) != pattern_tokens:
+                continue
+
+            matched_pattern = " ".join(pattern_tokens)
+            print(f"[π-CLI] Blocked command: {command}")
+            return cast(
+                HookJSONOutput,
+                {
+                    "hookSpecificOutput": {
+                        "permissionDecisionReason": f"Command contains invalid pattern: {matched_pattern}",
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                    }
+                },
+            )
+
+    return {}
+
+
+async def check_file_write(
+    input_data: HookInput, _tool_use_id: str | None, _context: HookContext
+) -> HookJSONOutput:
+    """Check if the file has been written."""
+    if "tool_input" not in input_data or "tool_name" not in input_data:
+        return {}
+
+    print("Input data check_file_write: ", input_data)
+    tool_input = input_data["tool_input"]
+    tool_name = input_data["tool_name"]
 
     return {}

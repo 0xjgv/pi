@@ -19,7 +19,7 @@ from claude_agent_sdk.types import (
     UserMessage,
 )
 
-from π.hooks import check_bash_command, check_file_format
+from π.hooks import check_bash_command, check_file_format, check_file_write
 
 ALLOWED_TOOLS = [
     "Task",
@@ -51,15 +51,18 @@ def get_agent_options(
     return ClaudeAgentOptions(
         hooks={
             "PostToolUse": [
-                HookMatcher(matcher="Write|MultiEdit|Edit", hooks=[check_file_format])
+                HookMatcher(matcher="Write|MultiEdit|Edit", hooks=[check_file_format]),
+                HookMatcher(
+                    matcher="Write", hooks=[check_file_write]
+                ),  # Build the function that checks if the file has been written (research & plan document)
             ],
             "PreToolUse": [
                 HookMatcher(matcher="Bash", hooks=[check_bash_command]),
             ],
         },
+        allowed_tools=[*ALLOWED_TOOLS, *extra_allowed_tools],
         permission_mode="acceptEdits",
         system_prompt=system_prompt,
-        allowed_tools=[*ALLOWED_TOOLS, *extra_allowed_tools],
         setting_sources=["project"],
         mcp_servers=mcp_servers,
         cwd=cwd,  # helps to find the project .claude dir
@@ -160,58 +163,63 @@ async def main():
     # Extra prompt for the agents to know the available tools
     available_tools = f"## Available tools: {', '.join(allowed_mcp_server_tools)}"
 
-    # Create agent options for the lead and engineer
-    lead_options = get_agent_options(
+    # Create agent options for the tech lead and software engineer
+    tech_lead_options = get_agent_options(
         system_prompt=f"You are the tech lead and you call the shots. Use the tools to follow the workflow. \n{available_tools}",
         extra_allowed_tools=allowed_mcp_server_tools,
         mcp_servers={mcp_server_name: mcp_server},
     )
-    engineer_options = get_agent_options(
-        system_prompt=f"You are the engineer and you follow the instructions of the tech lead. \n{available_tools}",
+    software_engineer_options = get_agent_options(
+        system_prompt=f"You are the software engineer and you follow the instructions of the tech lead. \n{available_tools}",
         extra_allowed_tools=allowed_mcp_server_tools,
         mcp_servers={mcp_server_name: mcp_server},
     )
 
     # Create named queues for the agents to communicate with each other
-    lead_agent, engineer_agent = NamedQueue("lead"), NamedQueue("engineer")
+    software_engineer_agent_queue, tech_lead_agent_queue = (
+        NamedQueue("software_engineer"),
+        NamedQueue("tech_lead"),
+    )
 
     async with (
-        ClaudeSDKClient(options=engineer_options) as engineer_client,
-        ClaudeSDKClient(options=lead_options) as lead_client,
+        ClaudeSDKClient(options=software_engineer_options) as software_engineer_client,
+        ClaudeSDKClient(options=tech_lead_options) as tech_lead_client,
     ):
         tasks = [
             asyncio.create_task(
                 agent(
-                    outbox=engineer_agent,
-                    client=lead_client,
-                    inbox=lead_agent,
-                    name="lead",
+                    name=software_engineer_agent_queue.name,
+                    outbox=software_engineer_agent_queue,
+                    inbox=tech_lead_agent_queue,
+                    client=tech_lead_client,
                 ),
-                name="lead",
+                name=tech_lead_agent_queue.name,
             ),
             asyncio.create_task(
                 agent(
-                    client=engineer_client,
-                    inbox=engineer_agent,
-                    outbox=lead_agent,
-                    name="engineer",
+                    name=software_engineer_agent_queue.name,
+                    inbox=software_engineer_agent_queue,
+                    client=software_engineer_client,
+                    outbox=tech_lead_agent_queue,
                 ),
-                name="engineer",
+                name=software_engineer_agent_queue.name,
             ),
         ]
 
         mission = (
             "How would you refactor the codebase to improve the production readiness?"
         )
-        await engineer_agent.put(f"/research_codebase {mission}")
+        # We prompt the software engineer to research the codebase first so
+        # that any questions go to the tech lead.
+        await software_engineer_agent_queue.put(f"/research_codebase {mission}")
 
         minutes = 7
         print(f"waiting for {minutes} minutes...")
         await asyncio.sleep(minutes * 60)
 
         await asyncio.gather(
-            engineer_agent.put(None),
-            lead_agent.put(None),
+            software_engineer_agent_queue.put(None),
+            tech_lead_agent_queue.put(None),
         )
         await asyncio.gather(*tasks)
 
