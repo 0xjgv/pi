@@ -1,13 +1,9 @@
 import asyncio
-from itertools import cycle
 from pathlib import Path
-from typing import Any
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
     ClaudeSDKClient,
-    create_sdk_mcp_server,
-    tool,
 )
 from claude_agent_sdk.types import (
     HookMatcher,
@@ -36,17 +32,22 @@ ALLOWED_TOOLS = [
 ]
 
 
-class AgentQueue(asyncio.Queue[Any]):
+class QueueMessage:
+    def __init__(self, *, message_from: str, message: str):
+        self.message_from = message_from
+        self.message = message
+
+
+class AgentQueue(asyncio.Queue[QueueMessage | None]):
     def __init__(self, name: str):
-        self.name: str = name
+        self.name = name
         super().__init__()
 
 
 def get_agent_options(
     *,
-    extra_allowed_tools: list[str] = [],
-    mcp_servers: dict[str, Any] = {},
     system_prompt: str | None = None,
+    model: str | None = None,
     cwd: Path = Path.cwd(),
 ) -> ClaudeAgentOptions:
     return ClaudeAgentOptions(
@@ -61,11 +62,11 @@ def get_agent_options(
                 HookMatcher(matcher="Bash", hooks=[check_bash_command]),
             ],
         },
-        allowed_tools=[*ALLOWED_TOOLS, *extra_allowed_tools],
+        allowed_tools=ALLOWED_TOOLS,
         permission_mode="acceptEdits",
         system_prompt=system_prompt,
         setting_sources=["project"],
-        mcp_servers=mcp_servers,
+        model=model,
         cwd=cwd,  # helps to find the project .claude dir
     )
 
@@ -97,60 +98,68 @@ async def query_agent(
 
 async def agent(
     *,
+    outboxes: list[AgentQueue],
     client: ClaudeSDKClient,
-    outbox: AgentQueue,
     inbox: AgentQueue,
 ):
-    while (message := await inbox.get()) is not None:
-        msg_result = await query_agent(client=client, prompt=message, name=inbox.name)
-        print(f"[{inbox.name}] RESULT: {msg_result if msg_result else ''}\n")
-        await outbox.put(msg_result)
+    while (msg_item := await inbox.get()) is not None:
+        if not msg_item.message:
+            continue
+
+        print(f"[{msg_item.message_from} -> {inbox.name}]")
+        print(f"> {msg_item.message}")
+
+        msg_result = await query_agent(
+            prompt=msg_item.message,
+            name=inbox.name,
+            client=client,
+        )
+
+        async with asyncio.TaskGroup() as task_group:
+            queue_message = QueueMessage(
+                message=msg_result or "",
+                message_from=inbox.name,
+            )
+            for outbox in outboxes:
+                task_group.create_task(outbox.put(queue_message))
 
     # Signal the end of the conversation
-    outbox.put_nowait(None)
+    for outbox in outboxes:
+        outbox.put_nowait(None)
+
+
+async def proxy_agent(
+    *,
+    inbox: AgentQueue,
+):
+    while (msg_item := await inbox.get()) is not None:
+        if not msg_item.message:
+            continue
+
+        print(f"[{msg_item.message_from} -> {inbox.name}] PROXY")
+        print(f"> {msg_item.message}")
+
+        # async with asyncio.TaskGroup() as task_group:
+        #     for outbox in outboxes:
+        #         task_group.create_task(outbox.put(msg_result))
+
+    # Signal the end of the conversation
+    # outbox.put_nowait(None)
 
 
 async def main():
-    # Create a cycle of workflow steps
-    workflow = ("research", "plan", "review", "implement", "commit", "validate")
-    workflow_iter = cycle(workflow)
-
-    # Create an MCP server tools for the workflow
-    @tool("get_step", "Get the current step of the workflow", {})
-    async def get_step(_: Any) -> dict[str, Any]:
-        current_step = next(workflow_iter)
-        return {"content": [{"type": "text", "text": f"Workflow step: {current_step}"}]}
-
-    # Create an MCP server tools for the agents
-    mcp_server_name = "workflow"
-    tools = [get_step]
-    mcp_server = create_sdk_mcp_server(
-        name=mcp_server_name,
-        version="0.1.0",
-        tools=tools,
-    )
-    allowed_mcp_server_tools = [
-        f"mcp__{mcp_server_name}__{tool.name}" for tool in tools
-    ]
-
-    # Extra prompt for the agents to know the available tools
-    available_tools = f"## Available tools: {', '.join(allowed_mcp_server_tools)}"
-
     # Create agent options for the tech lead and software engineer
     tech_lead_options = get_agent_options(
-        system_prompt=f"You are the tech lead and you call the shots. Use the tools to follow the workflow. \n{available_tools}",
-        extra_allowed_tools=allowed_mcp_server_tools,
-        mcp_servers={mcp_server_name: mcp_server},
+        system_prompt="You are the tech lead and you call the shots. Use the tools to follow the workflow.",
     )
     software_engineer_options = get_agent_options(
-        system_prompt=f"You are the software engineer and you follow the instructions of the tech lead. \n{available_tools}",
-        extra_allowed_tools=allowed_mcp_server_tools,
-        mcp_servers={mcp_server_name: mcp_server},
+        system_prompt="You are the software engineer and you follow the instructions of the tech lead.",
     )
 
     # Create named queues for the agents to communicate with each other
-    software_engineer_agent_queue, tech_lead_agent_queue = (
+    software_engineer_agent_queue, proxy_agent_queue, tech_lead_agent_queue = (
         AgentQueue("software_engineer"),
+        AgentQueue("proxy_agent"),
         AgentQueue("tech_lead"),
     )
 
@@ -161,7 +170,7 @@ async def main():
     ):
         task_group.create_task(
             agent(
-                outbox=software_engineer_agent_queue,
+                outboxes=[software_engineer_agent_queue, proxy_agent_queue],
                 client=software_engineer_client,
                 inbox=tech_lead_agent_queue,
             ),
@@ -169,17 +178,25 @@ async def main():
         )
         task_group.create_task(
             agent(
+                outboxes=[tech_lead_agent_queue, proxy_agent_queue],
                 inbox=software_engineer_agent_queue,
-                outbox=tech_lead_agent_queue,
                 client=tech_lead_client,
             ),
             name=tech_lead_agent_queue.name,
         )
+        task_group.create_task(
+            proxy_agent(
+                inbox=proxy_agent_queue,
+            ),
+            name=proxy_agent_queue.name,
+        )
 
         mission = "How would you implement a similar approach to ../linus in the way it handles the different workflow steps?"
+        initial_message = QueueMessage(message_from="user", message=mission)
+
         # We prompt the software engineer to research the codebase first, so
         # so that any clarifying questions go to the tech lead.
-        await software_engineer_agent_queue.put(f"/research_codebase {mission}")
+        await software_engineer_agent_queue.put(initial_message)
 
         minutes = 10
         print(f"waiting for {minutes} minutes...")
