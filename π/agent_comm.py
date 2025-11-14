@@ -1,4 +1,3 @@
-# conversation_queue_async.py
 import asyncio
 from itertools import cycle
 from pathlib import Path
@@ -184,25 +183,24 @@ async def main():
     async with (
         ClaudeSDKClient(options=software_engineer_options) as software_engineer_client,
         ClaudeSDKClient(options=tech_lead_options) as tech_lead_client,
+        asyncio.TaskGroup() as task_group,
     ):
-        tasks = [
-            asyncio.create_task(
-                agent(
-                    outbox=software_engineer_agent_queue,
-                    inbox=tech_lead_agent_queue,
-                    client=tech_lead_client,
-                ),
-                name=tech_lead_agent_queue.name,
+        task_group.create_task(
+            agent(
+                outbox=software_engineer_agent_queue,
+                client=software_engineer_client,
+                inbox=tech_lead_agent_queue,
             ),
-            asyncio.create_task(
-                agent(
-                    inbox=software_engineer_agent_queue,
-                    client=software_engineer_client,
-                    outbox=tech_lead_agent_queue,
-                ),
-                name=software_engineer_agent_queue.name,
+            name=software_engineer_agent_queue.name,
+        )
+        task_group.create_task(
+            agent(
+                inbox=software_engineer_agent_queue,
+                outbox=tech_lead_agent_queue,
+                client=tech_lead_client,
             ),
-        ]
+            name=tech_lead_agent_queue.name,
+        )
 
         mission = "How would you implement a similar approach to ../linus in the way it handles the different workflow steps?"
         # We prompt the software engineer to research the codebase first, so
@@ -213,11 +211,7 @@ async def main():
         print(f"waiting for {minutes} minutes...")
         await asyncio.sleep(minutes * 60)
 
-        await asyncio.gather(
-            software_engineer_agent_queue.put(None),
-            tech_lead_agent_queue.put(None),
-        )
-        await asyncio.gather(*tasks)
+        print("Done")
 
 
 if __name__ == "__main__":
