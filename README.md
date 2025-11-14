@@ -154,7 +154,7 @@ make codespace
 ```
 π/
 ├── cli.py              # CLI entry point
-├── workflow.py         # 4-stage workflow orchestration
+├── workflow.py         # 5-stage workflow orchestration
 ├── agent.py           # Agent management and statistics
 ├── agent_comm.py      # Agent communication utilities
 ├── hooks.py           # Safety and quality hooks
