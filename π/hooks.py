@@ -284,8 +284,19 @@ async def check_file_write(
     if "tool_input" not in input_data or "tool_name" not in input_data:
         return {}
 
-    print("Input data check_file_write: ", input_data)
     tool_input = input_data["tool_input"]
-    tool_name = input_data["tool_name"]
+    file_path = tool_input.get("file_path")
+    if not file_path:
+        return {}
 
-    return {}
+    path = Path(file_path)
+    if path.exists():
+        return {}
+
+    return cast(
+        HookJSONOutput,
+        {
+            "decision": "allow",
+            "reason": f"File {path.name} will be written",
+        },
+    )

@@ -21,6 +21,13 @@ from claude_agent_sdk.types import (
 
 from π.hooks import check_bash_command, check_file_format, check_file_write
 
+
+class AgentQueue(asyncio.Queue[Any]):
+    def __init__(self, name: str):
+        self.name: str = name
+        super().__init__()
+
+
 ALLOWED_TOOLS = [
     "Task",
     "Bash",
@@ -117,24 +124,17 @@ async def query_agent(
 async def agent(
     *,
     client: ClaudeSDKClient,
-    outbox: asyncio.Queue,
-    inbox: asyncio.Queue,
-    name: str,
+    outbox: AgentQueue,
+    inbox: AgentQueue,
 ):
     while (message := await inbox.get()) is not None:
-        print(f"[{name}] RECEIVED MESSAGE: {message if message else ''}")
-        msg_result = await query_agent(client=client, prompt=message, name=name)
-        # print(f"[{name}] responds: {msg_result[-700:] if msg_result else ''}")
+        print(f"[{inbox.name}] RECEIVED MESSAGE: {message if message else ''}")
+        msg_result = await query_agent(client=client, prompt=message, name=inbox.name)
+        # print(f"[{inbox.name}] responds: {msg_result[-700:] if msg_result else ''}")
         await outbox.put(msg_result)
 
     # Signal the end of the conversation
     outbox.put_nowait(None)
-
-
-class NamedQueue(asyncio.Queue[Any]):
-    def __init__(self, name: str):
-        self.name: str = name
-        super().__init__()
 
 
 async def main():
@@ -177,8 +177,8 @@ async def main():
 
     # Create named queues for the agents to communicate with each other
     software_engineer_agent_queue, tech_lead_agent_queue = (
-        NamedQueue("software_engineer"),
-        NamedQueue("tech_lead"),
+        AgentQueue("software_engineer"),
+        AgentQueue("tech_lead"),
     )
 
     async with (
@@ -188,7 +188,6 @@ async def main():
         tasks = [
             asyncio.create_task(
                 agent(
-                    name=software_engineer_agent_queue.name,
                     outbox=software_engineer_agent_queue,
                     inbox=tech_lead_agent_queue,
                     client=tech_lead_client,
@@ -197,7 +196,6 @@ async def main():
             ),
             asyncio.create_task(
                 agent(
-                    name=software_engineer_agent_queue.name,
                     inbox=software_engineer_agent_queue,
                     client=software_engineer_client,
                     outbox=tech_lead_agent_queue,
@@ -206,14 +204,12 @@ async def main():
             ),
         ]
 
-        mission = (
-            "How would you refactor the codebase to improve the production readiness?"
-        )
-        # We prompt the software engineer to research the codebase first so
-        # that any questions go to the tech lead.
+        mission = "How would you implement a similar approach to ../linus in the way it handles the different workflow steps?"
+        # We prompt the software engineer to research the codebase first, so
+        # so that any clarifying questions go to the tech lead.
         await software_engineer_agent_queue.put(f"/research_codebase {mission}")
 
-        minutes = 7
+        minutes = 10
         print(f"waiting for {minutes} minutes...")
         await asyncio.sleep(minutes * 60)
 
