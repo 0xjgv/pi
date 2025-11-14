@@ -1,6 +1,6 @@
 # π
 
-`π` (pi) is a sophisticated Python CLI that provides intelligent codebase automation through a multi-stage workflow system. Built on the Claude Agent SDK, it enables complex development tasks through structured research, planning, review, and iteration stages with built-in safety and code quality enforcement.
+`π` (pi) v0.1.0 is a sophisticated Python CLI that provides intelligent codebase automation through a multi-stage workflow system. Built on the Claude Agent SDK, it enables complex development tasks through structured research, planning, validation, review, and iteration stages with built-in safety and code quality enforcement.
 
 ## Highlights
 
