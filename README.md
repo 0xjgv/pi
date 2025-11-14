@@ -17,7 +17,7 @@
 ### Core Components
 
 - **CLI Interface** (`π/cli.py`): Entry point with async command handling
-- **Workflow System** (`π/workflow.py`): 4-stage orchestration pipeline
+- **Workflow System** (`π/workflow.py`): 5-stage orchestration pipeline
 - **Agent Management** (`π/agent.py`): Claude agent lifecycle and statistics
 - **Safety Hooks** (`π/hooks.py`): Pre/post tool execution validation
 - **Prompt System** (`π/prompts/`): Modular prompt templates
