@@ -6,6 +6,7 @@ help:
 	@echo "  make install   - Install deps with uv"
 	@echo "  make format    - Format code with ruff"
 	@echo "  make check     - Run lint and test (without formatting)"
+	@echo "  make fix       - Auto-fix lint errors with ruff"
 	@echo "  make clean     - Remove cache and generated files"
 
 install:
