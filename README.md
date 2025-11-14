@@ -4,7 +4,7 @@
 
 ## Highlights
 
-- **4-Stage Workflow System**: Research → Create Plan → Review Plan → Iterate Plan
+- **5-Stage Workflow System**: Research → Create Plan → Validate Plan → Review Plan → Iterate Plan
 - **Intelligent Sub-agent Orchestration**: Spawns specialized agents for different tasks
 - **Built-in Safety Hooks**: Prevents destructive commands and enforces code quality
 - **Multi-language Support**: Python (ruff), TypeScript/JavaScript (ESLint), Rust (cargo check), Go (go vet)
