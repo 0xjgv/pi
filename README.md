@@ -160,11 +160,15 @@ make codespace
 ├── hooks.py           # Safety and quality hooks
 ├── utils.py           # Core utilities and helpers
 └── prompts/           # Modular prompt templates
+    ├── __init__.py
     ├── research_codebase.py
     ├── create_plan.py
+    ├── validate_plan.py
     ├── review_plan.py
     ├── iterate_plan.py
-    └── ...
+    ├── implement_plan.py
+    ├── describe_pr.py
+    └── commit.py
 ```
 
 ### Adding Custom Prompts
