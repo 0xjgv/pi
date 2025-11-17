@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from typing import Callable
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
@@ -10,7 +11,11 @@ from claude_agent_sdk.types import (
 )
 
 from π.hooks import check_bash_command, check_file_format, check_file_write
-from π.utils import extract_message_content
+from π.utils import (
+    create_workflow_dir,
+    extract_message_content,
+    generate_workflow_id,
+)
 
 ALLOWED_TOOLS = [
     "Task",
@@ -98,6 +103,7 @@ async def query_agent(
 
 async def agent(
     *,
+    write_conversation: Callable[[QueueMessage, str], None] | None = None,
     outboxes: list[AgentQueue],
     client: ClaudeSDKClient,
     inbox: AgentQueue,
@@ -106,8 +112,11 @@ async def agent(
         if not msg_item.message:
             continue
 
-        print(f"[{msg_item.message_from} -> {inbox.name}]")
-        print(f"> {msg_item.message}")
+        if write_conversation:
+            write_conversation(msg_item, inbox.name)
+        else:
+            print(f"[{msg_item.message_from} -> {inbox.name}]")
+            print(f"> {msg_item.message}")
 
         msg_result = await query_agent(
             prompt=msg_item.message,
@@ -147,7 +156,36 @@ async def proxy_agent(
     # outbox.put_nowait(None)
 
 
+def capture_conversation(
+    *,
+    workflow_dir: Path,
+) -> Callable[[QueueMessage, str], None]:
+    """Create a function to write conversation messages to a CSV file."""
+    # Write the header once when the function is first called
+    csv_file = workflow_dir / "conversation.csv"
+    with open(csv_file, "w", encoding="utf-8") as f:
+        f.write("message_from,message_to,message\n")
+
+    def _escape_csv(text: str) -> str:
+        # Replace quotes with double quotes and wrap in quotes to escape commas
+        escaped = text.replace('"', '""')
+        return f'"{escaped}"'
+
+    # Return a function that can be called to append messages to the CSV file
+    def _write_message(msg: QueueMessage, message_to: str) -> None:
+        with open(csv_file, "a", encoding="utf-8") as f:
+            escaped_message = _escape_csv(msg.message)
+            f.write(f"{msg.message_from},{message_to},{escaped_message}\n")
+
+    return _write_message
+
+
 async def main():
+    # Set up workflow directory for conversation logging
+    workflow_id = generate_workflow_id()
+    workflow_dir = create_workflow_dir(Path.cwd() / ".logs", workflow_id)
+    write_conversation = capture_conversation(workflow_dir=workflow_dir)
+
     # Create agent options for the tech lead and software engineer
     tech_lead_options = get_agent_options(
         system_prompt="You are the tech lead and you call the shots. Use the tools to follow the workflow.",
@@ -171,6 +209,7 @@ async def main():
         task_group.create_task(
             agent(
                 outboxes=[software_engineer_agent_queue, proxy_agent_queue],
+                write_conversation=write_conversation,
                 client=software_engineer_client,
                 inbox=tech_lead_agent_queue,
             ),
@@ -179,19 +218,21 @@ async def main():
         task_group.create_task(
             agent(
                 outboxes=[tech_lead_agent_queue, proxy_agent_queue],
+                write_conversation=write_conversation,
                 inbox=software_engineer_agent_queue,
                 client=tech_lead_client,
             ),
             name=tech_lead_agent_queue.name,
         )
-        task_group.create_task(
-            proxy_agent(
-                inbox=proxy_agent_queue,
-            ),
-            name=proxy_agent_queue.name,
-        )
+        # EXAMPLE: On how to add a third agent to the conversation
+        # task_group.create_task(
+        #     proxy_agent(
+        #         inbox=proxy_agent_queue,
+        #     ),
+        #     name=proxy_agent_queue.name,
+        # )
 
-        mission = "How would you implement a similar approach to ../linus in the way it handles the different workflow steps?"
+        mission = "What's the capital of France?"
         initial_message = QueueMessage(message_from="user", message=mission)
 
         # We prompt the software engineer to research the codebase first, so
