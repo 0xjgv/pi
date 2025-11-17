@@ -13,6 +13,7 @@ from claude_agent_sdk.types import (
 from π.hooks import check_bash_command, check_file_format, check_file_write
 from π.utils import (
     create_workflow_dir,
+    escape_csv_text,
     extract_message_content,
     generate_workflow_id,
 )
@@ -47,6 +48,24 @@ class AgentQueue(asyncio.Queue[QueueMessage | None]):
     def __init__(self, name: str):
         self.name = name
         super().__init__()
+
+
+def capture_conversation_to_csv(
+    *,
+    workflow_dir: Path,
+) -> Callable[[QueueMessage, str], None]:
+    """Create a function to write conversation messages to a CSV file."""
+    # Write the header once when the function is first called
+    csv_file = workflow_dir / "conversation.csv"
+    with open(csv_file, "w", encoding="utf-8") as f:
+        f.write("message_from,message_to,message\n")
+
+    # Return a function that can be called to append messages to the CSV file
+    def _write_message(msg: QueueMessage, message_to: str) -> None:
+        with open(csv_file, "a", encoding="utf-8") as f:
+            f.write(f"{msg.message_from},{message_to},{escape_csv_text(msg.message)}\n")
+
+    return _write_message
 
 
 def get_agent_options(
@@ -137,52 +156,11 @@ async def agent(
         outbox.put_nowait(None)
 
 
-async def proxy_agent(
-    *,
-    inbox: AgentQueue,
-):
-    while (msg_item := await inbox.get()) is not None:
-        if not msg_item.message:
-            continue
-
-        print(f"[{msg_item.message_from} -> {inbox.name}] PROXY")
-        print(f"> {msg_item.message}")
-
-        # async with asyncio.TaskGroup() as task_group:
-        #     for outbox in outboxes:
-        #         task_group.create_task(outbox.put(msg_result))
-
-    # Signal the end of the conversation
-    # outbox.put_nowait(None)
-
-
-def capture_conversation(
-    *,
-    workflow_dir: Path,
-) -> Callable[[QueueMessage, str], None]:
-    """Create a function to write conversation messages to a CSV file."""
-    # Write the header once when the function is first called
-    csv_file = workflow_dir / "conversation.csv"
-    with open(csv_file, "w", encoding="utf-8") as f:
-        f.write("message_from,message_to,message\n")
-
-    # Replace quotes with double quotes and wrap in quotes to escape commas
-    def _escape_csv(text: str) -> str:
-        return f'"{text.strip().replace('"', '""')}"'
-
-    # Return a function that can be called to append messages to the CSV file
-    def _write_message(msg: QueueMessage, message_to: str) -> None:
-        with open(csv_file, "a", encoding="utf-8") as f:
-            f.write(f"{msg.message_from},{message_to},{_escape_csv(msg.message)}\n")
-
-    return _write_message
-
-
 async def main():
     # Set up workflow directory for conversation logging
     workflow_id = generate_workflow_id()
     workflow_dir = create_workflow_dir(Path.cwd() / ".logs", workflow_id)
-    write_conversation = capture_conversation(workflow_dir=workflow_dir)
+    write_conversation = capture_conversation_to_csv(workflow_dir=workflow_dir)
 
     # Create agent options for the tech lead and software engineer
     tech_lead_options = get_agent_options(
@@ -193,9 +171,8 @@ async def main():
     )
 
     # Create named queues for the agents to communicate with each other
-    software_engineer_agent_queue, proxy_agent_queue, tech_lead_agent_queue = (
+    software_engineer_agent_queue, tech_lead_agent_queue = (
         AgentQueue("software_engineer"),
-        AgentQueue("proxy_agent"),
         AgentQueue("tech_lead"),
     )
 
@@ -206,7 +183,7 @@ async def main():
     ):
         task_group.create_task(
             agent(
-                outboxes=[software_engineer_agent_queue, proxy_agent_queue],
+                outboxes=[software_engineer_agent_queue],
                 write_conversation=write_conversation,
                 client=software_engineer_client,
                 inbox=tech_lead_agent_queue,
@@ -215,9 +192,9 @@ async def main():
         )
         task_group.create_task(
             agent(
-                outboxes=[tech_lead_agent_queue, proxy_agent_queue],
                 write_conversation=write_conversation,
                 inbox=software_engineer_agent_queue,
+                outboxes=[tech_lead_agent_queue],
                 client=tech_lead_client,
             ),
             name=tech_lead_agent_queue.name,

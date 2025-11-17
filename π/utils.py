@@ -36,6 +36,11 @@ def create_workflow_dir(base_dir: Path, workflow_id: str) -> Path:
     return dir_path
 
 
+def escape_csv_text(text: str) -> str:
+    # Replace quotes with double quotes and wrap in quotes to escape commas
+    return f'"{text.strip().replace('"', '""')}"'
+
+
 def write_to_log(log_file: Path, content: str) -> None:
     """Append content to a log file.
 
