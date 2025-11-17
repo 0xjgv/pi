@@ -166,16 +166,14 @@ def capture_conversation(
     with open(csv_file, "w", encoding="utf-8") as f:
         f.write("message_from,message_to,message\n")
 
+    # Replace quotes with double quotes and wrap in quotes to escape commas
     def _escape_csv(text: str) -> str:
-        # Replace quotes with double quotes and wrap in quotes to escape commas
-        escaped = text.replace('"', '""')
-        return f'"{escaped}"'
+        return f'"{text.strip().replace('"', '""')}"'
 
     # Return a function that can be called to append messages to the CSV file
     def _write_message(msg: QueueMessage, message_to: str) -> None:
         with open(csv_file, "a", encoding="utf-8") as f:
-            escaped_message = _escape_csv(msg.message)
-            f.write(f"{msg.message_from},{message_to},{escaped_message}\n")
+            f.write(f"{msg.message_from},{message_to},{_escape_csv(msg.message)}\n")
 
     return _write_message
 
