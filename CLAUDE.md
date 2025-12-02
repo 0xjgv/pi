@@ -47,3 +47,10 @@ Each agent has an inbox and outbox(es). Messages flow bidirectionally until term
 ## Guidelines
 
 Follow the Zen of Python. Explicit over implicit. Simple over complex. Readability counts.
+
+## Claude Agent SDK Documentation
+
+- <https://platform.claude.com/docs/en/agent-sdk/structured-outputs>
+- <https://platform.claude.com/docs/en/agent-sdk/slash-commands>
+- <https://platform.claude.com/docs/en/agent-sdk/todo-tracking>
+- <https://platform.claude.com/docs/en/agent-sdk/custom-tools>

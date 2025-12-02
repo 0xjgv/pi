@@ -5,7 +5,7 @@ description = "π CLI"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "claude-agent-sdk>=0.1.4",
+    "claude-agent-sdk>=0.1.7",
     "pydantic>=2.12.3",
 ]
 
