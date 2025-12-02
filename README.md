@@ -58,8 +58,8 @@ Common tasks are bundled into the `Makefile`:
 
 ## License
 
-[Add your license here]
+<!-- TODO: Add your license here -->
 
 ## Contributing
 
-[Add contributing guidelines here]
+<!-- TODO: Add contributing guidelines here -->

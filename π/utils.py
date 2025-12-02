@@ -1,3 +1,4 @@
+import re
 import uuid
 from functools import wraps
 from os import getpid, system
@@ -81,6 +82,30 @@ def extract_message_content(msg: Message | ResultMessage) -> str | None:
             return "\n".join(texts) if len(texts) > 0 else None
         return None
     return None
+
+
+QUESTION_PATTERNS = [
+    r"^\s*[-*]\s*.*\?$",  # Bullet with question mark
+    r"^\s*\d+\.\s*.*\?$",  # Numbered question
+    r"^(Questions?|Open items?|Clarifications? needed):",  # Section headers
+    r"(before I proceed|need clarification|should I|which approach)",  # Phrases
+]
+
+
+def extract_questions(response: str) -> list[str]:
+    """Extract questions from a response for supervisor escalation."""
+    questions = []
+    lines = response.split("\n")
+
+    for line in lines:
+        for pattern in QUESTION_PATTERNS:
+            if re.search(pattern, line, re.IGNORECASE):
+                cleaned = line.strip().lstrip("-*0123456789. ")
+                if cleaned and cleaned not in questions:
+                    questions.append(cleaned)
+                break
+
+    return questions
 
 
 def load_claude_commands() -> list[str]:

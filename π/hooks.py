@@ -300,3 +300,33 @@ async def check_file_write(
             "reason": f"File {path.name} will be written",
         },
     )
+
+
+# Stage output file patterns
+STAGE_OUTPUT_PATTERNS = {
+    "research": "thoughts/shared/research/",
+    "plan": "thoughts/shared/plans/",
+}
+
+
+async def check_stage_output(
+    input_data: HookInput, _tool_use_id: str | None, context: HookContext
+) -> HookJSONOutput:
+    """Detect when a stage output file is written."""
+    if input_data.get("tool_name") != "Write":
+        return {}
+
+    file_path = input_data.get("tool_input", {}).get("file_path", "")
+
+    for stage, pattern in STAGE_OUTPUT_PATTERNS.items():
+        if pattern in file_path and file_path.endswith(".md"):
+            print(f"[π-CLI] Stage output detected: {stage} -> {file_path}")
+            return cast(
+                HookJSONOutput,
+                {
+                    "stage_complete": stage,
+                    "output_file": file_path,
+                },
+            )
+
+    return {}

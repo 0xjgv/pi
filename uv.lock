@@ -288,6 +288,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "claude-agent-sdk" },
+    { name = "pydantic" },
 ]
 
 [package.dev-dependencies]
@@ -296,7 +297,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "claude-agent-sdk", specifier = ">=0.1.4" }]
+requires-dist = [
+    { name = "claude-agent-sdk", specifier = ">=0.1.4" },
+    { name = "pydantic", specifier = ">=2.12.3" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff", specifier = ">=0.14.1" }]

@@ -1,6 +1,7 @@
 import asyncio
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
@@ -10,11 +11,17 @@ from claude_agent_sdk.types import (
     HookMatcher,
 )
 
-from π.hooks import check_bash_command, check_file_format, check_file_write
+from π.hooks import (
+    check_bash_command,
+    check_file_format,
+    check_file_write,
+    check_stage_output,
+)
 from π.utils import (
     create_workflow_dir,
     escape_csv_text,
     extract_message_content,
+    extract_questions,
     generate_workflow_id,
 )
 
@@ -37,6 +44,52 @@ ALLOWED_TOOLS = [
     "SlashCommand",
 ]
 
+SUPERVISOR_QUESTION_PROMPT = """You are the tech lead supervising an automated workflow.
+
+**Workflow Objective**: {objective}
+
+**Current Stage**: {stage}
+
+**Stage Context**:
+{context}
+
+**Questions from the software engineer**:
+{questions}
+
+Provide clear, actionable answers based on:
+1. Best practices for this codebase
+2. The workflow objective
+3. Technical feasibility
+
+Be decisive. If you cannot answer definitively, provide your best recommendation with rationale.
+Do NOT ask follow-up questions - make decisions and move forward.
+"""
+
+SUPERVISOR_REVIEW_PROMPT = """You are the tech lead reviewing stage output.
+
+**Workflow Objective**: {objective}
+
+**Stage Completed**: {stage}
+
+**Output File**: {output_file}
+
+Review the output and determine if it meets the objective requirements.
+
+Respond with either:
+- "APPROVED: [brief rationale]" - if the output is satisfactory
+- "REVISION NEEDED: [specific feedback]" - if changes are required
+
+Be constructive but decisive. The workflow cannot proceed without your approval.
+"""
+
+# Stage definitions: (command_name, expected_output_pattern, requires_review)
+WORKFLOW_STAGES = [
+    ("1_research_codebase", "thoughts/shared/research/", True),
+    ("2_create_plan", "thoughts/shared/plans/", True),
+    ("5_implement_plan", None, True),  # No file output, review via response
+    ("7_validate_plan", None, False),  # Final validation, no review needed
+]
+
 
 class QueueMessage:
     def __init__(self, *, message_from: str, message: str):
@@ -48,6 +101,17 @@ class AgentQueue(asyncio.Queue[QueueMessage | None]):
     def __init__(self, name: str):
         self.name = name
         super().__init__()
+
+
+@dataclass
+class StageResult:
+    """Captures the outcome of a stage execution."""
+
+    stage: str
+    status: Literal["complete", "questions", "error"]
+    output_file: str | None = None
+    questions: list[str] = field(default_factory=list)
+    response: str | None = None
 
 
 def capture_conversation_to_csv(
@@ -79,8 +143,8 @@ def get_agent_options(
             "PostToolUse": [
                 HookMatcher(matcher="Write|MultiEdit|Edit", hooks=[check_file_format]),
                 HookMatcher(
-                    matcher="Write", hooks=[check_file_write]
-                ),  # Build the function that checks if the file has been written (research & plan document)
+                    matcher="Write", hooks=[check_file_write, check_stage_output]
+                ),
             ],
             "PreToolUse": [
                 HookMatcher(matcher="Bash", hooks=[check_bash_command]),
@@ -120,106 +184,241 @@ async def query_agent(
     return messages[-1] if len(messages) > 0 else None
 
 
-async def agent(
+async def query_supervisor(
     *,
-    write_conversation: Callable[[QueueMessage, str], None] | None = None,
-    outboxes: list[AgentQueue],
     client: ClaudeSDKClient,
-    inbox: AgentQueue,
-):
-    while (msg_item := await inbox.get()) is not None:
-        if not msg_item.message:
-            continue
+    objective: str,
+    stage: str,
+    context: str,
+    questions: list[str] | None = None,
+    output_file: str | None = None,
+) -> tuple[str, bool]:
+    """Query supervisor for answers or approval.
 
-        if write_conversation:
-            write_conversation(msg_item, inbox.name)
-        else:
-            print(f"[{msg_item.message_from} -> {inbox.name}]")
-            print(f"> {msg_item.message}")
-
-        msg_result = await query_agent(
-            prompt=msg_item.message,
-            name=inbox.name,
-            client=client,
+    Returns:
+        tuple of (response_text, is_approved)
+        - For questions: (answers, True) - always approved to continue
+        - For review: (feedback, True/False) - approved or needs revision
+    """
+    if questions:
+        prompt = SUPERVISOR_QUESTION_PROMPT.format(
+            objective=objective,
+            stage=stage,
+            context=context,
+            questions="\n".join(f"- {q}" for q in questions),
+        )
+    else:
+        prompt = SUPERVISOR_REVIEW_PROMPT.format(
+            objective=objective,
+            stage=stage,
+            output_file=output_file,
         )
 
-        async with asyncio.TaskGroup() as task_group:
-            queue_message = QueueMessage(
-                message=msg_result or "",
-                message_from=inbox.name,
+    response = await query_agent(client=client, prompt=prompt, name="supervisor")
+
+    if questions:
+        return response or "", True
+
+    # Parse review response - strip markdown formatting like **APPROVED:**
+    clean_response = response.strip().lstrip("*").strip().upper() if response else ""
+    is_approved = clean_response.startswith("APPROVED")
+    return response or "", is_approved
+
+
+async def execute_stage(
+    *,
+    client: ClaudeSDKClient,
+    stage_command: str,
+    objective: str,
+    supervisor_context: str,
+) -> StageResult:
+    """Execute a single stage and return the result."""
+    # Build the stage prompt with objective and any supervisor context
+    if supervisor_context:
+        prompt = f"/{stage_command} {objective}\n\nContext from tech lead:\n{supervisor_context}"
+    else:
+        prompt = f"/{stage_command} {objective}"
+
+    response = await query_agent(client=client, prompt=prompt, name="swe")
+
+    if response is None:
+        return StageResult(
+            stage=stage_command,
+            status="error",
+            response="No response from agent",
+        )
+
+    # Check for questions in response
+    questions = extract_questions(response)
+    if questions:
+        return StageResult(
+            stage=stage_command,
+            status="questions",
+            questions=questions,
+            response=response,
+        )
+
+    # Stage completed (file detection happens via hooks, but we mark complete here)
+    return StageResult(
+        stage=stage_command,
+        status="complete",
+        response=response,
+    )
+
+
+async def stage_controller(
+    *,
+    write_conversation: Callable[[QueueMessage, str], None] | None = None,
+    supervisor_client: ClaudeSDKClient,
+    swe_client: ClaudeSDKClient,
+    objective: str,
+) -> bool:
+    """Orchestrate the staged workflow.
+
+    Returns:
+        True if workflow completed successfully, False otherwise.
+    """
+    stage_context = ""  # Accumulates supervisor feedback
+
+    for stage_command, output_pattern, requires_review in WORKFLOW_STAGES:
+        print(f"\n{'=' * 60}")
+        print(f"[π-CLI] Starting stage: {stage_command}")
+        print(f"{'=' * 60}\n")
+
+        stage_complete = False
+        max_iterations = 5  # Prevent infinite loops
+        iterations = 0
+
+        while not stage_complete and iterations < max_iterations:
+            iterations += 1
+
+            # Execute stage
+            result = await execute_stage(
+                client=swe_client,
+                stage_command=stage_command,
+                objective=objective,
+                supervisor_context=stage_context,
             )
-            for outbox in outboxes:
-                task_group.create_task(outbox.put(queue_message))
 
-    # Signal the end of the conversation
-    for outbox in outboxes:
-        outbox.put_nowait(None)
+            if write_conversation and result.response:
+                msg = QueueMessage(message_from="swe", message=result.response)
+                write_conversation(msg, "stage_controller")
+
+            if result.status == "error":
+                print(f"[π-CLI] Stage {stage_command} failed: {result.response}")
+                return False
+
+            if result.status == "questions":
+                # Escalate to supervisor
+                print(
+                    f"[π-CLI] Escalating {len(result.questions)} questions to supervisor"
+                )
+
+                answers, _ = await query_supervisor(
+                    client=supervisor_client,
+                    objective=objective,
+                    stage=stage_command,
+                    context=stage_context,
+                    questions=result.questions,
+                )
+
+                if write_conversation:
+                    msg = QueueMessage(message_from="supervisor", message=answers)
+                    write_conversation(msg, "swe")
+
+                # Add answers to context for next iteration
+                stage_context = f"Previous questions and answers:\n{answers}"
+                continue
+
+            # Stage completed
+            if requires_review:
+                print("[π-CLI] Requesting supervisor review")
+
+                feedback, is_approved = await query_supervisor(
+                    client=supervisor_client,
+                    objective=objective,
+                    stage=stage_command,
+                    context=stage_context,
+                    output_file=result.output_file,
+                )
+
+                if write_conversation:
+                    msg = QueueMessage(message_from="supervisor", message=feedback)
+                    write_conversation(msg, "swe")
+
+                if is_approved:
+                    print(f"[π-CLI] Stage {stage_command} approved")
+                    stage_context = f"Approved stage output: {result.output_file or 'implementation complete'}"
+                    stage_complete = True
+                else:
+                    print(f"[π-CLI] Revision requested for {stage_command}")
+                    stage_context = f"Revision feedback:\n{feedback}"
+            else:
+                stage_complete = True
+
+        if not stage_complete:
+            print(
+                f"[π-CLI] Stage {stage_command} failed after {max_iterations} iterations"
+            )
+            return False
+
+    print(f"\n{'=' * 60}")
+    print("[π-CLI] Workflow completed successfully!")
+    print(f"{'=' * 60}\n")
+    return True
 
 
-async def main():
+async def main(objective: str | None = None):
+    """Run the staged workflow with supervisor oversight.
+
+    Args:
+        objective: The workflow objective. If None, prompts user.
+    """
+    if not objective:
+        objective = input("Enter workflow objective: ").strip()
+        if not objective:
+            print("No objective provided. Exiting.")
+            return
+
+    print("\n[π-CLI] Starting workflow with objective:")
+    print(f"  {objective}\n")
+
     # Set up workflow directory for conversation logging
     workflow_id = generate_workflow_id()
     workflow_dir = create_workflow_dir(Path.cwd() / ".logs", workflow_id)
     write_conversation = capture_conversation_to_csv(workflow_dir=workflow_dir)
 
-    # Create agent options for the tech lead and software engineer
-    tech_lead_options = get_agent_options(
-        system_prompt="You are the tech lead and you call the shots. Use the tools to follow the workflow.",
+    print(f"[π-CLI] Logging to: {workflow_dir}")
+
+    # Create agent options
+    swe_options = get_agent_options(
+        system_prompt="You are a software engineer. Follow the workflow stages precisely.",
     )
-    software_engineer_options = get_agent_options(
-        system_prompt="You are the software engineer and you follow the instructions of the tech lead.",
+    supervisor_options = get_agent_options(
+        system_prompt="You are the tech lead. Review work, answer questions, and approve progress.",
+        model="opus",  # Use more capable model for supervision
     )
 
-    # Create named queues for the agents to communicate with each other
-    software_engineer_agent_queue, tech_lead_agent_queue = (
-        AgentQueue("software_engineer"),
-        AgentQueue("tech_lead"),
-    )
-
+    # Run the workflow
     async with (
-        ClaudeSDKClient(options=software_engineer_options) as software_engineer_client,
-        ClaudeSDKClient(options=tech_lead_options) as tech_lead_client,
-        asyncio.TaskGroup() as task_group,
+        ClaudeSDKClient(options=supervisor_options) as supervisor_client,
+        ClaudeSDKClient(options=swe_options) as swe_client,
     ):
-        task_group.create_task(
-            agent(
-                outboxes=[software_engineer_agent_queue],
-                write_conversation=write_conversation,
-                client=software_engineer_client,
-                inbox=tech_lead_agent_queue,
-            ),
-            name=software_engineer_agent_queue.name,
+        success = await stage_controller(
+            write_conversation=write_conversation,
+            supervisor_client=supervisor_client,
+            swe_client=swe_client,
+            objective=objective,
         )
-        task_group.create_task(
-            agent(
-                write_conversation=write_conversation,
-                inbox=software_engineer_agent_queue,
-                outboxes=[tech_lead_agent_queue],
-                client=tech_lead_client,
-            ),
-            name=tech_lead_agent_queue.name,
-        )
-        # EXAMPLE: On how to add a third agent to the conversation
-        # task_group.create_task(
-        #     proxy_agent(
-        #         inbox=proxy_agent_queue,
-        #     ),
-        #     name=proxy_agent_queue.name,
-        # )
 
-        mission = "What's the capital of France?"
-        initial_message = QueueMessage(message_from="user", message=mission)
-
-        # We prompt the software engineer to research the codebase first, so
-        # so that any clarifying questions go to the tech lead.
-        await software_engineer_agent_queue.put(initial_message)
-
-        minutes = 10
-        print(f"waiting for {minutes} minutes...")
-        await asyncio.sleep(minutes * 60)
-
-        print("Done")
+        if success:
+            print(f"\n[π-CLI] Workflow completed. Logs at: {workflow_dir}")
+        else:
+            print(f"\n[π-CLI] Workflow failed. Check logs at: {workflow_dir}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+
+    objective = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else None
+    asyncio.run(main(objective))
