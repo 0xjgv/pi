@@ -1,6 +1,6 @@
 ---
 description: Document codebase as-is without evaluation or recommendations
-model: sonnet
+model: opus
 ---
 # Research Codebase
 
