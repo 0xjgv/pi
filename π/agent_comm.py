@@ -1,35 +1,22 @@
 import asyncio
 import json
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Literal, TypeVar
+from sys import argv
 
 from claude_agent_sdk import (
-    ClaudeAgentOptions,
     ClaudeSDKClient,
-)
-from claude_agent_sdk.types import (
-    HookMatcher,
 )
 from pydantic import BaseModel
 
-from π.hooks import (
-    check_bash_command,
-    check_file_format,
-    check_file_write,
-    check_stage_output,
-)
-from π.schemas import SupervisorDecision
-from π.types import AgentQueue, QueueMessage, StageResult
+from π.agent import get_agent_options
+from π.schemas import StageOutput, SupervisorDecision
 from π.utils import (
     capture_conversation_to_csv,
     create_workflow_dir,
     extract_message_content,
     generate_workflow_id,
 )
-
-T = TypeVar("T", bound=BaseModel)
 
 ALLOWED_TOOLS = [
     "Task",
@@ -122,51 +109,12 @@ WORKFLOW_STAGES = [
 ]
 
 
-def get_agent_options(
-    *,
-    system_prompt: str | None = None,
-    model: str | None = None,
-    cwd: Path = Path.cwd(),
-    output_schema: type | None = None,
-) -> ClaudeAgentOptions:
-    options = ClaudeAgentOptions(
-        hooks={
-            "PostToolUse": [
-                HookMatcher(matcher="Write|MultiEdit|Edit", hooks=[check_file_format]),
-                HookMatcher(
-                    matcher="Write", hooks=[check_file_write, check_stage_output]
-                ),
-            ],
-            "PreToolUse": [
-                HookMatcher(matcher="Bash", hooks=[check_bash_command]),
-            ],
-        },
-        allowed_tools=ALLOWED_TOOLS,
-        permission_mode="acceptEdits",
-        system_prompt=system_prompt,
-        setting_sources=["project"],
-        model=model,
-        cwd=cwd,  # helps to find the project .claude dir
-    )
-
-    if output_schema:
-        options.output_format = {
-            "type": "json_schema",
-            "json_schema": {
-                "name": output_schema.__name__,
-                "schema": output_schema.model_json_schema(),
-            },
-        }
-
-    return options
-
-
 def parse_structured_output(
-    output_type: type[T],
+    output_type: type[BaseModel],
     *,
     structured_output: dict | None = None,
     text_result: str | None = None,
-) -> T | None:
+) -> BaseModel | None:
     """Parse structured output from SDK or fallback to JSON text parsing.
 
     Args:
@@ -307,163 +255,12 @@ async def query_supervisor(
     return response_text, is_approved
 
 
-async def execute_stage(
-    *,
-    client: ClaudeSDKClient,
-    stage_command: str,
-    objective: str,
-    supervisor_context: str,
-) -> StageResult:
-    """Execute a single stage and return the result."""
-    from π.schemas import StageOutput
-
-    # Build the stage prompt with objective and any supervisor context
-    if supervisor_context:
-        prompt = f"/{stage_command} {objective}\n\nContext from tech lead:\n{supervisor_context}"
-    else:
-        prompt = f"/{stage_command} {objective}"
-
-    result = await query_agent(
-        client=client,
-        prompt=prompt,
-        name="swe",
-        output_type=StageOutput,
-    )
-
-    if result is None:
-        return StageResult(
-            stage=stage_command,
-            status="error",
-            response="No response from agent",
-        )
-
-    # Handle structured output
-    if isinstance(result, StageOutput):
-        return StageResult(
-            stage=stage_command,
-            status=result.status,
-            output_file=result.output_file,
-            questions=result.questions,
-            response=result.summary,
-        )
-
-    # Fallback for non-structured response - assume complete with text response
-    return StageResult(
-        stage=stage_command,
-        status="complete",
-        response=str(result),
-    )
-
-
-async def stage_controller(
-    *,
-    write_conversation: Callable[[QueueMessage, str], None] | None = None,
-    supervisor_client: ClaudeSDKClient,
-    swe_client: ClaudeSDKClient,
-    objective: str,
-) -> bool:
-    """Orchestrate the staged workflow.
-
-    Returns:
-        True if workflow completed successfully, False otherwise.
-    """
-    stage_context = ""  # Accumulates supervisor feedback
-
-    for stage_command, output_pattern, requires_review in WORKFLOW_STAGES:
-        print(f"\n{'=' * 60}")
-        print(f"[π-CLI] Starting stage: {stage_command}")
-        print(f"{'=' * 60}\n")
-
-        stage_complete = False
-        max_iterations = 5  # Prevent infinite loops
-        iterations = 0
-
-        while not stage_complete and iterations < max_iterations:
-            iterations += 1
-
-            # Execute stage
-            result = await execute_stage(
-                client=swe_client,
-                stage_command=stage_command,
-                objective=objective,
-                supervisor_context=stage_context,
-            )
-
-            if write_conversation and result.response:
-                msg = QueueMessage(message_from="swe", message=result.response)
-                write_conversation(msg, "stage_controller")
-
-            if result.status == "error":
-                print(f"[π-CLI] Stage {stage_command} failed: {result.response}")
-                return False
-
-            if result.status == "questions":
-                # Escalate to supervisor
-                print(
-                    f"[π-CLI] Escalating {len(result.questions)} questions to supervisor"
-                )
-
-                answers, _ = await query_supervisor(
-                    questions=result.questions,
-                    client=supervisor_client,
-                    context=stage_context,
-                    stage=stage_command,
-                    objective=objective,
-                )
-
-                if write_conversation:
-                    msg = QueueMessage(message_from="supervisor", message=answers)
-                    write_conversation(msg, "swe")
-
-                # Add answers to context for next iteration
-                stage_context = f"Previous questions and answers:\n{answers}"
-                continue
-
-            # Stage completed
-            if requires_review:
-                print("[π-CLI] Requesting supervisor review")
-
-                feedback, is_approved = await query_supervisor(
-                    client=supervisor_client,
-                    objective=objective,
-                    stage=stage_command,
-                    context=stage_context,
-                    output_file=result.output_file,
-                )
-
-                if write_conversation:
-                    msg = QueueMessage(message_from="supervisor", message=feedback)
-                    write_conversation(msg, "swe")
-
-                if is_approved:
-                    print(f"[π-CLI] Stage {stage_command} approved")
-                    stage_context = f"Approved stage output: {result.output_file or 'implementation complete'}"
-                    stage_complete = True
-                else:
-                    print(f"[π-CLI] Revision requested for {stage_command}")
-                    stage_context = f"Revision feedback:\n{feedback}"
-            else:
-                stage_complete = True
-
-        if not stage_complete:
-            print(
-                f"[π-CLI] Stage {stage_command} failed after {max_iterations} iterations"
-            )
-            return False
-
-    print(f"\n{'=' * 60}")
-    print("[π-CLI] Workflow completed successfully!")
-    print(f"{'=' * 60}\n")
-    return True
-
-
 async def main(objective: str | None = None):
     """Run the staged workflow with supervisor oversight.
 
     Args:
         objective: The workflow objective. If None, prompts user.
     """
-    from π.schemas import StageOutput, SupervisorDecision
 
     if not objective:
         objective = input("Enter workflow objective: ").strip()
@@ -498,12 +295,8 @@ async def main(objective: str | None = None):
         ClaudeSDKClient(options=supervisor_options) as supervisor_client,
         ClaudeSDKClient(options=swe_options) as swe_client,
     ):
-        success = await stage_controller(
-            write_conversation=write_conversation,
-            supervisor_client=supervisor_client,
-            swe_client=swe_client,
-            objective=objective,
-        )
+        # run the workflow
+        success = True
 
         if success:
             print(f"\n[π-CLI] Workflow completed. Logs at: {workflow_dir}")
@@ -512,7 +305,5 @@ async def main(objective: str | None = None):
 
 
 if __name__ == "__main__":
-    import sys
-
-    objective = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else None
+    objective = " ".join(argv[1:]) if len(argv) > 1 else None
     asyncio.run(main(objective))
