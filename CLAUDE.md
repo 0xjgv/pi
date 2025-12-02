@@ -1,52 +1,46 @@
-# CLAUDE.md
+# π
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+CLI tool orchestrating Claude agents for automated research → plan → implement workflows.
+
+## Stack
+
+- Python 3.13+ with uv
+- claude-agent-sdk (>=0.1.7)
+- pydantic for structured outputs
+- ruff for linting/formatting
+
+## Structure
+
+```shell
+π/                    # Main package
+├── agent.py          # Agent configuration factory (ClaudeAgentOptions)
+├── agent_comm.py     # Workflow orchestration, supervisor/SWE agent loops
+├── hooks.py          # PreToolUse/PostToolUse validation hooks
+├── schemas.py        # Pydantic models (StageOutput, SupervisorDecision)
+└── utils.py          # Workflow ID generation, CSV logging, helpers
+.claude/
+├── agents/           # Sub-agent definitions (codebase-analyzer, etc.)
+└── commands/         # Slash commands (1_research, 2_plan, 3_implement)
+thoughts/shared/      # Generated research/ and plans/ artifacts
+```
 
 ## Commands
 
-```bash
-uv sync              # Install dependencies
-make format          # Format with ruff
-make check           # Lint with ruff
-make fix             # Auto-fix lint errors
-make clean           # Remove caches
+- Format: `make format`
+- Lint: `make check`
+- Run: `π "your prompt"` or `uv run π "your prompt"`
 
-π "<prompt>"         # Run CLI with a prompt
-```
+## Key Patterns
 
-## Architecture
+- **Dual structured output**: SDK native first, JSON text parsing fallback (`agent_comm.py:112-155`)
+- **Hook validation**: PostToolUse runs language-specific linters, PreToolUse blocks dangerous bash commands
+- **Workflow stages**: research → plan → implement, each with question loops to supervisor agent
+- **Documentation-first agents**: Research agents describe "what is", never critique or suggest
 
-π is a Python CLI wrapper around the Claude Agent SDK for multi-agent workflows.
+## References
 
-### Core Components
-
-- **`cli.py`** - Entry point (`π` command), runs the workflow
-- **`workflow.py`** - Orchestrates staged workflow: research → plan → review → iterate
-- **`agent.py`** - Single-agent runner with message handling and stats tracking
-- **`agent_comm.py`** - Multi-agent communication via async queues (`AgentQueue`, `QueueMessage`)
-- **`hooks.py`** - Pre/post tool hooks for bash command blocking and language-specific linting
-- **`utils.py`** - Workflow ID generation, logging, CSV escaping
-
-### Multi-Agent Queue System
-
-Agents communicate through `asyncio.Queue`-based message passing:
-
-```markdown
-AgentQueue("software_engineer") ←→ AgentQueue("tech_lead")
-     ↑                                    ↓
-     └────── QueueMessage (from, text) ───┘
-```
-
-Each agent has an inbox and outbox(es). Messages flow bidirectionally until terminated with `None`.
-
-### Hooks
-
-- **PreToolUse**: `check_bash_command` blocks `rm` patterns
-- **PostToolUse**: `check_file_format` runs ruff/eslint/cargo/go vet on edits
-
-## Guidelines
-
-Follow the Zen of Python. Explicit over implicit. Simple over complex. Readability counts.
+- README.md (project README)
+- IDEA.md (project IDEA)
 
 ## Claude Agent SDK Documentation
 
