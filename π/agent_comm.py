@@ -21,9 +21,10 @@ from π.hooks import (
     check_stage_output,
 )
 from π.schemas import SupervisorDecision
+from π.types import AgentQueue, QueueMessage, StageResult
 from π.utils import (
+    capture_conversation_to_csv,
     create_workflow_dir,
-    escape_csv_text,
     extract_message_content,
     generate_workflow_id,
 )
@@ -119,47 +120,6 @@ WORKFLOW_STAGES = [
     ("5_implement_plan", None, True),  # No file output, review via response
     ("7_validate_plan", None, False),  # Final validation, no review needed
 ]
-
-
-class QueueMessage:
-    def __init__(self, *, message_from: str, message: str):
-        self.message_from = message_from
-        self.message = message
-
-
-class AgentQueue(asyncio.Queue[QueueMessage | None]):
-    def __init__(self, name: str):
-        self.name = name
-        super().__init__()
-
-
-@dataclass
-class StageResult:
-    """Captures the outcome of a stage execution."""
-
-    stage: str
-    status: Literal["complete", "questions", "error"]
-    output_file: str | None = None
-    questions: list[str] = field(default_factory=list)
-    response: str | None = None
-
-
-def capture_conversation_to_csv(
-    *,
-    workflow_dir: Path,
-) -> Callable[[QueueMessage, str], None]:
-    """Create a function to write conversation messages to a CSV file."""
-    # Write the header once when the function is first called
-    csv_file = workflow_dir / "conversation.csv"
-    with open(csv_file, "w", encoding="utf-8") as f:
-        f.write("message_from,message_to,message\n")
-
-    # Return a function that can be called to append messages to the CSV file
-    def _write_message(msg: QueueMessage, message_to: str) -> None:
-        with open(csv_file, "a", encoding="utf-8") as f:
-            f.write(f"{msg.message_from},{message_to},{escape_csv_text(msg.message)}\n")
-
-    return _write_message
 
 
 def get_agent_options(

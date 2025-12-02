@@ -2,6 +2,7 @@ import uuid
 from functools import wraps
 from os import getpid, system
 from pathlib import Path
+from typing import Callable
 
 from claude_agent_sdk.types import (
     AssistantMessage,
@@ -10,6 +11,8 @@ from claude_agent_sdk.types import (
     TextBlock,
     UserMessage,
 )
+
+from π.types import QueueMessage
 
 
 def generate_workflow_id() -> str:
@@ -39,6 +42,24 @@ def create_workflow_dir(base_dir: Path, workflow_id: str) -> Path:
 def escape_csv_text(text: str) -> str:
     # Replace quotes with double quotes and wrap in quotes to escape commas
     return f'"{text.strip().replace('"', '""')}"'
+
+
+def capture_conversation_to_csv(
+    *,
+    workflow_dir: Path,
+) -> Callable[[QueueMessage, str], None]:
+    """Create a function to write conversation messages to a CSV file."""
+    # Write the header once when the function is first called
+    csv_file = workflow_dir / "conversation.csv"
+    with open(csv_file, "w", encoding="utf-8") as f:
+        f.write("message_from,message_to,message\n")
+
+    # Return a function that can be called to append messages to the CSV file
+    def _write_message(msg: QueueMessage, message_to: str) -> None:
+        with open(csv_file, "a", encoding="utf-8") as f:
+            f.write(f"{msg.message_from},{message_to},{escape_csv_text(msg.message)}\n")
+
+    return _write_message
 
 
 def write_to_log(log_file: Path, content: str) -> None:
