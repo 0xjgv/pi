@@ -5,6 +5,7 @@ from typing import Any
 
 from claude_agent_sdk import ClaudeSDKClient, create_sdk_mcp_server, tool
 
+
 # Workflow state stored in-memory
 class WorkflowState:
     """In-memory workflow state manager."""
@@ -36,6 +37,13 @@ class WorkflowState:
                 self.context = output_file
         self.current_stage_index += 1
         return self.current_stage
+
+    def reset(self) -> None:
+        """Reset workflow state to initial values, preserving objective."""
+        self.current_stage_index = 0
+        self.context = self.objective
+        self.completed_stages = []
+        self.stage_outputs = {}
 
 
 # Global state - set by workflow orchestrator before agent runs
@@ -69,10 +77,10 @@ STAGE_OUTPUT_PATTERNS = {
     name="complete_stage",
     description="Signal that the current workflow stage is complete. Call this when you have finished the stage work and created any required output files.",
     input_schema={
-        "stage": str,        # "research" | "plan" | "implement"
-        "summary": str,      # What was accomplished
+        "stage": str,  # "research" | "plan" | "implement"
+        "summary": str,  # What was accomplished
         "output_file": str,  # Path to output artifact (optional for implement)
-    }
+    },
 )
 async def complete_stage(args: dict[str, Any]) -> dict[str, Any]:
     """Signal stage completion and advance workflow state."""
@@ -85,11 +93,13 @@ async def complete_stage(args: dict[str, Any]) -> dict[str, Any]:
     # Validate stage matches current
     if stage != state.current_stage:
         return {
-            "content": [{
-                "type": "text",
-                "text": f"Error: Cannot complete '{stage}'. Current stage is '{state.current_stage}'."
-            }],
-            "is_error": True
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error: Cannot complete '{stage}'. Current stage is '{state.current_stage}'.",
+                }
+            ],
+            "is_error": True,
         }
 
     # Validate output file exists (for research and plan stages)
@@ -97,27 +107,33 @@ async def complete_stage(args: dict[str, Any]) -> dict[str, Any]:
     if expected_pattern and output_file:
         if not Path(output_file).exists():
             return {
-                "content": [{
-                    "type": "text",
-                    "text": f"Error: Output file not found: {output_file}"
-                }],
-                "is_error": True
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Error: Output file not found: {output_file}",
+                    }
+                ],
+                "is_error": True,
             }
         if expected_pattern not in output_file:
             return {
-                "content": [{
-                    "type": "text",
-                    "text": f"Error: Output file must be in {expected_pattern}, got: {output_file}"
-                }],
-                "is_error": True
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Error: Output file must be in {expected_pattern}, got: {output_file}",
+                    }
+                ],
+                "is_error": True,
             }
     elif expected_pattern and not output_file:
         return {
-            "content": [{
-                "type": "text",
-                "text": f"Error: Stage '{stage}' requires an output_file in {expected_pattern}"
-            }],
-            "is_error": True
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error: Stage '{stage}' requires an output_file in {expected_pattern}",
+                }
+            ],
+            "is_error": True,
         }
 
     # Advance state
@@ -131,9 +147,7 @@ async def complete_stage(args: dict[str, Any]) -> dict[str, Any]:
         "workflow_complete": state.is_complete,
     }
 
-    return {
-        "content": [{"type": "text", "text": str(result)}]
-    }
+    return {"content": [{"type": "text", "text": str(result)}]}
 
 
 @tool(
@@ -141,8 +155,8 @@ async def complete_stage(args: dict[str, Any]) -> dict[str, Any]:
     description="Ask the tech lead a question when you need clarification or guidance. Use this when blocked or uncertain about how to proceed.",
     input_schema={
         "question": str,  # The question to ask
-        "context": str,   # Relevant context for the question
-    }
+        "context": str,  # Relevant context for the question
+    },
 )
 async def ask_supervisor(args: dict[str, Any]) -> dict[str, Any]:
     """Query supervisor and return answer inline."""
@@ -151,7 +165,7 @@ async def ask_supervisor(args: dict[str, Any]) -> dict[str, Any]:
     if _supervisor_client is None:
         return {
             "content": [{"type": "text", "text": "Error: Supervisor not available"}],
-            "is_error": True
+            "is_error": True,
         }
 
     state = get_workflow_state()
@@ -187,15 +201,13 @@ Do NOT ask follow-up questions. Make decisions and move forward."""
 
     answer = messages[-1] if messages else "No response from supervisor"
 
-    return {
-        "content": [{"type": "text", "text": f"Supervisor's answer:\n\n{answer}"}]
-    }
+    return {"content": [{"type": "text", "text": f"Supervisor's answer:\n\n{answer}"}]}
 
 
 @tool(
     name="get_current_stage",
     description="Get information about the current workflow stage, including requirements and context.",
-    input_schema={}  # No parameters
+    input_schema={},  # No parameters
 )
 async def get_current_stage(args: dict[str, Any]) -> dict[str, Any]:
     """Return current workflow state information."""
@@ -224,15 +236,13 @@ async def get_current_stage(args: dict[str, Any]) -> dict[str, Any]:
         "workflow_complete": state.is_complete,
     }
 
-    return {
-        "content": [{"type": "text", "text": str(info)}]
-    }
+    return {"content": [{"type": "text", "text": str(info)}]}
 
 
-def create_workflow_server():
+def create_workflow_server(mcp_name: str = "workflow"):
     """Create the workflow MCP server."""
     return create_sdk_mcp_server(
-        name="workflow",
+        tools=[complete_stage, ask_supervisor, get_current_stage],
         version="1.0.0",
-        tools=[complete_stage, ask_supervisor, get_current_stage]
+        name=mcp_name,
     )

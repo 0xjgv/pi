@@ -40,7 +40,10 @@ def get_agent_options(
     cwd: Path = Path.cwd(),
     include_workflow_mcp: bool = False,
 ) -> ClaudeAgentOptions:
-    mcp_servers = {"wf": create_workflow_server()} if include_workflow_mcp else {}
+    mcp_name = "workflow"
+    mcp_servers = (
+        {mcp_name: create_workflow_server(mcp_name)} if include_workflow_mcp else {}
+    )
 
     options = ClaudeAgentOptions(
         hooks={

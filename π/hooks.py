@@ -13,6 +13,7 @@ Hooks return structured JSON responses following the Claude Agent SDK spec:
 Hook Flow:
   Tool called → PreToolUse hooks → Tool executes → PostToolUse hooks → Result
 """
+
 import shlex
 import shutil
 import subprocess

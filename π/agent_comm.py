@@ -122,7 +122,10 @@ async def run_stage(
             log_workflow_event(
                 workflow_dir,
                 "message",
-                {"type": msg_type, "content_preview": content[:200] if content else None},
+                {
+                    "type": msg_type,
+                    "content_preview": content[:200] if content else None,
+                },
             )
 
     # Check if state advanced (complete_stage was called)
@@ -161,9 +164,7 @@ async def run_workflow(
                 f"/{command} ===\n"
             )
             log_workflow_event(
-                workflow_dir,
-                "stage_start",
-                {"stage": stage_key, "index": stage_index}
+                workflow_dir, "stage_start", {"stage": stage_key, "index": stage_index}
             )
 
             # Execute stage - wait for completion tool call
@@ -189,7 +190,9 @@ async def run_workflow(
                 log_workflow_event(workflow_dir, "workflow_complete", {"success": True})
                 return True
 
-            print(f"[π-CLI] Stage {stage_key} completed: {result.get('summary', 'N/A')}")
+            print(
+                f"[π-CLI] Stage {stage_key} completed: {result.get('summary', 'N/A')}"
+            )
             log_workflow_event(
                 workflow_dir,
                 "stage_complete",
