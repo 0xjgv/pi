@@ -1,8 +1,10 @@
+import json
 import uuid
+from datetime import datetime
 from functools import wraps
 from os import getpid, system
 from pathlib import Path
-from typing import Callable
+from typing import Any
 
 from claude_agent_sdk.types import (
     AssistantMessage,
@@ -11,8 +13,6 @@ from claude_agent_sdk.types import (
     TextBlock,
     UserMessage,
 )
-
-from π.types import QueueMessage
 
 
 def generate_workflow_id() -> str:
@@ -39,40 +39,27 @@ def create_workflow_dir(base_dir: Path, workflow_id: str) -> Path:
     return dir_path
 
 
+def log_workflow_event(workflow_dir: Path, event: str, data: dict[str, Any]) -> None:
+    """Log a workflow event to the log file.
+
+    Args:
+        workflow_dir: The workflow log directory
+        event: Event name (e.g., "stage_start", "question_loop", "review")
+        data: Event data to log
+    """
+    log_file = workflow_dir / "workflow.jsonl"
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "event": event,
+        **data,
+    }
+    with log_file.open("a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
 def escape_csv_text(text: str) -> str:
     # Replace quotes with double quotes and wrap in quotes to escape commas
     return f'"{text.strip().replace('"', '""')}"'
-
-
-def capture_conversation_to_csv(
-    *,
-    workflow_dir: Path,
-) -> Callable[[QueueMessage, str], None]:
-    """Create a function to write conversation messages to a CSV file."""
-    # Write the header once when the function is first called
-    csv_file = workflow_dir / "conversation.csv"
-    with open(csv_file, "w", encoding="utf-8") as f:
-        f.write("message_from,message_to,message\n")
-
-    # Return a function that can be called to append messages to the CSV file
-    def _write_message(msg: QueueMessage, message_to: str) -> None:
-        with open(csv_file, "a", encoding="utf-8") as f:
-            f.write(f"{msg.message_from},{message_to},{escape_csv_text(msg.message)}\n")
-
-    return _write_message
-
-
-def write_to_log(log_file: Path, content: str) -> None:
-    """Append content to a log file.
-
-    Args:
-        log_file: Path to the log file
-        content: Content to append
-    """
-    with open(log_file, "a", encoding="utf-8") as f:
-        f.write(content)
-        if not content.endswith("\n"):
-            f.write("\n")
 
 
 def prevent_sleep(func):
