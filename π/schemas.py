@@ -4,7 +4,11 @@ from pydantic import BaseModel, Field
 
 
 class StageOutput(BaseModel):
-    """Structured output for stage execution."""
+    """Structured output for stage execution.
+
+    DEPRECATED: Stage completion is now handled via MCP tools.
+    Kept for backward compatibility.
+    """
 
     status: Literal["complete", "questions", "error"] = Field(
         description="The status of the stage"

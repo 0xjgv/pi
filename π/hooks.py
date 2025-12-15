@@ -1,3 +1,18 @@
+"""
+Hook validation system for Claude Agent SDK tool execution.
+
+This module implements pre- and post-execution validation hooks that:
+- PreToolUse: Intercept tool calls before execution (blocks dangerous commands)
+- PostToolUse: Validate tool outputs after execution (runs code quality checks)
+
+Hooks return structured JSON responses following the Claude Agent SDK spec:
+- Empty dict {} means "no action needed, proceed normally"
+- HookJSONOutput with "decision": "block" blocks the operation
+- HookJSONOutput with "permissionDecision": "deny" denies execution
+
+Hook Flow:
+  Tool called → PreToolUse hooks → Tool executes → PostToolUse hooks → Result
+"""
 import shlex
 import shutil
 import subprocess
@@ -13,7 +28,24 @@ from claude_agent_sdk.types import (
 
 # === Helper Functions ===
 def _compact_path(path: Path | str) -> str:
-    """Make a path more compact for display."""
+    """
+    Format a file path for readable console output.
+
+    Applies these transformations in order:
+    1. Replace home directory with ~/
+    2. Replace current directory with ./
+    3. Truncate long paths (>60 chars): /a/b/.../c/d
+
+    Args:
+        path: Absolute or relative file path
+
+    Returns:
+        Compact path string suitable for console output
+
+    Examples:
+        /Users/juan/project/src/main.py → ~/project/src/main.py
+        /tmp/long/very/deep/path/file.py → /tmp/.../file.py
+    """
     path = Path(path)
     home_dir = Path.home()
 
@@ -44,7 +76,23 @@ def _compact_path(path: Path | str) -> str:
 
 
 def _find_project_root(start_path: Path, marker_files: list[str]) -> Path | None:
-    """Find project root by looking for marker files."""
+    """
+    Find project root by traversing up the directory tree.
+
+    Searches from start_path upward until finding a directory containing
+    one of the specified marker files (e.g., package.json, Cargo.toml).
+
+    Args:
+        start_path: Starting directory to search from
+        marker_files: List of filenames that indicate project root
+
+    Returns:
+        Path to project root directory, or None if not found
+
+    Examples:
+        >>> root = _find_project_root(Path("/project/src"), ["package.json"])
+        >>> # Returns /project if /project/package.json exists
+    """
     current = start_path
     while current != current.parent:
         for marker in marker_files:
@@ -56,7 +104,29 @@ def _find_project_root(start_path: Path, marker_files: list[str]) -> Path | None
 
 # === Language Checkers ===
 def check_python(path: Path) -> tuple[int, str]:
-    """Run Python-specific checks - ruff only."""
+    """
+    Run Python linting checks using Ruff.
+
+    Invoked by: check_file_format() after Edit/Write/MultiEdit on .py/.pyx files
+
+    Args:
+        path: Absolute path to Python file to check
+
+    Returns:
+        (int, str) tuple:
+        - int: Exit code (0 = success, 2 = failure)
+        - str: Error output from ruff (empty string if success)
+
+    Tool chain:
+        1. Prefers: uvx ruff check [file]
+        2. Fallback: ruff check [file]
+        3. Unsupported: Prints warning, returns (0, "")
+
+    Example:
+        >>> exit_code, feedback = check_python(Path("main.py"))
+        >>> if exit_code == 2:
+        ...     print(f"Linting failed: {feedback}")
+    """
     print(f"🐍 Running Python checks for {_compact_path(path)}...")
 
     # Ruff check - prefer uvx, fallback to ruff
@@ -88,7 +158,34 @@ def check_python(path: Path) -> tuple[int, str]:
 
 
 def check_typescript(path: Path) -> tuple[int, str]:
-    """Run TypeScript/JavaScript checks - ESLint only."""
+    """
+    Run TypeScript/JavaScript linting checks using ESLint.
+
+    Invoked by: check_file_format() after Edit/Write/MultiEdit on .ts/.tsx/.js/.jsx files
+
+    Args:
+        path: Absolute path to TypeScript/JavaScript file to check
+
+    Returns:
+        (int, str) tuple:
+        - int: Exit code (0 = success, 2 = failure)
+        - str: Error output from eslint (empty string if success)
+
+    Requirements:
+        - package.json must exist in parent directories
+        - ESLint config must exist (.eslintrc.json, .eslintrc.js, etc.)
+
+    Tool chain:
+        1. Find project root via package.json
+        2. Check for ESLint config files
+        3. Run: npx eslint [file]
+        4. Gracefully skip if no config found
+
+    Example:
+        >>> exit_code, feedback = check_typescript(Path("app.tsx"))
+        >>> if exit_code == 2:
+        ...     print(f"Linting failed: {feedback}")
+    """
     project_root = _find_project_root(path.parent, ["package.json"])
     if not project_root:
         print(f"⚠️  No package.json found for {_compact_path(path)}")
@@ -125,7 +222,32 @@ def check_typescript(path: Path) -> tuple[int, str]:
 
 
 def check_rust(path: Path) -> tuple[int, str]:
-    """Run Rust checks."""
+    """
+    Run Rust compilation and type checks using Cargo.
+
+    Invoked by: check_file_format() after Edit/Write/MultiEdit on .rs files
+
+    Args:
+        path: Absolute path to Rust file to check
+
+    Returns:
+        (int, str) tuple:
+        - int: Exit code (0 = success, 2 = failure)
+        - str: Error output from cargo check (empty string if success)
+
+    Requirements:
+        - Cargo.toml must exist in parent directories
+
+    Tool chain:
+        1. Find project root via Cargo.toml
+        2. Run: cargo check (checks entire project)
+        3. Gracefully skip if no Cargo.toml found
+
+    Example:
+        >>> exit_code, feedback = check_rust(Path("main.rs"))
+        >>> if exit_code == 2:
+        ...     print(f"Compilation failed: {feedback}")
+    """
     project_root = _find_project_root(path.parent, ["Cargo.toml"])
     if not project_root:
         print(f"⚠️  No Cargo.toml found for {_compact_path(path)}")
@@ -150,7 +272,32 @@ def check_rust(path: Path) -> tuple[int, str]:
 
 
 def check_go(path: Path) -> tuple[int, str]:
-    """Run Go checks."""
+    """
+    Run Go static analysis checks using go vet.
+
+    Invoked by: check_file_format() after Edit/Write/MultiEdit on .go files
+
+    Args:
+        path: Absolute path to Go file to check
+
+    Returns:
+        (int, str) tuple:
+        - int: Exit code (0 = success, 2 = failure)
+        - str: Error output from go vet (empty string if success)
+
+    Requirements:
+        - go.mod must exist in parent directories
+
+    Tool chain:
+        1. Find project root via go.mod
+        2. Run: go vet ./... (checks entire project)
+        3. Gracefully skip if no go.mod found
+
+    Example:
+        >>> exit_code, feedback = check_go(Path("main.go"))
+        >>> if exit_code == 2:
+        ...     print(f"Static analysis failed: {feedback}")
+    """
     project_root = _find_project_root(path.parent, ["go.mod"])
     if not project_root:
         print(f"⚠️  No go.mod found for {_compact_path(path)}")
@@ -192,7 +339,41 @@ LANGUAGE_REGISTRY = {
 async def check_file_format(
     input_data: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
-    """Run checks on modified files based on file type."""
+    """
+    PostToolUse hook: Run language-specific linters after file modifications.
+
+    Trigger: Fires after Edit, Write, or MultiEdit tools
+
+    Behavior:
+    1. Extracts file_path from tool_input
+    2. Looks up language checker by file extension
+    3. Runs language-specific linter (ruff, eslint, cargo check, go vet)
+    4. If linter fails, blocks the operation and returns error feedback
+
+    Input Structure (HookInput):
+        {
+            "tool_name": "Edit" | "Write" | "MultiEdit",
+            "tool_input": {"file_path": "/path/to/file.py", ...}
+        }
+
+    Returns (HookJSONOutput):
+        - {} if no checker or file doesn't exist (allow operation)
+        - {} if linter passes (allow operation)
+        - {"decision": "block", "reason": "...", "hookSpecificOutput": {...}}
+          if linter fails (block operation, return error to agent)
+
+    Supported files:
+        - Python: .py, .pyx (via ruff)
+        - TypeScript/JS: .ts, .tsx, .js, .jsx (via eslint)
+        - Rust: .rs (via cargo check)
+        - Go: .go (via go vet)
+
+    Example flow:
+        Agent runs: Edit(file_path="/src/main.py", new_string="...")
+        Hook fires: check_file_format() extracts file_path
+        Hook runs: ruff check /src/main.py
+        Result: If ruff fails, hook returns block decision
+    """
     tool_name = input_data.get("tool_name")
 
     # Only check files modified by Edit, Write, or MultiEdit tools
@@ -233,7 +414,39 @@ async def check_file_format(
 async def check_bash_command(
     input_data: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
-    """Prevent certain bash commands from being executed."""
+    """
+    PreToolUse hook: Block dangerous bash commands before execution.
+
+    Trigger: Fires before Bash tool executes
+
+    Blocked patterns:
+        - rm
+        - rm -rf
+        - rm -rf *
+        - rm -rf **/*
+
+    Behavior:
+    1. Tokenizes bash command using shlex.split()
+    2. Scans for blocked patterns in token sequence
+    3. If pattern matched, denies execution with reason
+
+    Input Structure (HookInput):
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm -rf /path", ...}
+        }
+
+    Returns (HookJSONOutput):
+        - {} if command is safe (allow execution)
+        - {"hookSpecificOutput": {"permissionDecision": "deny", ...}}
+          if command contains blocked pattern (deny execution)
+
+    Example flow:
+        Agent tries: Bash(command="rm -rf temp/")
+        Hook fires: check_bash_command() tokenizes command
+        Hook finds: Pattern "rm -rf" in tokens
+        Result: Hook denies execution with reason
+    """
     if "tool_input" not in input_data or "tool_name" not in input_data:
         return {}
 
@@ -280,7 +493,27 @@ async def check_bash_command(
 async def check_file_write(
     input_data: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
-    """Check if the file has been written."""
+    """
+    PreToolUse hook: Notify when a new file will be created.
+
+    Trigger: Can fire before Write tool (currently not registered)
+
+    Behavior:
+        Checks if file exists; if not, returns allow decision with notification
+
+    Input Structure (HookInput):
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/path/to/new_file.py", ...}
+        }
+
+    Returns (HookJSONOutput):
+        - {} if file already exists (silent allow)
+        - {"decision": "allow", "reason": "File ... will be written"}
+          if file doesn't exist (notify and allow)
+
+    Note: This hook is defined but not currently registered in agent.py
+    """
     if "tool_input" not in input_data or "tool_name" not in input_data:
         return {}
 
@@ -300,33 +533,3 @@ async def check_file_write(
             "reason": f"File {path.name} will be written",
         },
     )
-
-
-# Stage output file patterns
-STAGE_OUTPUT_PATTERNS = {
-    "research": "thoughts/shared/research/",
-    "plan": "thoughts/shared/plans/",
-}
-
-
-async def check_stage_output(
-    input_data: HookInput, _tool_use_id: str | None, context: HookContext
-) -> HookJSONOutput:
-    """Detect when a stage output file is written."""
-    if input_data.get("tool_name") != "Write":
-        return {}
-
-    file_path = input_data.get("tool_input", {}).get("file_path", "")
-
-    for stage, pattern in STAGE_OUTPUT_PATTERNS.items():
-        if pattern in file_path and file_path.endswith(".md"):
-            print(f"[π-CLI] Stage output detected: {stage} -> {file_path}")
-            return cast(
-                HookJSONOutput,
-                {
-                    "stage_complete": stage,
-                    "output_file": file_path,
-                },
-            )
-
-    return {}

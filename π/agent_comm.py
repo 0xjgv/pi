@@ -4,108 +4,55 @@ import re
 from pathlib import Path
 from sys import argv
 
-from claude_agent_sdk import (
-    ClaudeSDKClient,
-)
+from claude_agent_sdk import ClaudeSDKClient
 from pydantic import BaseModel
 
 from π.agent import get_agent_options
-from π.schemas import StageOutput, SupervisorDecision
+from π.schemas import SupervisorDecision
 from π.utils import (
-    capture_conversation_to_csv,
     create_workflow_dir,
     extract_message_content,
     generate_workflow_id,
+    log_workflow_event,
 )
-
-ALLOWED_TOOLS = [
-    "Task",
-    "Bash",
-    "Glob",
-    "Grep",
-    "ExitPlanMode",
-    "Read",
-    "Edit",
-    "Write",
-    "NotebookEdit",
-    "WebFetch",
-    "TodoWrite",
-    "WebSearch",
-    "BashOutput",
-    "KillShell",
-    "Skill",
-    "SlashCommand",
-]
+from π.workflow_mcp import WorkflowState, set_workflow_context
 
 SWE_SYSTEM_PROMPT = """You are a software engineer executing workflow stages.
 
-When you complete your task, you MUST respond with a JSON object:
-- status: "complete" when done, "questions" if you need clarification, "error" if failed
-- summary: Brief description of what you did
-- output_file: Path to any file you created (or null)
-- questions: List of specific questions (only when status is "questions")
-- error_message: Error details (only when status is "error")
+You have access to workflow control tools:
+- **mcp__workflow__get_current_stage**: Get info about the current stage and requirements
+- **mcp__workflow__complete_stage**: Signal when you've finished a stage
+- **mcp__workflow__ask_supervisor**: Ask the tech lead when you need guidance
 
-Example completion:
-{"status": "complete", "summary": "Created research document analyzing auth flow", "output_file": "thoughts/shared/research/2025-12-02-auth-flow.md", "questions": [], "error_message": null}
+## Workflow Process:
 
-Example questions:
-{"status": "questions", "summary": "Analyzed codebase structure", "output_file": null, "questions": ["Should I focus on REST or GraphQL endpoints?", "Which authentication method should I document?"], "error_message": null}
+1. Call `get_current_stage` to understand what you need to do
+2. Execute the stage using the slash command (e.g., /1_research_codebase)
+3. When finished, call `complete_stage` with:
+   - stage: "research" | "plan" | "implement"
+   - summary: Brief description of what you accomplished
+   - output_file: Path to the file you created (required for research/plan stages)
+
+4. If you have questions or are blocked, call `ask_supervisor` before proceeding
+
+## Important:
+- ALWAYS call `complete_stage` when you finish a stage
+- ALWAYS provide the output_file for research and plan stages
+- The workflow cannot proceed until you signal completion
 """
 
 SUPERVISOR_SYSTEM_PROMPT = """You are the tech lead reviewing stage output and answering questions.
 
-When reviewing or answering, you MUST respond with a JSON object:
-- approved: true if work is satisfactory or questions are answered, false if revisions needed
-- feedback: Your rationale, answers to questions, or specific revision instructions
-
-Example approval:
-{"approved": true, "feedback": "Research is comprehensive and covers all required areas."}
-
-Example revision request:
-{"approved": false, "feedback": "Missing analysis of error handling patterns. Please add a section on exception flow."}
-"""
-
-SUPERVISOR_QUESTION_PROMPT = """You are the tech lead supervising an automated workflow.
-
-**Workflow Objective**: {objective}
-
-**Current Stage**: {stage}
-
-**Stage Context**:
-{context}
-
-**Questions from the software engineer**:
-{questions}
-
-Provide clear, actionable answers based on:
-1. Best practices for this codebase
-2. The workflow objective
-3. Technical feasibility
-
-Be decisive. If you cannot answer definitively, provide your best recommendation with rationale.
+When reviewing or answering, provide clear, actionable guidance.
+Be decisive - if uncertain, give your best recommendation with rationale.
 Do NOT ask follow-up questions - make decisions and move forward.
 """
 
-SUPERVISOR_REVIEW_PROMPT = """You are the tech lead reviewing stage output.
-
-**Workflow Objective**: {objective}
-
-**Stage Completed**: {stage}
-
-**Output File**: {output_file}
-
-Review the output and determine if it meets the objective requirements.
-
-Be constructive but decisive. The workflow cannot proceed without your approval.
-"""
-
-# Stage definitions: (command_name, expected_output_pattern, requires_review)
+# Stage definitions: (command_name, stage_key)
 WORKFLOW_STAGES = [
-    ("1_research_codebase", "thoughts/shared/research/", True),
-    ("2_create_plan", "thoughts/shared/plans/", True),
-    ("5_implement_plan", None, True),  # No file output, review via response
-    ("7_validate_plan", None, False),  # Final validation, no review needed
+    ("1_research_codebase", "research"),
+    ("2_create_plan", "plan"),
+    ("3_implement_plan", "implement"),
 ]
 
 
@@ -115,28 +62,15 @@ def parse_structured_output(
     structured_output: dict | None = None,
     text_result: str | None = None,
 ) -> BaseModel | None:
-    """Parse structured output from SDK or fallback to JSON text parsing.
-
-    Args:
-        output_type: Pydantic model class to validate against
-        structured_output: SDK's structured_output attribute (if available)
-        text_result: Raw text result to parse as JSON fallback
-
-    Returns:
-        Validated Pydantic model instance, or None if parsing fails
-    """
-    # First try SDK's structured_output
+    """Parse structured output from SDK or fallback to JSON text parsing."""
     if structured_output:
         try:
             return output_type.model_validate(structured_output)
         except ValueError:
             pass
 
-    # Fallback: parse JSON from text
     if text_result:
         text = text_result.strip()
-
-        # Try extracting JSON from markdown code blocks
         json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if json_match:
             try:
@@ -145,7 +79,6 @@ def parse_structured_output(
             except (json.JSONDecodeError, ValueError):
                 pass
 
-        # Try parsing entire text as JSON
         try:
             data = json.loads(text)
             return output_type.model_validate(data)
@@ -155,112 +88,130 @@ def parse_structured_output(
     return None
 
 
-async def query_agent(
+async def run_stage(
     *,
     client: ClaudeSDKClient,
-    prompt: str,
-    name: str,
-    output_type: type[T] | None = None,
-) -> T | str | None:
-    """Query agent and optionally parse structured output.
+    command: str,
+    context: str,
+    workflow_dir: Path,
+    workflow_state: WorkflowState,
+) -> dict | None:
+    """Execute a stage and wait for completion via MCP tool.
 
-    Args:
-        client: The SDK client
-        prompt: Query prompt
-        name: Agent name for logging
-        output_type: If provided, parse structured_output into this Pydantic model
+    The MCP `complete_stage` tool updates WorkflowState directly when called.
+    We detect completion by checking if the state advanced.
 
     Returns:
-        Parsed model if output_type provided and structured_output available,
-        otherwise last text message, or None if no response.
+        Dict with stage result if completed via tool, None if no completion signal.
     """
+    prompt = f"/{command} {context}"
+    print(f"[π-CLI] Executing: {prompt}")
+
+    # Capture state before execution
+    stage_before = workflow_state.current_stage
+    index_before = workflow_state.current_stage_index
+
     await client.query(prompt=prompt)
 
-    last_instance_label = None
-    messages: list[str] = []
-    sdk_structured_output: dict | None = None
-
     async for msg in client.receive_response():
-        instance_label = type(msg).__name__
+        msg_type = type(msg).__name__
 
-        if last_instance_label is None or last_instance_label != instance_label:
-            print(f"[{name}] MESSAGE:", instance_label)
-            last_instance_label = instance_label
-
-        # Capture SDK's structured_output if available
-        if hasattr(msg, "structured_output") and msg.structured_output:
-            sdk_structured_output = msg.structured_output
-
+        # Log message for debugging
         content = extract_message_content(msg)
-        if content is not None and content.strip() != "":
-            messages.append(content)
+        if content:
+            log_workflow_event(
+                workflow_dir,
+                "message",
+                {"type": msg_type, "content_preview": content[:200] if content else None},
+            )
 
-    # Parse structured output (SDK first, then text fallback)
-    if output_type:
-        last_message = messages[-1] if messages else None
-        result = parse_structured_output(
-            output_type,
-            structured_output=sdk_structured_output,
-            text_result=last_message,
-        )
-        if result:
-            return result
+    # Check if state advanced (complete_stage was called)
+    if workflow_state.current_stage_index > index_before and stage_before:
+        output_file = workflow_state.stage_outputs.get(stage_before)
+        return {
+            "stage_completed": stage_before,
+            "output_file": output_file,
+            "summary": f"Completed {stage_before} stage",
+            "next_stage": workflow_state.current_stage,
+            "workflow_complete": workflow_state.is_complete,
+        }
 
-    return messages[-1] if messages else None
+    return None
 
 
-async def query_supervisor(
+async def run_workflow(
     *,
-    client: ClaudeSDKClient,
-    objective: str,
-    stage: str,
-    context: str,
-    questions: list[str] | None = None,
-    output_file: str | None = None,
-) -> tuple[str, bool]:
-    """Query supervisor for answers or approval.
+    supervisor_client: ClaudeSDKClient,
+    swe_client: ClaudeSDKClient,
+    workflow_state: WorkflowState,
+    workflow_dir: Path,
+) -> bool:
+    """Execute the staged workflow with MCP tool-based state control.
 
     Returns:
-        tuple of (response_text, is_approved)
+        True if workflow completed successfully, False otherwise.
     """
+    try:
+        # Set workflow context for MCP tools
+        set_workflow_context(workflow_state, supervisor_client)
 
-    if questions:
-        prompt = SUPERVISOR_QUESTION_PROMPT.format(
-            questions="\n".join(f"- {q}" for q in questions),
-            objective=objective,
-            context=context,
-            stage=stage,
-        )
-    else:
-        prompt = SUPERVISOR_REVIEW_PROMPT.format(
-            output_file=output_file,
-            objective=objective,
-            stage=stage,
-        )
+        for stage_index, (command, stage_key) in enumerate(WORKFLOW_STAGES):
+            print(
+                f"\n[π-CLI] === Stage {stage_index + 1}/{len(WORKFLOW_STAGES)}: "
+                f"/{command} ===\n"
+            )
+            log_workflow_event(
+                workflow_dir,
+                "stage_start",
+                {"stage": stage_key, "index": stage_index}
+            )
 
-    result = await query_agent(
-        output_type=SupervisorDecision,
-        name="supervisor",
-        client=client,
-        prompt=prompt,
-    )
+            # Execute stage - wait for completion tool call
+            result = await run_stage(
+                client=swe_client,
+                command=command,
+                context=workflow_state.context,
+                workflow_dir=workflow_dir,
+                workflow_state=workflow_state,
+            )
 
-    if isinstance(result, SupervisorDecision):
-        return result.feedback, result.approved
+            if result is None:
+                print(f"[π-CLI] Stage {command} did not signal completion")
+                log_workflow_event(
+                    workflow_dir,
+                    "stage_error",
+                    {"stage": stage_key, "error": "no_completion_signal"},
+                )
+                return False
 
-    # Fallback for non-structured response - parse text for approval
-    response_text = str(result) if result else ""
-    clean = response_text.strip().lstrip("*").strip().upper()
-    is_approved = clean.startswith("APPROVED") or "APPROVED:" in clean.upper()
-    return response_text, is_approved
+            if result.get("workflow_complete"):
+                print("\n[π-CLI] === Workflow completed successfully ===")
+                log_workflow_event(workflow_dir, "workflow_complete", {"success": True})
+                return True
+
+            print(f"[π-CLI] Stage {stage_key} completed: {result.get('summary', 'N/A')}")
+            log_workflow_event(
+                workflow_dir,
+                "stage_complete",
+                {
+                    "stage": stage_key,
+                    "output_file": result.get("output_file"),
+                    "summary": result.get("summary"),
+                },
+            )
+
+        print("\n[π-CLI] === Workflow completed successfully ===")
+        log_workflow_event(workflow_dir, "workflow_complete", {"success": True})
+        return True
+
+    except Exception as e:
+        print(f"[π-CLI] Workflow error: {e}")
+        log_workflow_event(workflow_dir, "workflow_error", {"error": str(e)})
+        return False
 
 
 async def main(objective: str | None = None):
-    """Run the staged workflow with supervisor oversight.
-
-    Args:
-        objective: The workflow objective. If None, prompts user.
-    """
+    """Run the staged workflow with MCP tool-based state control."""
 
     if not objective:
         objective = input("Enter workflow objective: ").strip()
@@ -271,37 +222,41 @@ async def main(objective: str | None = None):
     print("\n[π-CLI] Starting workflow with objective:")
     print(f"  {objective}\n")
 
-    # Set up workflow directory for conversation logging
+    # Set up workflow
     workflow_id = generate_workflow_id()
     workflow_dir = create_workflow_dir(Path.cwd() / ".logs", workflow_id)
-    write_conversation = capture_conversation_to_csv(workflow_dir=workflow_dir)
+    workflow_state = WorkflowState(objective)
 
     print(f"[π-CLI] Logging to: {workflow_dir}")
 
-    # Create agent options with structured output
+    # Create agent options - SWE gets MCP tools
     swe_options = get_agent_options(
         system_prompt=SWE_SYSTEM_PROMPT,
-        output_schema=StageOutput,
-        model="sonnet-4.5",
+        output_schema=None,
+        model="haiku",
+        include_workflow_mcp=True,
     )
     supervisor_options = get_agent_options(
         system_prompt=SUPERVISOR_SYSTEM_PROMPT,
         output_schema=SupervisorDecision,
-        model="sonnet-4.5",
+        model="haiku",
     )
 
-    # Run the workflow
     async with (
         ClaudeSDKClient(options=supervisor_options) as supervisor_client,
         ClaudeSDKClient(options=swe_options) as swe_client,
     ):
-        # run the workflow
-        success = True
+        success = await run_workflow(
+            supervisor_client=supervisor_client,
+            swe_client=swe_client,
+            workflow_state=workflow_state,
+            workflow_dir=workflow_dir,
+        )
 
         if success:
-            print(f"\n[π-CLI] Workflow completed. Logs at: {workflow_dir}")
+            print("[π-CLI] Workflow completed successfully")
         else:
-            print(f"\n[π-CLI] Workflow failed. Check logs at: {workflow_dir}")
+            print("[π-CLI] Workflow failed")
 
 
 if __name__ == "__main__":
