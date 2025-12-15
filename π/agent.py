@@ -8,54 +8,53 @@ from π.hooks import (
 )
 from π.workflow_mcp import create_workflow_server
 
-ALLOWED_TOOLS = [
-    "Task",
+# https://code.claude.com/docs/en/settings#tools-available-to-claude
+AVAILABLE_TOOLS = [
+    "AskUserQuestion",
     "Bash",
+    "BashOutput",
+    "Edit",
+    "ExitPlanMode",
     "Glob",
     "Grep",
-    "ExitPlanMode",
-    "Read",
-    "Edit",
-    "Write",
-    "NotebookEdit",
-    "WebFetch",
-    "TodoWrite",
-    "WebSearch",
-    "BashOutput",
     "KillShell",
+    "NotebookEdit",
+    "Read",
     "Skill",
     "SlashCommand",
-    # MCP workflow tools
-    "mcp__workflow__complete_stage",
-    "mcp__workflow__ask_supervisor",
-    "mcp__workflow__get_current_stage",
+    "Task",
+    "TodoWrite",
+    "WebFetch",
+    "WebSearch",
+    "Write",
 ]
 
 
 def get_agent_options(
     *,
+    include_workflow_mcp: bool = False,
     output_schema: type | None = None,
     system_prompt: str | None = None,
     model: str | None = None,
     cwd: Path = Path.cwd(),
-    include_workflow_mcp: bool = False,
 ) -> ClaudeAgentOptions:
     mcp_name = "workflow"
-    mcp_servers = (
-        {mcp_name: create_workflow_server(mcp_name)} if include_workflow_mcp else {}
-    )
+    workflow_server_config, workflow_tool_names = create_workflow_server(mcp_name)
+
+    mcp_servers = {mcp_name: workflow_server_config} if include_workflow_mcp else {}
+    AVAILABLE_TOOLS.extend(workflow_tool_names)
 
     options = ClaudeAgentOptions(
         hooks={
             "PostToolUse": [
-                HookMatcher(matcher="Write|MultiEdit|Edit", hooks=[check_file_format]),
+                HookMatcher(matcher="Write|Edit", hooks=[check_file_format]),
             ],
             "PreToolUse": [
                 HookMatcher(matcher="Bash", hooks=[check_bash_command]),
             ],
         },
         permission_mode="acceptEdits",
-        allowed_tools=ALLOWED_TOOLS,
+        allowed_tools=AVAILABLE_TOOLS,
         system_prompt=system_prompt,
         setting_sources=["project"],
         model=model,

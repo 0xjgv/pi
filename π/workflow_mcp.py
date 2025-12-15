@@ -3,7 +3,12 @@
 from pathlib import Path
 from typing import Any
 
-from claude_agent_sdk import ClaudeSDKClient, create_sdk_mcp_server, tool
+from claude_agent_sdk import (
+    ClaudeSDKClient,
+    McpSdkServerConfig,
+    create_sdk_mcp_server,
+    tool,
+)
 
 
 # Workflow state stored in-memory
@@ -86,9 +91,9 @@ async def complete_stage(args: dict[str, Any]) -> dict[str, Any]:
     """Signal stage completion and advance workflow state."""
     state = get_workflow_state()
 
-    stage = args["stage"]
-    summary = args["summary"]
     output_file = args.get("output_file")
+    summary = args["summary"]
+    stage = args["stage"]
 
     # Validate stage matches current
     if stage != state.current_stage:
@@ -239,10 +244,14 @@ async def get_current_stage(args: dict[str, Any]) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": str(info)}]}
 
 
-def create_workflow_server(mcp_name: str = "workflow"):
+def create_workflow_server(
+    mcp_name: str = "workflow",
+) -> tuple[McpSdkServerConfig, list[str]]:
     """Create the workflow MCP server."""
+    tools = [complete_stage, ask_supervisor, get_current_stage]
+    tool_names = [f"mcp__{mcp_name}__{tool.name}" for tool in tools]
     return create_sdk_mcp_server(
-        tools=[complete_stage, ask_supervisor, get_current_stage],
         version="1.0.0",
         name=mcp_name,
-    )
+        tools=tools,
+    ), tool_names
