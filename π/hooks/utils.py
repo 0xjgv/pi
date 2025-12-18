@@ -37,9 +37,10 @@ def compact_path(path: Path | str) -> str:
     # If path is very long, show first and last parts
     path_str = str(path)
     if len(path_str) > 60:
-        parts = path_str.split("/")
+        parts = path.parts
         if len(parts) > 4:
-            return f"{'/'.join(parts[:2])}/.../{'/'.join(parts[-2:])}"
+            # Use Path to join correctly for the platform
+            return str(Path(parts[0], parts[1], "...", parts[-2], parts[-1]))
 
     return path_str
 
