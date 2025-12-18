@@ -1,14 +1,12 @@
-"""Tests for π.hooks module."""
+"""Tests for π.hooks package."""
 
-import pytest
 from pathlib import Path
 
-from π.hooks import (
-    _compact_path,
-    _find_project_root,
-    _is_dangerous_command,
-    check_bash_command,
-)
+import pytest
+
+from π.hooks import check_bash_command
+from π.hooks.safety import is_dangerous_command
+from π.hooks.utils import compact_path, find_project_root
 
 
 class TestIsDangerousCommand:
@@ -30,7 +28,7 @@ class TestIsDangerousCommand:
     )
     def test_detects_dangerous_commands(self, cmd: str):
         """Should detect various dangerous patterns."""
-        assert _is_dangerous_command(cmd) is True
+        assert is_dangerous_command(cmd) is True
 
     @pytest.mark.parametrize(
         "cmd",
@@ -46,7 +44,7 @@ class TestIsDangerousCommand:
     )
     def test_allows_safe_commands(self, cmd: str):
         """Should allow normal commands."""
-        assert _is_dangerous_command(cmd) is False
+        assert is_dangerous_command(cmd) is False
 
 
 class TestCompactPath:
@@ -55,7 +53,7 @@ class TestCompactPath:
     def test_home_directory_replacement(self):
         """Should replace home dir with ~."""
         home = Path.home()
-        result = _compact_path(home / "projects" / "test")
+        result = compact_path(home / "projects" / "test")
         assert result.startswith("~/")
         assert "projects/test" in result
 
@@ -64,7 +62,7 @@ class TestCompactPath:
         cwd = Path.cwd()
         # Create a subpath of cwd
         subpath = cwd / "subdir" / "file.py"
-        result = _compact_path(subpath)
+        result = compact_path(subpath)
         assert result.startswith("./") or result.startswith("~/")
 
 
@@ -77,7 +75,7 @@ class TestFindProjectRoot:
         subdir = tmp_path / "src" / "pkg"
         subdir.mkdir(parents=True)
 
-        result = _find_project_root(subdir, ["pyproject.toml"])
+        result = find_project_root(subdir, ["pyproject.toml"])
         assert result == tmp_path
 
     def test_returns_none_when_not_found(self, tmp_path: Path):
@@ -85,7 +83,7 @@ class TestFindProjectRoot:
         subdir = tmp_path / "orphan"
         subdir.mkdir()
 
-        result = _find_project_root(subdir, ["nonexistent.marker"])
+        result = find_project_root(subdir, ["nonexistent.marker"])
         assert result is None
 
 
