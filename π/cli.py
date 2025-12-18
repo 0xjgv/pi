@@ -112,7 +112,8 @@ def execute_claude_task(
             except Exception as e:
                 return f"Error executing agent: {e}", session_id
 
-        logger.debug("Last message type: %s", last_message.__class__.__name__)
+        if last_message:
+            logger.debug("Last message type: %s", last_message.__class__.__name__)
 
         return result_content if result_content else last_text_content, session_id
 
