@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 import dspy
-from claude_agent_sdk import ClaudeSDKClient
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import (
     AssistantMessage,
     ResultMessage,
@@ -18,8 +18,6 @@ from π.agent import get_agent_options
 from π.session import COMMAND_MAP, Command, WorkflowSession
 from π.utils import setup_logging
 
-load_dotenv()
-
 THINKING_MODELS = {
     "low": "claude-haiku-4-5-20251001",
     "med": "claude-sonnet-4-5-20250929",
@@ -30,7 +28,28 @@ THINKING_MODELS = {
 logger = logging.getLogger("π")
 console = Console()
 
-agent_options = get_agent_options(cwd=Path.cwd())
+# Load environment variables from .env file
+load_dotenv()
+
+# Lazy-initialized state
+_agent_options: ClaudeAgentOptions | None = None
+_session: WorkflowSession | None = None
+
+
+def _get_agent_options() -> ClaudeAgentOptions:
+    """Lazy initialization of agent options (evaluates cwd at runtime)."""
+    global _agent_options
+    if _agent_options is None:
+        _agent_options = get_agent_options(cwd=Path.cwd())
+    return _agent_options
+
+
+def _get_session() -> WorkflowSession:
+    """Lazy initialization of workflow session."""
+    global _session
+    if _session is None:
+        _session = WorkflowSession()
+    return _session
 
 
 def configure_dspy(model: str = THINKING_MODELS["low"]) -> None:
@@ -47,9 +66,6 @@ def configure_dspy(model: str = THINKING_MODELS["low"]) -> None:
 
 
 # --- Tool Definitions ---
-
-# Module-level session state
-_session = WorkflowSession()
 
 
 def execute_claude_task(
@@ -78,7 +94,7 @@ def execute_claude_task(
         result_content = ""
         last_message = None
 
-        async with ClaudeSDKClient(options=agent_options) as client:
+        async with ClaudeSDKClient(options=_get_agent_options()) as client:
             try:
                 if session_id:
                     logger.debug("Using session ID: %s", session_id)
@@ -138,7 +154,7 @@ def research_codebase(
     Returns:
         A summary of the research + the file path of the research document or open questions to the agent.
     """
-    if not _session.should_resume(Command.RESEARCH_CODEBASE, session_id):
+    if not _get_session().should_resume(Command.RESEARCH_CODEBASE, session_id):
         session_id = None
 
     with console.status("[bold cyan]Researching codebase..."):
@@ -148,7 +164,7 @@ def research_codebase(
             query=query,
         )
 
-    _session.set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
+    _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
 
     return f"Result: {result}, Research Session ID: {last_session_id}"
 
@@ -170,7 +186,7 @@ def create_plan(
     Returns:
         A summary of the plan + the file path of the plan document or open questions to the agent.
     """
-    if not _session.should_resume(Command.CREATE_PLAN, session_id):
+    if not _get_session().should_resume(Command.CREATE_PLAN, session_id):
         session_id = None
 
     with console.status("[bold cyan]Creating plan..."):
@@ -181,8 +197,8 @@ def create_plan(
             query=query,
         )
 
-    _session.set_doc_path(Command.CREATE_PLAN, str(research_document_path))
-    _session.set_session_id(Command.CREATE_PLAN, last_session_id)
+    _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
+    _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
 
     return f"Result: {result}, Plan Session ID: {last_session_id}"
 
@@ -205,10 +221,10 @@ def implement_plan(
         A summary of the implementation or open questions to the agent.
     """
     # Validate: ensure we're not receiving the research doc by mistake
-    _session.validate_plan_doc(str(plan_document_path))
+    _get_session().validate_plan_doc(str(plan_document_path))
 
     # If resuming a session, validate that the session ID matches the stored one.
-    if not _session.should_resume(Command.IMPLEMENT_PLAN, session_id):
+    if not _get_session().should_resume(Command.IMPLEMENT_PLAN, session_id):
         session_id = None
 
     with console.status("[bold cyan]Implementing plan..."):
@@ -219,8 +235,8 @@ def implement_plan(
             query=query,
         )
 
-    _session.set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
-    _session.set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
+    _get_session().set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
+    _get_session().set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
 
     return f"Result: {result}, Implementation Session ID: {last_session_id}"
 

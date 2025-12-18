@@ -49,10 +49,11 @@ def check_typescript(path: Path, tool_name: str | None = None) -> int:
     print(f"📦 Running TypeScript/JS checks for {compact_path(path)}...")
 
     eslint_configs = [
+        "eslint.config.mjs",
+        "eslint.config.js",
         ".eslintrc.json",
         ".eslintrc.js",
         ".eslintrc.cjs",
-        "eslint.config.js",
     ]
     if not any((project_root / config).exists() for config in eslint_configs):
         print("⚠️  No ESLint configuration found")
