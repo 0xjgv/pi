@@ -48,7 +48,8 @@ clean: ## Remove cache and generated files
 
 .PHONY: test
 test: ## Run tests with pytest
-	@$(SILENT_HELPER) && run_silent "Running tests" "uv run pytest tests/ -v"
+	@$(SILENT_HELPER) && print_main_header "Running Tests" && \
+		run_silent "Running tests" "uv run pytest -x -v tests/"
 
 .PHONY: test-cov
 test-cov: ## Run tests with coverage
@@ -57,7 +58,7 @@ test-cov: ## Run tests with coverage
 ##@ Development
 
 .PHONY: check
-check: quality-check ## Run all checks
+check: quality-check test ## Run all checks
 
 .PHONY: codespace
 codespace: ## Set up codespace environment

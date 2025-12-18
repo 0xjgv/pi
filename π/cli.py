@@ -12,6 +12,7 @@ from claude_agent_sdk.types import (
     TextBlock,
 )
 from dotenv import load_dotenv
+from rich.console import Console
 
 from π.agent import get_agent_options
 from π.session import COMMAND_MAP, Command, WorkflowSession
@@ -27,6 +28,7 @@ THINKING_MODELS = {
 
 # Module-level logger
 logger = logging.getLogger("π")
+console = Console()
 
 agent_options = get_agent_options(cwd=Path.cwd())
 
@@ -138,11 +140,12 @@ def research_codebase(
     if not _session.should_resume(Command.RESEARCH, session_id):
         session_id = None
 
-    result, last_session_id = execute_claude_task(
-        tool_command=Command.RESEARCH,
-        session_id=session_id,
-        query=query,
-    )
+    with console.status("[bold cyan]Researching codebase..."):
+        result, last_session_id = execute_claude_task(
+            tool_command=Command.RESEARCH,
+            session_id=session_id,
+            query=query,
+        )
 
     _session.set_session_id(Command.RESEARCH, last_session_id)
 
@@ -169,12 +172,13 @@ def create_plan(
     if not _session.should_resume(Command.PLAN, session_id):
         session_id = None
 
-    result, last_session_id = execute_claude_task(
-        path_to_document=research_document_path,
-        tool_command=Command.PLAN,
-        session_id=session_id,
-        query=query,
-    )
+    with console.status("[bold cyan]Creating plan..."):
+        result, last_session_id = execute_claude_task(
+            path_to_document=research_document_path,
+            tool_command=Command.PLAN,
+            session_id=session_id,
+            query=query,
+        )
 
     _session.set_doc_path(Command.PLAN, str(research_document_path))
     _session.set_session_id(Command.PLAN, last_session_id)
@@ -206,12 +210,14 @@ def implement_plan(
     if not _session.should_resume(Command.IMPLEMENT, session_id):
         session_id = None
 
-    result, last_session_id = execute_claude_task(
-        path_to_document=plan_document_path,
-        tool_command=Command.IMPLEMENT,
-        session_id=session_id,
-        query=query,
-    )
+    with console.status("[bold cyan]Implementing plan..."):
+        result, last_session_id = execute_claude_task(
+            path_to_document=plan_document_path,
+            tool_command=Command.IMPLEMENT,
+            session_id=session_id,
+            query=query,
+        )
+
     _session.set_doc_path(Command.IMPLEMENT, str(plan_document_path))
     _session.set_session_id(Command.IMPLEMENT, last_session_id)
 

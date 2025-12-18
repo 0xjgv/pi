@@ -5,9 +5,10 @@ CLI tool orchestrating Claude agents for automated research → plan → impleme
 ## Stack
 
 - Python 3.13+ with uv
-- claude-agent-sdk (>=0.1.13)
-- pydantic for structured outputs
-- ruff for linting/formatting
+- claude-agent-sdk (>=0.1.18)
+- dspy (>=3.0.4) for ReAct agent orchestration
+- ruff for linting/fixing/formatting
+- rich for pretty console output
 
 ## Structure
 
@@ -23,11 +24,14 @@ CLI tool orchestrating Claude agents for automated research → plan → impleme
 thoughts/shared/      # Generated research and plan artifacts
 ```
 
-## Commands
+## Development Commands
 
-- Format: `make format`
-- Lint: `make check`
 - Run: `π "your prompt"` or `uv run π "your prompt"`
+- Format: `make format`
+- Lint: `make lint`
+- Test: `make test`
+- Test with coverage: `make test-cov`
+- Check: `make check` (fix, format, lint, test)
 
 ## Key Patterns
 
