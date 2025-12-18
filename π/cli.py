@@ -42,8 +42,8 @@ def configure_dspy(model: str = THINKING_MODELS["low"]) -> None:
             model=model,
         )
         dspy.configure(lm=lm)
-    except Exception:
-        logger.warning("DSPy LM not configured")
+    except Exception as e:
+        logger.warning("DSPy LM not configured: %s", e, exc_info=True)
 
 
 # --- Tool Definitions ---
