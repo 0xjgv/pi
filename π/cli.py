@@ -28,6 +28,13 @@ THINKING_MODELS = {
 logger = logging.getLogger("π")
 console = Console()
 
+
+class AgentExecutionError(Exception):
+    """Raised when the Claude agent fails to execute a task."""
+
+    pass
+
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -136,7 +143,7 @@ def execute_claude_task(
                         if block_text:
                             last_text_content = block_text
             except Exception as e:
-                return f"Error executing agent: {e}", session_id
+                raise AgentExecutionError(f"Agent execution failed: {e}") from e
 
         if last_message:
             logger.debug("Last message type: %s", last_message.__class__.__name__)
@@ -167,16 +174,20 @@ def research_codebase(
     if not _get_session().should_resume(Command.RESEARCH_CODEBASE, session_id):
         session_id = None
 
-    with console.status("[bold cyan]Researching codebase..."):
-        result, last_session_id = execute_claude_task(
-            tool_command=Command.RESEARCH_CODEBASE,
-            session_id=session_id,
-            query=query,
-        )
+    try:
+        with console.status("[bold cyan]Researching codebase..."):
+            result, last_session_id = execute_claude_task(
+                tool_command=Command.RESEARCH_CODEBASE,
+                session_id=session_id,
+                query=query,
+            )
 
-    _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
+        _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
 
-    return f"Result: {result}, Research Session ID: {last_session_id}"
+        return f"Result: {result}, Research Session ID: {last_session_id}"
+    except AgentExecutionError as e:
+        logger.exception("Research failed")
+        return f"[ERROR] {e}"
 
 
 def create_plan(
@@ -199,18 +210,22 @@ def create_plan(
     if not _get_session().should_resume(Command.CREATE_PLAN, session_id):
         session_id = None
 
-    with console.status("[bold cyan]Creating plan..."):
-        result, last_session_id = execute_claude_task(
-            path_to_document=research_document_path,
-            tool_command=Command.CREATE_PLAN,
-            session_id=session_id,
-            query=query,
-        )
+    try:
+        with console.status("[bold cyan]Creating plan..."):
+            result, last_session_id = execute_claude_task(
+                path_to_document=research_document_path,
+                tool_command=Command.CREATE_PLAN,
+                session_id=session_id,
+                query=query,
+            )
 
-    _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
-    _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
+        _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
+        _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
 
-    return f"Result: {result}, Plan Session ID: {last_session_id}"
+        return f"Result: {result}, Plan Session ID: {last_session_id}"
+    except AgentExecutionError as e:
+        logger.exception("Planning failed")
+        return f"[ERROR] {e}"
 
 
 def implement_plan(
@@ -237,18 +252,22 @@ def implement_plan(
     if not _get_session().should_resume(Command.IMPLEMENT_PLAN, session_id):
         session_id = None
 
-    with console.status("[bold cyan]Implementing plan..."):
-        result, last_session_id = execute_claude_task(
-            path_to_document=plan_document_path,
-            tool_command=Command.IMPLEMENT_PLAN,
-            session_id=session_id,
-            query=query,
-        )
+    try:
+        with console.status("[bold cyan]Implementing plan..."):
+            result, last_session_id = execute_claude_task(
+                path_to_document=plan_document_path,
+                tool_command=Command.IMPLEMENT_PLAN,
+                session_id=session_id,
+                query=query,
+            )
 
-    _get_session().set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
-    _get_session().set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
+        _get_session().set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
+        _get_session().set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
 
-    return f"Result: {result}, Implementation Session ID: {last_session_id}"
+        return f"Result: {result}, Implementation Session ID: {last_session_id}"
+    except AgentExecutionError as e:
+        logger.exception("Implementation failed")
+        return f"[ERROR] {e}"
 
 
 # --- ReAct Agent Module ---
