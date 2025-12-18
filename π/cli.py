@@ -138,17 +138,17 @@ def research_codebase(
     Returns:
         A summary of the research + the file path of the research document or open questions to the agent.
     """
-    if not _session.should_resume(Command.RESEARCH, session_id):
+    if not _session.should_resume(Command.RESEARCH_CODEBASE, session_id):
         session_id = None
 
     with console.status("[bold cyan]Researching codebase..."):
         result, last_session_id = execute_claude_task(
-            tool_command=Command.RESEARCH,
+            tool_command=Command.RESEARCH_CODEBASE,
             session_id=session_id,
             query=query,
         )
 
-    _session.set_session_id(Command.RESEARCH, last_session_id)
+    _session.set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
 
     return f"Result: {result}, Research Session ID: {last_session_id}"
 
@@ -170,19 +170,19 @@ def create_plan(
     Returns:
         A summary of the plan + the file path of the plan document or open questions to the agent.
     """
-    if not _session.should_resume(Command.PLAN, session_id):
+    if not _session.should_resume(Command.CREATE_PLAN, session_id):
         session_id = None
 
     with console.status("[bold cyan]Creating plan..."):
         result, last_session_id = execute_claude_task(
             path_to_document=research_document_path,
-            tool_command=Command.PLAN,
+            tool_command=Command.CREATE_PLAN,
             session_id=session_id,
             query=query,
         )
 
-    _session.set_doc_path(Command.PLAN, str(research_document_path))
-    _session.set_session_id(Command.PLAN, last_session_id)
+    _session.set_doc_path(Command.CREATE_PLAN, str(research_document_path))
+    _session.set_session_id(Command.CREATE_PLAN, last_session_id)
 
     return f"Result: {result}, Plan Session ID: {last_session_id}"
 
@@ -208,19 +208,19 @@ def implement_plan(
     _session.validate_plan_doc(str(plan_document_path))
 
     # If resuming a session, validate that the session ID matches the stored one.
-    if not _session.should_resume(Command.IMPLEMENT, session_id):
+    if not _session.should_resume(Command.IMPLEMENT_PLAN, session_id):
         session_id = None
 
     with console.status("[bold cyan]Implementing plan..."):
         result, last_session_id = execute_claude_task(
             path_to_document=plan_document_path,
-            tool_command=Command.IMPLEMENT,
+            tool_command=Command.IMPLEMENT_PLAN,
             session_id=session_id,
             query=query,
         )
 
-    _session.set_doc_path(Command.IMPLEMENT, str(plan_document_path))
-    _session.set_session_id(Command.IMPLEMENT, last_session_id)
+    _session.set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
+    _session.set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
 
     return f"Result: {result}, Implementation Session ID: {last_session_id}"
 

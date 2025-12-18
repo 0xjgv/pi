@@ -22,7 +22,7 @@ class TestSetupLogging:
         logging.root.setLevel(logging.WARNING)
 
         setup_logging(verbose=True)
-        assert logging.getLogger().level == logging.DEBUG
+        assert logging.getLogger("π").level == logging.DEBUG
 
     def test_default_sets_info_level(self):
         """Default mode should set INFO level."""
@@ -31,7 +31,7 @@ class TestSetupLogging:
         logging.root.setLevel(logging.WARNING)
 
         setup_logging(verbose=False)
-        assert logging.getLogger().level == logging.INFO
+        assert logging.getLogger("π").level == logging.INFO
 
 
 class TestExtractMessageContent:
@@ -59,13 +59,14 @@ class TestExtractMessageContent:
         """Should extract text from AssistantMessage content blocks."""
         msg = AssistantMessage(
             content=[
-                TextBlock(type="text", text="block 1"),
-                TextBlock(type="text", text="block 2"),
-            ]
+                TextBlock(text="block 1"),
+                TextBlock(text="block 2"),
+            ],
+            model="claude-sonnet-4-20250514",
         )
         assert extract_message_content(msg) == "block 1\nblock 2"
 
     def test_returns_none_for_empty_blocks(self):
         """Should return None when no text blocks found."""
-        msg = AssistantMessage(content=[])
+        msg = AssistantMessage(content=[], model="claude-sonnet-4-20250514")
         assert extract_message_content(msg) is None

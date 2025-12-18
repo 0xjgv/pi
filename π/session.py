@@ -2,22 +2,42 @@
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).parent.parent
 
 
 class Command(StrEnum):
     """Workflow stage commands."""
 
-    RESEARCH = "research_codebase"
-    PLAN = "create_plan"
-    IMPLEMENT = "implement_plan"
+    RESEARCH_CODEBASE = "research_codebase"
+    CREATE_PLAN = "create_plan"
+    IMPLEMENT_PLAN = "implement_plan"
+
+
+def build_command_map(
+    *,
+    command_dir: Path = ROOT_DIR / ".claude/commands",
+) -> dict[Command, str]:
+    """Build a command map from the command directory."""
+    command_map = {}
+    if not command_dir.exists():
+        return command_map
+
+    for f in sorted(command_dir.glob("[0-9]_*.md")):
+        try:
+            # e.g., '1_research_codebase' -> 'RESEARCH_CODEBASE'
+            command_name = f.stem.split("_", 1)[1].upper()
+            if command_enum_member := getattr(Command, command_name, None):
+                command_map[command_enum_member] = f"/{f.stem}"
+        except (IndexError, AttributeError):
+            continue  # Or log a warning
+
+    return command_map
 
 
 # TODO: find a way to get the command map from the commands folder
-COMMAND_MAP = {
-    Command.RESEARCH: "/1_research_codebase",
-    Command.PLAN: "/2_create_plan",
-    Command.IMPLEMENT: "/3_implement_plan",
-}
+COMMAND_MAP = build_command_map()
 
 
 @dataclass
@@ -41,11 +61,11 @@ class WorkflowSession:
 
     def get_doc_path(self, command: Command) -> str:
         """Get the document path for a command."""
-        return self.doc_paths.get(command, "")
+        return self.input_doc_paths.get(command, "")
 
     def set_doc_path(self, command: Command, path: str) -> None:
         """Set the document path for a command."""
-        self.doc_paths[command] = path
+        self.input_doc_paths[command] = path
 
     def should_resume(self, command: Command, session_id: str | None) -> bool:
         """Check if we should resume a previous session.
@@ -62,7 +82,7 @@ class WorkflowSession:
         Raises:
             ValueError: If the plan_path matches the research document used for create_plan.
         """
-        research_doc = self.doc_paths.get(Command.PLAN, "")
+        research_doc = self.input_doc_paths.get(Command.CREATE_PLAN, "")
         if research_doc and plan_path == research_doc:
             raise ValueError(
                 f"implement_plan requires the PLAN document, not the research document.\n"
