@@ -70,6 +70,7 @@ def run_check_command(
     name: str,
     tool_name: str | None = None,
     file_path: str | None = None,
+    timeout: int = 30,
 ) -> tuple[int, str, str]:
     """Run a check command and return raw results for processing.
 
@@ -79,6 +80,7 @@ def run_check_command(
         name: Human-readable name for the checker
         tool_name: Optional tool that triggered this check
         file_path: Optional file path being checked
+        timeout: Command timeout in seconds (default: 30)
 
     Returns:
         Tuple of (exit_code, stdout, stderr)
@@ -97,7 +99,7 @@ def run_check_command(
         )
 
         result = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True, timeout=30
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout
         )
 
         if result.returncode != 0:

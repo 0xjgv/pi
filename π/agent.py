@@ -32,7 +32,6 @@ AVAILABLE_TOOLS = [
 def get_agent_options(
     *,
     system_prompt: str | None = None,
-    model: str | None = None,
     cwd: Path = Path.cwd(),
 ) -> ClaudeAgentOptions:
     return ClaudeAgentOptions(
@@ -48,6 +47,5 @@ def get_agent_options(
         allowed_tools=AVAILABLE_TOOLS,
         system_prompt=system_prompt,
         setting_sources=["project"],
-        model=model,
         cwd=cwd,
     )
