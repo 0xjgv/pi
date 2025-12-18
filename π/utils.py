@@ -21,13 +21,24 @@ def setup_logging(verbose: bool = False) -> logging.Logger:
         Configured logger instance
     """
     level = logging.DEBUG if verbose else logging.INFO
+
+    # Configure root logger with basic format (keeps third-party libs at WARNING)
     logging.basicConfig(
-        level=level,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
+        level=logging.WARNING,
         force=True,
     )
-    return logging.getLogger("π")
+
+    # Configure our logger specifically
+    logger = logging.getLogger("π")
+    logger.setLevel(level)
+
+    # Silence noisy third-party loggers
+    for name in ("httpcore", "httpx", "claude_agent_sdk"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+    return logger
 
 
 def extract_message_content(msg: Message | ResultMessage) -> str | None:

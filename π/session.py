@@ -12,6 +12,7 @@ class Command(StrEnum):
     IMPLEMENT = "implement_plan"
 
 
+# TODO: find a way to get the command map from the commands folder
 COMMAND_MAP = {
     Command.RESEARCH: "/1_research_codebase",
     Command.PLAN: "/2_create_plan",
