@@ -17,20 +17,40 @@ def is_dangerous_command(cmd: str) -> bool:
     Returns:
         True if the command matches a dangerous pattern
     """
+    # Strip common privilege escalation prefixes for pattern matching
+    normalized_cmd = re.sub(r"^(sudo|doas|pkexec)\s+", "", cmd.strip())
+
     dangerous_patterns = [
-        (r"rm\s+-rf\s+(/\s*|~(/.*)?\s*)", "Dangerous rm -rf command detected!"),
-        (r"(curl|wget).*\|.*sh", "Piping curl/wget to shell is not allowed!"),
-        (r"dd\s+if=.*of=/dev/", "Direct disk write operation detected!"),
-        (r"mkfs\.\w+", "File system formatting command detected!"),
-        (r"fdisk\s+/dev/", "Disk partitioning command detected!"),
-        (r">\s*/dev/sd[a-z]", "Direct write to disk device detected!"),
+        # Destructive file operations
+        (r"rm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)*(/\s*$|/\s+|~\s*$|~\s+|\*)", "Dangerous rm"),
+        # Piping remote content to shell
+        (r"(curl|wget).*\|.*(ba)?sh", "Piping curl/wget to shell"),
+        # Direct disk operations
+        (r"dd\s+.*of=/dev/", "Direct disk write"),
+        (r"mkfs\.\w+", "File system formatting"),
+        (r"fdisk\s+/dev/", "Disk partitioning"),
+        (r">\s*/dev/sd[a-z]", "Direct write to disk device"),
+        # Fork bomb patterns
+        (r":\(\)\s*\{.*:\|:.*\}", "Fork bomb"),
+        (r"\..*\|.*&", "Potential fork bomb"),
+        # Catastrophic permission/ownership on root
+        (
+            r"chmod\s+(-[a-zA-Z]*R[a-zA-Z]*\s+)*(777|a\+rwx)\s+/\s*$",
+            "Recursive chmod 777 on root",
+        ),
+        (r"chown\s+(-[a-zA-Z]*R[a-zA-Z]*\s+)+\S+\s+/\s*$", "Recursive chown on root"),
+        # File truncation of critical paths
+        (r":>\s*/etc/", "Truncating /etc file"),
+        (r"truncate\s+.*(/etc/|/var/|/usr/)", "Truncating system file"),
+        # Overwriting critical system files
+        (r">\s*/etc/(passwd|shadow|sudoers|hosts)", "Overwriting critical system file"),
     ]
 
     for pattern, _ in dangerous_patterns:
-        if re.search(pattern, cmd):
+        if re.search(pattern, normalized_cmd):
             return True
 
-    simple_patterns = ["format c:", "rm -rf *"]
+    simple_patterns = ["format c:", "rm -rf *", ":(){ :|:& };:"]
     return any(pattern in cmd.lower() for pattern in simple_patterns)
 
 
@@ -41,15 +61,14 @@ async def check_bash_command(
 
     Trigger: Fires before Bash tool executes
 
-    Blocked patterns (regex-based):
-        - rm -rf / or ~
+    Blocked patterns (with sudo/doas/pkexec prefix handling):
+        - rm -rf on / ~ or *
         - curl/wget piped to shell
-        - dd writing to /dev/
-        - mkfs commands
-        - fdisk commands
+        - dd/mkfs/fdisk disk operations
         - Direct writes to /dev/sd*
-        - rm -rf *
-        - format c:
+        - Fork bombs (:(){ :|:& };:)
+        - chmod 777 / or chown -R on root
+        - Truncation/overwrite of /etc files
     """
     if "tool_input" not in input_data or "tool_name" not in input_data:
         return {}
