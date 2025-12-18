@@ -18,7 +18,7 @@ def log_event(event: str, data: dict) -> None:
         data: Event data to log (truncated to 200 chars in output)
     """
     now = datetime.now()
-    log_file = _LOG_DIR / f"{now.strftime('%d-%m-%Y')}-hooks.log"
+    log_file = _LOG_DIR / f"{now.strftime('%Y-%m-%d')}-hooks.log"
     with log_file.open("a") as f:
         f.write(
             f"{now.isoformat()} | {event} | {json.dumps(data, default=str)[:200]}\n"

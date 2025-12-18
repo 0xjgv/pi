@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from contextvars import ContextVar
 from pathlib import Path
 
 import click
@@ -38,35 +39,44 @@ class AgentExecutionError(Exception):
 # Load environment variables from .env file
 load_dotenv()
 
-# Lazy-initialized state
-_event_loop: asyncio.AbstractEventLoop | None = None
-_agent_options: ClaudeAgentOptions | None = None
-_session: WorkflowSession | None = None
+# Context variables for per-invocation isolation (thread-safe, async-safe)
+_session_var: ContextVar[WorkflowSession] = ContextVar("session")
+_agent_options_var: ContextVar[ClaudeAgentOptions] = ContextVar("agent_options")
+_event_loop_var: ContextVar[asyncio.AbstractEventLoop] = ContextVar("event_loop")
 
 
 def _get_event_loop() -> asyncio.AbstractEventLoop:
-    """Get or create a reusable event loop for the CLI session."""
-    global _event_loop
-    if _event_loop is None or _event_loop.is_closed():
-        _event_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(_event_loop)
-    return _event_loop
+    """Get or create a reusable event loop for the current context."""
+    try:
+        loop = _event_loop_var.get()
+        if not loop.is_closed():
+            return loop
+    except LookupError:
+        pass
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    _event_loop_var.set(loop)
+    return loop
 
 
 def _get_agent_options() -> ClaudeAgentOptions:
-    """Lazy initialization of agent options (evaluates cwd at runtime)."""
-    global _agent_options
-    if _agent_options is None:
-        _agent_options = get_agent_options(cwd=Path.cwd())
-    return _agent_options
+    """Get agent options for the current context (evaluates cwd at runtime)."""
+    try:
+        return _agent_options_var.get()
+    except LookupError:
+        options = get_agent_options(cwd=Path.cwd())
+        _agent_options_var.set(options)
+        return options
 
 
 def _get_session() -> WorkflowSession:
-    """Lazy initialization of workflow session."""
-    global _session
-    if _session is None:
-        _session = WorkflowSession()
-    return _session
+    """Get workflow session for the current context."""
+    try:
+        return _session_var.get()
+    except LookupError:
+        session = WorkflowSession()
+        _session_var.set(session)
+        return session
 
 
 def configure_dspy(model: str = THINKING_MODELS["low"]) -> None:
