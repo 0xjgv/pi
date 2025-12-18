@@ -1247,6 +1247,7 @@ dependencies = [
     { name = "claude-agent-sdk" },
     { name = "click" },
     { name = "dspy" },
+    { name = "rich" },
 ]
 
 [package.dev-dependencies]
@@ -1261,6 +1262,7 @@ requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.1.18" },
     { name = "click", specifier = ">=8.3.1" },
     { name = "dspy", specifier = ">=3.0.4" },
+    { name = "rich", specifier = ">=14.2.0" },
 ]
 
 [package.metadata.requires-dev]

@@ -28,6 +28,8 @@ THINKING_MODELS = {
 # Module-level logger
 logger = logging.getLogger("π")
 
+agent_options = get_agent_options(cwd=Path.cwd())
+
 
 def configure_dspy(model: str = THINKING_MODELS["low"]) -> None:
     """Configure DSPy with the specified model."""
@@ -42,11 +44,10 @@ def configure_dspy(model: str = THINKING_MODELS["low"]) -> None:
         logger.warning("DSPy LM not configured")
 
 
-# --- The Tool Definition ---
+# --- Tool Definitions ---
+
 # Module-level session state
 _session = WorkflowSession()
-
-agent_options = get_agent_options(cwd=Path.cwd())
 
 
 def execute_claude_task(
@@ -159,7 +160,7 @@ def create_plan(
 
     Args:
         query: The query to create a plan for the codebase (goal, question, etc.).
-        research_document_path: The path to the research document.
+        research_document_path: Required path to the research document.
         session_id: Optional session ID to resume a previous planning session.
 
     Returns:
@@ -192,7 +193,7 @@ def implement_plan(
 
     Args:
         query: The query to implement the plan for the codebase (goal, question, etc.).
-        plan_document_path: The path to the plan document. (Required)
+        plan_document_path: Required path to the plan document.
         session_id: Optional session ID to resume a previous implementation session.
 
     Returns:
