@@ -18,7 +18,7 @@ def is_dangerous_command(cmd: str) -> bool:
         True if the command matches a dangerous pattern
     """
     dangerous_patterns = [
-        (r"rm\s+-rf\s+(/|~)", "Dangerous rm -rf command detected!"),
+        (r"rm\s+-rf\s+(/\s*|~(/.*)?\s*)", "Dangerous rm -rf command detected!"),
         (r"(curl|wget).*\|.*sh", "Piping curl/wget to shell is not allowed!"),
         (r"dd\s+if=.*of=/dev/", "Direct disk write operation detected!"),
         (r"mkfs\.\w+", "File system formatting command detected!"),
