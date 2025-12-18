@@ -106,16 +106,17 @@ def execute_claude_task(
 
     logger.debug("Tool call: %s", command)
 
-    async def _run_async(session_id: str | None = None) -> tuple[str, str | None]:
+    async def _run_async(sid: str | None) -> tuple[str, str]:
         last_text_content = ""
         result_content = ""
         last_message = None
+        new_session_id = ""
 
         async with ClaudeSDKClient(options=_get_agent_options()) as client:
             try:
-                if session_id:
-                    logger.debug("Using session ID: %s", session_id)
-                    await client.query(command, session_id=session_id)
+                if sid:
+                    logger.debug("Using session ID: %s", sid)
+                    await client.query(command, session_id=sid)
                 else:
                     logger.debug("Starting new session")
                     await client.query(command)
@@ -133,7 +134,7 @@ def execute_claude_task(
                         # ResultMessage usually contains the structured output of a tool (e.g., complete_stage)
                         # or the final cost/summary.
                         if message.result:
-                            session_id = message.session_id
+                            new_session_id = message.session_id
                             result_content = message.result
                     elif isinstance(message, AssistantMessage):
                         block_text = ""
@@ -148,12 +149,10 @@ def execute_claude_task(
         if last_message:
             logger.debug("Last message type: %s", last_message.__class__.__name__)
 
-        return result_content if result_content else last_text_content, session_id
+        return result_content if result_content else last_text_content, new_session_id
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
-    result, session_id = _get_event_loop().run_until_complete(_run_async(session_id))
-
-    return result, session_id or ""
+    return _get_event_loop().run_until_complete(_run_async(session_id))
 
 
 def research_codebase(
