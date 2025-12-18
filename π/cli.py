@@ -32,8 +32,18 @@ console = Console()
 load_dotenv()
 
 # Lazy-initialized state
+_event_loop: asyncio.AbstractEventLoop | None = None
 _agent_options: ClaudeAgentOptions | None = None
 _session: WorkflowSession | None = None
+
+
+def _get_event_loop() -> asyncio.AbstractEventLoop:
+    """Get or create a reusable event loop for the CLI session."""
+    global _event_loop
+    if _event_loop is None or _event_loop.is_closed():
+        _event_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_event_loop)
+    return _event_loop
 
 
 def _get_agent_options() -> ClaudeAgentOptions:
@@ -133,8 +143,8 @@ def execute_claude_task(
 
         return result_content if result_content else last_text_content, session_id
 
-    # Bridge Sync -> Async
-    result, session_id = asyncio.run(_run_async(session_id))
+    # Bridge Sync -> Async (reuse event loop across tool calls)
+    result, session_id = _get_event_loop().run_until_complete(_run_async(session_id))
 
     return result, session_id or ""
 
