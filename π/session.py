@@ -36,7 +36,6 @@ def build_command_map(
     return command_map
 
 
-# TODO: find a way to get the command map from the commands folder
 COMMAND_MAP = build_command_map()
 
 
