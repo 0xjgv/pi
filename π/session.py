@@ -27,7 +27,7 @@ class WorkflowSession:
     session_ids: dict[Command, str] = field(
         default_factory=lambda: {cmd: "" for cmd in Command}
     )
-    doc_paths: dict[Command, str] = field(
+    input_doc_paths: dict[Command, str] = field(
         default_factory=lambda: {cmd: "" for cmd in Command}
     )
 
