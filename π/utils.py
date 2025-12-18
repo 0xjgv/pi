@@ -89,15 +89,3 @@ def extract_message_content(msg: Message | ResultMessage) -> str | None:
             return "\n".join(texts) if len(texts) > 0 else None
         return None
     return None
-
-
-def load_claude_commands() -> list[str]:
-    """Load Claude commands from the commands directory.
-
-    Returns:
-        An ordered list of command names
-    """
-    commands_dir = Path.cwd() / ".claude" / "commands"
-    if not commands_dir.exists():
-        raise FileNotFoundError(f"Commands directory not found: {commands_dir}")
-    return sorted(command_file.stem for command_file in commands_dir.glob("*.md"))
