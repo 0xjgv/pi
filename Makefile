@@ -1,48 +1,72 @@
-.PHONY: help install format check clean codespace
-SHELL := /bin/bash
+# Silent helper (set VERBOSE=1 for full output)
+SILENT_HELPER := source ~/.claude/hack/run_silent.sh
 
-help:
-	@echo "Available targets:"
-	@echo "  make install   - Install deps with uv"
-	@echo "  make format    - Format code with ruff"
-	@echo "  make check     - Run lint and test (without formatting)"
-	@echo "  make clean     - Remove cache and generated files"
+.PHONY: help
+help: ## Show this help message
+	@echo "Available commands:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-install:
-	@echo "Installing deps..."
-	uv sync
+##@ Setup
 
-format:
-	@echo "Formatting code with ruff..."
-	uv run ruff format .
+.PHONY: install
+install: ## Install dependencies with uv
+	@$(SILENT_HELPER) && \
+		print_main_header "Installing Dependencies" && \
+		run_silent "Sync dependencies" "uv sync"
 
-check:
-	@echo "Linting code with ruff..."
-	uv run ruff check .
+##@ Code Quality
 
-fix:
-	@echo "Fixing lint errors with ruff..."
-	uv run ruff check --fix .
+.PHONY: fix
+fix: ## Fix lint errors with ruff
+	@$(SILENT_HELPER) && run_silent "Fix lint errors" "uv run ruff check --fix ."
 
-clean:
-	@echo "Cleaning up cache and generated files..."
-	@find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type f -name "*.pyc" -delete
-	@find . -type f -name "*.pyo" -delete
-	@uv run ruff clean
-	@echo "Clean complete!"
+.PHONY: format
+format: ## Format code with ruff
+	@$(SILENT_HELPER) && run_silent "Format code" "uv run ruff format ."
 
-codespace:
-	@echo "Setting up codespace..."
-	npm install -g @anthropic-ai/claude-code
-	python -m pip install --upgrade pip
-	pip install uv
-	uv sync
+.PHONY: lint
+lint: ## Lint code with ruff
+	@$(SILENT_HELPER) && run_silent "Lint check" "uv run ruff check ."
 
-	echo "alias cldd='claude --dangerously-skip-permissions'" >> ~/.bashrc
-	source .venv/bin/activate
-	source ~/.bashrc
+.PHONY: quality-check
+quality-check: ## Run quality checks (fix, format, lint)
+	@$(SILENT_HELPER) && print_main_header "Running Quality Checks"
+	@$(MAKE) fix
+	@$(MAKE) format
+	@$(MAKE) lint
+
+##@ Maintenance
+
+.PHONY: clean
+clean: ## Remove cache and generated files
+	@$(SILENT_HELPER) && \
+		print_main_header "Cleaning Up" && \
+		run_silent "Remove cache" "rm -rf .pytest_cache .mypy_cache .ruff_cache */__pycache__ */*/__pycache__ *.egg-info" && \
+		run_silent "Ruff clean" "uv run ruff clean"
+
+##@ Testing
+
+.PHONY: test
+test: ## Run tests with pytest
+	@$(SILENT_HELPER) && print_main_header "Running Tests" && \
+		run_silent "Running tests" "uv run pytest -x -v tests/"
+
+.PHONY: test-cov
+test-cov: ## Run tests with coverage
+	@$(SILENT_HELPER) && run_silent "Running tests with coverage" "uv run pytest tests/ -v --cov=π --cov-report=term-missing"
+
+##@ Development
+
+.PHONY: check
+check: quality-check test ## Run all checks
+
+.PHONY: codespace
+codespace: ## Set up codespace environment
+	@$(SILENT_HELPER) && \
+		print_main_header "Setting Up Codespace" && \
+		run_silent "Install claude-code" "npm install -g @anthropic-ai/claude-code" && \
+		run_silent "Upgrade pip" "python -m pip install --upgrade pip" && \
+		run_silent "Install uv" "pip install uv" && \
+		run_silent "Sync deps" "uv sync" && \
+		run_silent "Add alias" "echo \"alias cldd='claude --dangerously-skip-permissions'\" >> ~/.bashrc" && \
+		run_silent "Activate venv" "source .venv/bin/activate && source ~/.bashrc"
