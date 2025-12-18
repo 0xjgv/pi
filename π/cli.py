@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from claude_agent_sdk.types import (
 from dotenv import load_dotenv
 
 from π.agent import get_agent_options
+from π.utils import setup_logging
 
 load_dotenv()
 
@@ -21,6 +23,9 @@ THINKING_MODELS = {
     "med": "claude-sonnet-4-5-20250929",
     "high": "claude-opus-4-5-20251101",
 }
+
+# Module-level logger
+logger = logging.getLogger("π")
 
 
 def configure_dspy(model: str = THINKING_MODELS["low"]) -> None:
@@ -33,7 +38,7 @@ def configure_dspy(model: str = THINKING_MODELS["low"]) -> None:
         )
         dspy.configure(lm=lm)
     except Exception:
-        print("Warning: DSPy LM not configured.")
+        logger.warning("DSPy LM not configured")
 
 
 # --- The Tool Definition ---
@@ -44,14 +49,41 @@ COMMAND_MAP = {
     "implement_plan": "/3_implement_plan",
 }
 
-session_map_by_command = dict.fromkeys(COMMAND_MAP.keys(), "")
-session_map_by_path = dict.fromkeys(COMMAND_MAP.keys(), "")
+
+class SessionManager:
+    """Manages session state for Claude task execution."""
+
+    def __init__(self, commands: list[str]) -> None:
+        self._by_command: dict[str, str] = dict.fromkeys(commands, "")
+        self._by_path: dict[str, str] = dict.fromkeys(commands, "")
+
+    def get_session_id(self, command: str) -> str:
+        """Get the session ID for a command."""
+        return self._by_command.get(command, "")
+
+    def get_path(self, command: str) -> str:
+        """Get the document path for a command."""
+        return self._by_path.get(command, "")
+
+    def set_session(
+        self, command: str, session_id: str, path: str | None = None
+    ) -> None:
+        """Update session state for a command."""
+        if session_id:
+            self._by_command[command] = session_id
+        if path:
+            self._by_path[command] = path
+
+    def __repr__(self) -> str:
+        return f"SessionManager(commands={self._by_command}, paths={self._by_path})"
+
 
 agent_options = get_agent_options(cwd=Path.cwd())
 
 
 def execute_claude_task(
     *,
+    session_manager: SessionManager,
     path_to_document: Path | None = None,
     session_id: str | None = None,
     tool_command: str,
@@ -66,15 +98,15 @@ def execute_claude_task(
     command += f" {query}"
 
     # we resume the conversation
-    previous_session_id = session_map_by_command[tool_command]
+    previous_session_id = session_manager.get_session_id(tool_command)
     # session_id should be the same as the current tool_command session_id
-    print(f"<previous_session_id > session_id: {previous_session_id} > {session_id}")
+    logger.debug("Session transition: %s -> %s", previous_session_id, session_id)
     is_valid_session_id = previous_session_id == session_id
     if is_valid_session_id:
-        print(f"<with previous session_id>: {session_id}")
+        logger.debug("Resuming session: %s", session_id)
         command = query
 
-    print(f"<tool_call>: {command}")
+    logger.debug("Tool call: %s", command)
 
     async def _run_async(session_id: str | None = None) -> tuple[str, str | None]:
         last_text_content = ""
@@ -84,10 +116,10 @@ def execute_claude_task(
         async with ClaudeSDKClient(options=agent_options) as client:
             try:
                 if session_id:
-                    print(f"<with session_id>: {session_id}")
+                    logger.debug("Using session ID: %s", session_id)
                     await client.query(command, session_id=session_id)
                 else:
-                    print("<without session_id>")
+                    logger.debug("Starting new session")
                     await client.query(command)
 
                 last_class_name = None
@@ -96,7 +128,7 @@ def execute_claude_task(
                     last_message = message
 
                     if last_class_name != current_class_name:
-                        print(f"<agent>: {current_class_name}")
+                        logger.debug("Agent message type: %s", current_class_name)
                         last_class_name = current_class_name
 
                     if isinstance(message, ResultMessage):
@@ -115,7 +147,7 @@ def execute_claude_task(
             except Exception as e:
                 return f"Error executing agent: {e}", session_id
 
-        print(f"<last_message.__class__.__name__>: {last_message.__class__.__name__}")
+        logger.debug("Last message type: %s", last_message.__class__.__name__)
 
         return result_content if result_content else last_text_content, session_id
 
@@ -125,98 +157,15 @@ def execute_claude_task(
     )
 
     if session_id:
-        session_map_by_command[tool_command] = session_id
-    if path_to_document:
-        session_map_by_path[tool_command] = str(path_to_document)
-
-    print(f"<session_map_by_command>: {session_map_by_command}")
-    print(f"<session_map_by_path>: {session_map_by_path}")
-
-    return result, session_id or session_id or ""
-
-
-def research_codebase(
-    *,
-    resume_previous_session_id: str | None = None,
-    query: str,
-) -> str:
-    """
-    Research the codebase and return the results.
-
-    Args:
-        query: The query to research the codebase (goal, question, etc.).
-        session_id: Optional session ID to resume a previous research session.
-
-    Returns:
-        A summary of the research + the file path of the research document or open questions to the agent.
-    """
-    result, session_id = execute_claude_task(
-        session_id=resume_previous_session_id,
-        tool_command="research_codebase",
-        query=query,
-    )
-    return f"Result: {result}, Research Session ID: {session_id}"
-
-
-def create_plan(
-    *,
-    session_id: str | None = None,
-    research_document_path: Path,
-    query: str,
-) -> str:
-    """
-    Create a plan for the codebase.
-
-    Args:
-        query: The query to create a plan for the codebase (goal, question, etc.).
-        research_document_path: The path to the research document.
-        session_id: Optional session ID to resume a previous planning session.
-
-    Returns:
-        A summary of the plan + the file path of the plan document or open questions to the agent.
-    """
-    result, session_id = execute_claude_task(
-        path_to_document=research_document_path,
-        tool_command="create_plan",
-        session_id=session_id,
-        query=query,
-    )
-    return f"Result: {result}, Plan Session ID: {session_id}"
-
-
-def implement_plan(
-    *,
-    session_id: str | None = None,
-    plan_document_path: Path,
-    query: str,
-) -> str:
-    """
-    Implement the plan for the codebase.
-
-    Args:
-        query: The query to implement the plan for the codebase (goal, question, etc.).
-        plan_document_path: The path to the plan document. (Required)
-        session_id: Optional session ID to resume a previous implementation session.
-
-    Returns:
-        A summary of the implementation or open questions to the agent.
-    """
-    # Validate: ensure we're not receiving the research doc by mistake
-    research_doc_used = session_map_by_path.get("create_plan", "")
-    if research_doc_used and str(plan_document_path) == research_doc_used:
-        raise ValueError(
-            f"implement_plan requires the PLAN document, not the research document.\n"
-            f"Received: {plan_document_path}\n"
-            f"Hint: Use the plan document returned by create_plan."
+        session_manager.set_session(
+            tool_command,
+            session_id,
+            str(path_to_document) if path_to_document else None,
         )
 
-    result, session_id = execute_claude_task(
-        path_to_document=plan_document_path,
-        tool_command="implement_plan",
-        session_id=session_id,
-        query=query,
-    )
-    return f"Result: {result}, Implementation Session ID: {session_id}"
+    logger.debug("Session manager state: %s", session_manager)
+
+    return result, session_id or session_id or ""
 
 
 # --- ReAct Agent Module ---
@@ -241,13 +190,78 @@ class AgentTask(dspy.Signature):
     default="low",
     help="Thinking level: low=haiku (default), med=sonnet, high=opus",
 )
-def main(objective: str, thinking: str) -> None:
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    default=False,
+    help="Enable debug logging",
+)
+def main(objective: str, thinking: str, verbose: bool) -> None:
     """Run the ReAct agent with the given OBJECTIVE."""
+    setup_logging(verbose)
     model = THINKING_MODELS[thinking]
     configure_dspy(model)
 
     global agent_options
     agent_options = get_agent_options(cwd=Path.cwd(), model=model)
+
+    session_manager = SessionManager(list(COMMAND_MAP.keys()))
+
+    def research_codebase(
+        *,
+        session_id: str | None = None,
+        query: str,
+    ) -> str:
+        """Research the codebase and return the results."""
+        result, session_id = execute_claude_task(
+            session_manager=session_manager,
+            session_id=session_id,
+            tool_command="research_codebase",
+            query=query,
+        )
+        return f"Result: {result}, Research Session ID: {session_id}"
+
+    def create_plan(
+        *,
+        session_id: str | None = None,
+        research_document_path: Path,
+        query: str,
+    ) -> str:
+        """Create a plan for the codebase."""
+        result, session_id = execute_claude_task(
+            session_manager=session_manager,
+            path_to_document=research_document_path,
+            tool_command="create_plan",
+            session_id=session_id,
+            query=query,
+        )
+        return f"Result: {result}, Plan Session ID: {session_id}"
+
+    def implement_plan(
+        *,
+        session_id: str | None = None,
+        plan_document_path: Path,
+        query: str,
+    ) -> str:
+        """Implement the plan for the codebase."""
+        # Validate: ensure we're not receiving the research doc by mistake
+        research_doc_used = session_manager.get_path("create_plan")
+        if research_doc_used and str(plan_document_path) == research_doc_used:
+            raise ValueError(
+                f"implement_plan requires the PLAN document, not the research document.\n"
+                f"Received: {plan_document_path}\n"
+                f"Hint: Use the plan document returned by create_plan."
+            )
+
+        result, session_id = execute_claude_task(
+            session_manager=session_manager,
+            path_to_document=plan_document_path,
+            tool_command="implement_plan",
+            session_id=session_id,
+            query=query,
+        )
+        return f"Result: {result}, Implementation Session ID: {session_id}"
 
     click.echo(f"Starting ReAct Agent [{thinking}] with: '{objective}'")
 

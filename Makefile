@@ -44,6 +44,16 @@ clean: ## Remove cache and generated files
 		run_silent "Remove cache" "rm -rf .pytest_cache .mypy_cache .ruff_cache */__pycache__ */*/__pycache__ *.egg-info" && \
 		run_silent "Ruff clean" "uv run ruff clean"
 
+##@ Testing
+
+.PHONY: test
+test: ## Run tests with pytest
+	@$(SILENT_HELPER) && run_silent "Running tests" "uv run pytest tests/ -v"
+
+.PHONY: test-cov
+test-cov: ## Run tests with coverage
+	@$(SILENT_HELPER) && run_silent "Running tests with coverage" "uv run pytest tests/ -v --cov=π --cov-report=term-missing"
+
 ##@ Development
 
 .PHONY: check

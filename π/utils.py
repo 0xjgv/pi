@@ -76,11 +76,6 @@ def log_workflow_event(workflow_dir: Path, event: str, data: dict[str, Any]) -> 
         f.write(json.dumps(entry) + "\n")
 
 
-def escape_csv_text(text: str) -> str:
-    # Replace quotes with double quotes and wrap in quotes to escape commas
-    return f'"{text.strip().replace('"', '""')}"'
-
-
 def prevent_sleep(func):
     """Prevents the system from sleeping while the function is running"""
 
