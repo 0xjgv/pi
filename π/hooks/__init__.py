@@ -28,7 +28,7 @@ from π.hooks import checkers as _checkers  # noqa: F401
 from π.hooks.logging import log_event
 from π.hooks.registry import get_checker
 from π.hooks.safety import check_bash_command
-from π.hooks.utils import compact_path
+from π.hooks.utils import compact_path, console
 
 # Re-export public API
 __all__ = ["check_file_format", "check_bash_command"]
@@ -39,12 +39,12 @@ async def check_file_format(
 ) -> HookJSONOutput:
     """PostToolUse hook: Run language-specific linters after file modifications.
 
-    Trigger: Fires after Edit, Write, or MultiEdit tools
+    Trigger: Fires after Edit or Write
     """
     tool_name = input_data.get("tool_name")
 
-    # Only check files modified by Edit, Write, or MultiEdit tools
-    if tool_name not in ("Edit", "Write", "MultiEdit"):
+    # Only check files modified by Edit or Write tools
+    if tool_name not in ("Edit", "Write"):
         return {}
 
     tool_input = input_data.get("tool_input", {})
@@ -59,7 +59,7 @@ async def check_file_format(
     suffix = path.suffix.lower()
     checker_info = get_checker(suffix)
     if checker_info:
-        print(f"🔍 Checking {compact_path(path)} (triggered by {tool_name})")
+        console.print(f"🔍 Checking {compact_path(path)} (triggered by {tool_name})")
 
         # Run the checker
         exit_code = checker_info.func(path, tool_name)

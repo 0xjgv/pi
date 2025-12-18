@@ -3,7 +3,12 @@
 import subprocess
 from pathlib import Path
 
+from rich.console import Console
+
 from π.hooks.logging import log_event
+
+# Shared console for hook output
+console = Console()
 
 _home_dir = Path.home()
 

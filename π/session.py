@@ -1,8 +1,11 @@
 """Workflow session state management."""
 
+import logging
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent.parent
 
@@ -31,7 +34,7 @@ def build_command_map(
             if command_enum_member := getattr(Command, command_name, None):
                 command_map[command_enum_member] = f"/{f.stem}"
         except (IndexError, AttributeError):
-            continue  # Or log a warning
+            logger.warning("Skipping malformed command file: %s", f.name)
 
     return command_map
 
