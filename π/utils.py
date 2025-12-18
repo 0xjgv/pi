@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from datetime import datetime
 from functools import wraps
@@ -13,6 +14,24 @@ from claude_agent_sdk.types import (
     TextBlock,
     UserMessage,
 )
+
+
+def setup_logging(verbose: bool = False) -> logging.Logger:
+    """Configure logging for the π CLI.
+
+    Args:
+        verbose: If True, set DEBUG level; otherwise INFO level
+
+    Returns:
+        Configured logger instance
+    """
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    return logging.getLogger("π")
 
 
 def generate_workflow_id() -> str:

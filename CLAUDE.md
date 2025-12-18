@@ -14,12 +14,8 @@ CLI tool orchestrating Claude agents for automated research → plan → impleme
 ```shell
 π/                    # Main package
 ├── agent.py          # Agent configuration factory
-├── agent_comm.py     # Workflow orchestration, supervisor/SWE loops
-├── agents.py         # Agent definitions
+├── cli.py            # CLI entry point + DSPy ReAct orchestration
 ├── hooks.py          # PreToolUse/PostToolUse validation hooks
-├── idea_workflow.py  # Idea-based workflow implementation
-├── schemas.py        # Pydantic models
-├── types.py          # Type definitions
 └── utils.py          # Helpers, logging
 .claude/
 ├── agents/           # Sub-agent definitions (codebase-analyzer, etc.)
@@ -35,9 +31,9 @@ thoughts/shared/      # Generated research and plan artifacts
 
 ## Key Patterns
 
-- **Dual structured output**: SDK native first, JSON text parsing fallback
+- **DSPy ReAct orchestration**: Automatic tool selection via DSPy's ReAct agent
 - **Hook validation**: PostToolUse runs language-specific linters, PreToolUse blocks dangerous bash
-- **Workflow stages**: research → plan → implement with supervisor question loops
+- **Workflow stages**: research → plan → implement with slash command delegation
 - **Documentation-first**: Research agents describe "what is", never critique
 
 ## References
