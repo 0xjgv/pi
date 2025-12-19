@@ -13,7 +13,8 @@ from claude_agent_sdk.types import (
 )
 from rich.console import Console
 
-from π.agent import AgentExecutionError, get_agent_options
+from π.agent import get_agent_options
+from π.errors import AgentExecutionError
 from π.session import COMMAND_MAP, Command, WorkflowSession
 
 # Context variables for per-invocation isolation (thread-safe, async-safe)
