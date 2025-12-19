@@ -70,25 +70,16 @@ class WorkflowSession:
         """Set the document path for a command."""
         self.input_doc_paths[command] = path
 
-    def should_resume(self, command: Command, session_id: str | None) -> bool:
-        """Check if we should resume a previous session.
-
-        Returns True if the provided session_id matches the stored one.
-        """
-        if not session_id:
-            return False
-
-        should_resume = self.session_ids.get(command, "") == session_id
-        logger.debug(
-            "Should resume session",
-            extra={
-                "stored_session_id": self.session_ids.get(command, ""),
-                "should_resume": should_resume,
-                "session_id": session_id,
-                "command": command,
-            },
-        )
-        return should_resume
+    def get_resumable_session_id(self, command: Command) -> str | None:
+        """Get session ID to resume for this command, if one exists."""
+        session_id = self.session_ids.get(command, "")
+        if session_id:
+            logger.debug(
+                "Found resumable session",
+                extra={"command": command, "session_id": session_id},
+            )
+            return session_id
+        return None
 
     def validate_plan_doc(self, plan_path: str) -> None:
         """Validate that plan_path is not the research document.

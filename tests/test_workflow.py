@@ -242,30 +242,43 @@ class TestWorkflowFunctions:
         assert "[ERROR]" in result
         assert "Agent failed" in result
 
-    def test_session_id_resumption_logic(self, mock_execute_task: MagicMock):
-        """Should resume session when IDs match."""
+    def test_auto_resumes_existing_session(self, mock_execute_task: MagicMock):
+        """Should automatically resume when session exists."""
         from π.session import WorkflowSession
         from π.workflow import _session_var
 
         session = WorkflowSession()
-        session.set_session_id(Command.RESEARCH_CODEBASE, "existing-session")
+        session.set_session_id(Command.RESEARCH_CODEBASE, "auto-resume-session")
         _session_var.set(session)
 
-        research_codebase(query="continue", session_id="existing-session")
+        research_codebase(query="continue work")
 
         call_kwargs = mock_execute_task.call_args.kwargs
-        assert call_kwargs["session_id"] == "existing-session"
+        assert call_kwargs["session_id"] == "auto-resume-session"
 
-    def test_session_id_ignored_when_mismatch(self, mock_execute_task: MagicMock):
-        """Should not resume when session IDs don't match."""
+    def test_starts_new_session_when_none_exists(self, mock_execute_task: MagicMock):
+        """Should start new session when no prior session exists."""
         from π.session import WorkflowSession
         from π.workflow import _session_var
 
-        session = WorkflowSession()
-        session.set_session_id(Command.RESEARCH_CODEBASE, "old-session")
+        session = WorkflowSession()  # Fresh session, no IDs
         _session_var.set(session)
 
-        research_codebase(query="new", session_id="different-session")
+        research_codebase(query="new research")
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["session_id"] is None
+
+    def test_stores_session_for_future_resumption(self, mock_execute_task: MagicMock):
+        """Should store session ID for future auto-resumption."""
+        from π.session import WorkflowSession
+        from π.workflow import _session_var
+
+        mock_execute_task.return_value = ("Result", "new-session-xyz")
+        session = WorkflowSession()
+        _session_var.set(session)
+
+        research_codebase(query="first call")
+
+        # Session should now be stored
+        assert session.get_session_id(Command.RESEARCH_CODEBASE) == "new-session-xyz"

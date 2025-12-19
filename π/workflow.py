@@ -208,7 +208,6 @@ def _execute_claude_task(
 
 def clarify_goal(
     *,
-    session_id: str | None = None,
     query: str,
 ) -> str:
     """
@@ -216,20 +215,13 @@ def clarify_goal(
 
     Args:
         query: The query to clarify the goal (goal, question, etc.).
-        session_id: Optional session ID to resume a previous research session.
 
     Returns:
         A summary of the clarification + the file path of the clarification document or open questions to the agent.
     """
-    logger.debug(
-        "Clarify goal tool command: %s",
-        {
-            "session_id": session_id,
-            "query": query,
-        },
-    )
-    if not _get_session().should_resume(Command.CLARIFY, session_id):
-        session_id = None
+    # Auto-resume: check for existing session
+    session_id = _get_session().get_resumable_session_id(Command.CLARIFY)
+    logger.debug(f"Clarify goal tool command: {query}")
 
     try:
         with timed_phase("Clarifying goal"):
@@ -251,7 +243,6 @@ def clarify_goal(
 
 def research_codebase(
     *,
-    session_id: str | None = None,
     query: str,
 ) -> str:
     """
@@ -259,20 +250,13 @@ def research_codebase(
 
     Args:
         query: The query to research the codebase (goal, question, etc.).
-        session_id: Optional session ID to resume a previous research session.
 
     Returns:
         A summary of the research + the file path of the research document or open questions to the agent.
     """
-    logger.debug(
-        "Research codebase tool command: %s",
-        {
-            "session_id": session_id,
-            "query": query,
-        },
-    )
-    if not _get_session().should_resume(Command.RESEARCH_CODEBASE, session_id):
-        session_id = None
+    # Auto-resume: check for existing session
+    session_id = _get_session().get_resumable_session_id(Command.RESEARCH_CODEBASE)
+    logger.debug(f"Research codebase tool command: {query}")
 
     try:
         with timed_phase("Researching codebase"):
@@ -294,7 +278,6 @@ def research_codebase(
 
 def create_plan(
     *,
-    session_id: str | None = None,
     research_document_path: Path,
     query: str,
 ) -> str:
@@ -304,21 +287,19 @@ def create_plan(
     Args:
         query: The query to create a plan for the codebase (goal, question, etc.).
         research_document_path: Required path to the research document.
-        session_id: Optional session ID to resume a previous planning session.
 
     Returns:
         A summary of the plan + the file path of the plan document or open questions to the agent.
     """
+    # Auto-resume: check for existing session
+    session_id = _get_session().get_resumable_session_id(Command.CREATE_PLAN)
     logger.debug(
         "Plan tool command: %s",
         {
             "research_document_path": research_document_path,
-            "session_id": session_id,
             "query": query,
         },
     )
-    if not _get_session().should_resume(Command.CREATE_PLAN, session_id):
-        session_id = None
 
     try:
         with timed_phase("Creating plan"):
@@ -342,7 +323,6 @@ def create_plan(
 
 def implement_plan(
     *,
-    session_id: str | None = None,
     plan_document_path: Path,
     query: str,
 ) -> str:
@@ -352,25 +332,22 @@ def implement_plan(
     Args:
         query: The query to implement the plan for the codebase (goal, question, etc.).
         plan_document_path: Required path to the plan document.
-        session_id: Optional session ID to resume a previous implementation session.
 
     Returns:
         A summary of the implementation or open questions to the agent.
     """
+    # Auto-resume: check for existing session
+    session_id = _get_session().get_resumable_session_id(Command.IMPLEMENT_PLAN)
     logger.debug(
         "Implement plan tool command: %s",
         {
             "plan_document_path": plan_document_path,
-            "session_id": session_id,
             "query": query,
         },
     )
+
     # Validate: ensure we're not receiving the research doc by mistake
     _get_session().validate_plan_doc(str(plan_document_path))
-
-    # If resuming a session, validate that the session ID matches the stored one.
-    if not _get_session().should_resume(Command.IMPLEMENT_PLAN, session_id):
-        session_id = None
 
     try:
         with timed_phase("Implementing plan"):

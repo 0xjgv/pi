@@ -101,26 +101,27 @@ class TestWorkflowSession:
 
         assert session.get_doc_path(Command.CREATE_PLAN) == "/path/to/research.md"
 
-    def test_should_resume_returns_false_when_no_session_id(self):
-        """Should return False when no session_id provided."""
+    def test_get_resumable_session_id_returns_none_when_empty(self):
+        """Should return None when no session ID is stored."""
         session = WorkflowSession()
 
-        assert session.should_resume(Command.CLARIFY, None) is False
-        assert session.should_resume(Command.CLARIFY, "") is False
+        assert session.get_resumable_session_id(Command.CLARIFY) is None
 
-    def test_should_resume_returns_false_when_ids_dont_match(self):
-        """Should return False when session IDs don't match."""
+    def test_get_resumable_session_id_returns_stored_id(self):
+        """Should return stored session ID when one exists."""
+        session = WorkflowSession()
+        session.set_session_id(Command.RESEARCH_CODEBASE, "session-abc")
+
+        result = session.get_resumable_session_id(Command.RESEARCH_CODEBASE)
+
+        assert result == "session-abc"
+
+    def test_get_resumable_session_id_returns_none_for_other_commands(self):
+        """Should return None for commands without stored sessions."""
         session = WorkflowSession()
         session.set_session_id(Command.CLARIFY, "session-123")
 
-        assert session.should_resume(Command.CLARIFY, "different-id") is False
-
-    def test_should_resume_returns_true_when_ids_match(self):
-        """Should return True when session IDs match."""
-        session = WorkflowSession()
-        session.set_session_id(Command.CLARIFY, "session-123")
-
-        assert session.should_resume(Command.CLARIFY, "session-123") is True
+        assert session.get_resumable_session_id(Command.RESEARCH_CODEBASE) is None
 
     def test_validate_plan_doc_raises_when_same_as_research(self):
         """Should raise ValueError if plan path equals research doc."""
