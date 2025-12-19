@@ -73,7 +73,7 @@ class TestMain:
         with patch("π.cli.configure_dspy"):
             result = runner.invoke(main, ["test"])
 
-        assert "[low]" in result.output
+        assert "[claude/low]" in result.output
 
     @pytest.mark.parametrize("level", ["low", "med", "high"])
     def test_accepts_thinking_levels(
@@ -87,7 +87,7 @@ class TestMain:
         result = runner.invoke(main, ["test", "--thinking", level])
 
         assert result.exit_code == 0
-        assert f"[{level}]" in result.output
+        assert f"[claude/{level}]" in result.output
 
     def test_short_flag_for_thinking(
         self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
@@ -96,7 +96,7 @@ class TestMain:
         result = runner.invoke(main, ["test", "-t", "high"])
 
         assert result.exit_code == 0
-        assert "[high]" in result.output
+        assert "[claude/high]" in result.output
 
     def test_rejects_invalid_thinking_level(self, runner: CliRunner):
         """Should reject invalid thinking levels."""
@@ -130,3 +130,42 @@ class TestMain:
         assert mock_workflow["plan"] in tools
         assert mock_workflow["implement"] in tools
         assert mock_workflow["clarify"] in tools
+
+    def test_default_provider_is_claude(
+        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+    ):
+        """Should default to claude provider."""
+        with patch("π.cli.configure_dspy"):
+            result = runner.invoke(main, ["test"])
+
+        assert "[claude" in result.output.lower()
+
+    @pytest.mark.parametrize("provider", ["claude", "gemini"])
+    def test_accepts_valid_providers(
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,
+        mock_workflow: MagicMock,
+        provider: str,
+    ):
+        """Should accept valid provider values."""
+        result = runner.invoke(main, ["test", "-p", provider])
+
+        assert result.exit_code == 0
+        assert provider in result.output.lower()
+
+    def test_rejects_invalid_provider(self, runner: CliRunner):
+        """Should reject invalid provider values."""
+        result = runner.invoke(main, ["test", "-p", "openai"])
+
+        assert result.exit_code != 0
+
+    def test_provider_and_thinking_combine(
+        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+    ):
+        """Should combine provider and thinking options."""
+        result = runner.invoke(main, ["test", "-p", "gemini", "-t", "high"])
+
+        assert result.exit_code == 0
+        assert "gemini" in result.output.lower()
+        assert "high" in result.output.lower()

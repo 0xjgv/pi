@@ -2,7 +2,7 @@ import click
 import dspy
 from dotenv import load_dotenv
 
-from π.config import THINKING_MODELS, configure_dspy
+from π.config import Provider, configure_dspy, get_model
 from π.utils import setup_logging
 from π.workflow import (
     clarify_goal,
@@ -28,16 +28,28 @@ class AgentTask(dspy.Signature):
 @click.option(
     "--thinking",
     "-t",
-    type=click.Choice(["low", "med", "high"]),
-    default="low",
     help="Thinking level: low=haiku (default), med=sonnet, high=opus",
+    type=click.Choice(["low", "med", "high"], case_sensitive=False),
+    default="low",
 )
-def main(objective: str, thinking: str) -> None:
+@click.option(
+    "--provider",
+    "-p",
+    type=click.Choice([p.value for p in Provider], case_sensitive=False),
+    help="AI provider: claude (default), gemini, openai",
+    default=Provider.Claude.value,
+)
+def main(objective: str, thinking: str, provider: str) -> None:
     """Run the ReAct agent with the given OBJECTIVE."""
-    configure_dspy(model=THINKING_MODELS[thinking], logger=logger)
+    provider_enum = Provider(provider.lower())
+    model = get_model(provider=provider_enum, tier=thinking.lower())
+
+    configure_dspy(model=model, logger=logger)
     log_path = setup_logging()
 
-    click.echo(f"Starting ReAct Agent [{thinking}] with: '{objective}'")
+    click.echo(f"Starting ReAct Agent [{provider}/{thinking}] with: '{objective}'")
+    click.echo(f"Using model: {model}")
+    click.echo(f"Logging to: {log_path}")
 
     agent = dspy.ReAct(
         tools=[
