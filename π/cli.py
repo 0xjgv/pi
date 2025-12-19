@@ -7,7 +7,6 @@ from π.utils import prevent_sleep, setup_logging
 from π.workflow import (
     clarify_goal,
     create_plan,
-    implement_plan,
     logger,
     research_codebase,
 )
@@ -23,7 +22,7 @@ class AgentTask(dspy.Signature):
     output: str = dspy.OutputField()
 
 
-@click.command()
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("objective")
 @click.option(
     "--thinking",
@@ -55,7 +54,7 @@ def main(objective: str, thinking: str, provider: str) -> None:
     agent = dspy.ReAct(
         tools=[
             research_codebase,
-            implement_plan,
+            # implement_plan, # disabled for now
             clarify_goal,
             create_plan,
         ],
