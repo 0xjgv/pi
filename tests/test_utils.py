@@ -17,11 +17,11 @@ class TestSetupLogging:
         setup_logging(verbose=True)
         assert logging.getLogger("π").level == logging.DEBUG
 
-    def test_default_sets_info_level(self):
-        """Default mode should set INFO level."""
+    def test_default_sets_warning_level(self):
+        """Default mode should set WARNING level (suppress logs for clean console)."""
         for handler in logging.root.handlers[:]:
             logging.root.removeHandler(handler)
         logging.root.setLevel(logging.WARNING)
 
         setup_logging(verbose=False)
-        assert logging.getLogger("π").level == logging.INFO
+        assert logging.getLogger("π").level == logging.WARNING

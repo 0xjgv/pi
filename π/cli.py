@@ -3,7 +3,7 @@ import dspy
 from dotenv import load_dotenv
 
 from π.config import THINKING_MODELS, configure_dspy
-from π.utils import setup_logging
+from π.utils import get_log_path, setup_logging
 from π.workflow import (
     clarify_goal,
     create_plan,
@@ -58,6 +58,9 @@ def main(objective: str, thinking: str, verbose: bool) -> None:
     result = agent(objective=objective)
 
     click.echo(f"\nFinal Answer: {result.output}")
+
+    if log_path := get_log_path():
+        click.echo(f"\nDebug log: {log_path}")
 
 
 if __name__ == "__main__":

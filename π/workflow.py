@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
@@ -23,6 +26,23 @@ _session_var: ContextVar[WorkflowSession] = ContextVar("session")
 # Logger and Console for the workflow
 logger = logging.getLogger(__name__)
 console = Console()
+
+
+@contextmanager
+def timed_phase(phase_name: str) -> Generator[None, None, None]:
+    """Context manager that shows spinner during execution and timing after."""
+    start = time.monotonic()
+    with console.status(f"[bold cyan]{phase_name}..."):
+        yield
+    elapsed = time.monotonic() - start
+
+    if elapsed < 60:
+        time_str = f"{elapsed:.0f}s"
+    else:
+        mins, secs = divmod(int(elapsed), 60)
+        time_str = f"{mins}m {secs}s"
+
+    console.print(f"[green]✓[/green] {phase_name} ({time_str})")
 
 
 def _get_event_loop() -> asyncio.AbstractEventLoop:
@@ -154,7 +174,7 @@ def clarify_goal(
         session_id = None
 
     try:
-        with console.status("[bold cyan]Clarifying goal..."):
+        with timed_phase("Clarifying goal"):
             result, last_session_id = _execute_claude_task(
                 tool_command=Command.CLARIFY,
                 session_id=session_id,
@@ -189,7 +209,7 @@ def research_codebase(
         session_id = None
 
     try:
-        with console.status("[bold cyan]Researching codebase..."):
+        with timed_phase("Researching codebase"):
             result, last_session_id = _execute_claude_task(
                 tool_command=Command.RESEARCH_CODEBASE,
                 session_id=session_id,
@@ -226,7 +246,7 @@ def create_plan(
         session_id = None
 
     try:
-        with console.status("[bold cyan]Creating plan..."):
+        with timed_phase("Creating plan"):
             result, last_session_id = _execute_claude_task(
                 path_to_document=research_document_path,
                 tool_command=Command.CREATE_PLAN,
@@ -269,7 +289,7 @@ def implement_plan(
         session_id = None
 
     try:
-        with console.status("[bold cyan]Implementing plan..."):
+        with timed_phase("Implementing plan"):
             result, last_session_id = _execute_claude_task(
                 path_to_document=plan_document_path,
                 tool_command=Command.IMPLEMENT_PLAN,
