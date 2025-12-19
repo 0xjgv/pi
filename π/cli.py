@@ -3,7 +3,7 @@ import dspy
 from dotenv import load_dotenv
 
 from π.config import THINKING_MODELS, configure_dspy
-from π.utils import get_log_path, setup_logging
+from π.utils import setup_logging
 from π.workflow import (
     clarify_goal,
     create_plan,
@@ -32,17 +32,10 @@ class AgentTask(dspy.Signature):
     default="low",
     help="Thinking level: low=haiku (default), med=sonnet, high=opus",
 )
-@click.option(
-    "--verbose",
-    "-v",
-    is_flag=True,
-    default=False,
-    help="Enable debug logging",
-)
-def main(objective: str, thinking: str, verbose: bool) -> None:
+def main(objective: str, thinking: str) -> None:
     """Run the ReAct agent with the given OBJECTIVE."""
     configure_dspy(model=THINKING_MODELS[thinking], logger=logger)
-    setup_logging(verbose)
+    log_path = setup_logging()
 
     click.echo(f"Starting ReAct Agent [{thinking}] with: '{objective}'")
 
@@ -59,7 +52,7 @@ def main(objective: str, thinking: str, verbose: bool) -> None:
 
     click.echo(f"\nFinal Answer: {result.output}")
 
-    if log_path := get_log_path():
+    if log_path:
         click.echo(f"\nDebug log: {log_path}")
 
 

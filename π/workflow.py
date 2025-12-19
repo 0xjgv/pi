@@ -172,6 +172,11 @@ def _execute_claude_task(
                             new_session_id = message.session_id
                             result_content = message.result
                         _log_result_metrics(message)
+                        # Log ResultMessage to console before returning
+                        console.print(
+                            f"\n[bold cyan]Result:[/bold cyan] {result_content}\n"
+                        )
+                        break
                     elif isinstance(message, AssistantMessage):
                         block_text = ""
                         for block in message.content:

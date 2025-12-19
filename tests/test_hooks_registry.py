@@ -15,6 +15,7 @@ class TestLanguageChecker:
 
     def test_stores_func_and_metadata(self):
         """Should store function, scope, and project markers."""
+
         def dummy_checker(path: Path, tool_name: str | None = None) -> int:
             return 0
 
@@ -34,6 +35,7 @@ class TestLanguageCheckerDecorator:
 
     def test_registers_single_extension(self, clean_registry: None):
         """Should register function for single extension."""
+
         @language_checker([".test"])
         def test_checker(path: Path, tool_name: str | None = None) -> int:
             return 0
@@ -43,6 +45,7 @@ class TestLanguageCheckerDecorator:
 
     def test_registers_multiple_extensions(self, clean_registry: None):
         """Should register function for multiple extensions."""
+
         @language_checker([".a", ".b", ".c"])
         def multi_checker(path: Path, tool_name: str | None = None) -> int:
             return 0
@@ -54,6 +57,7 @@ class TestLanguageCheckerDecorator:
 
     def test_normalizes_extensions_to_lowercase(self, clean_registry: None):
         """Should normalize extensions to lowercase."""
+
         @language_checker([".PY", ".Py", ".pY"])
         def py_checker(path: Path, tool_name: str | None = None) -> int:
             return 0
@@ -64,6 +68,7 @@ class TestLanguageCheckerDecorator:
 
     def test_default_scope_is_file(self, clean_registry: None):
         """Default scope should be 'file'."""
+
         @language_checker([".xyz"])
         def file_checker(path: Path, tool_name: str | None = None) -> int:
             return 0
@@ -72,6 +77,7 @@ class TestLanguageCheckerDecorator:
 
     def test_custom_scope_and_markers(self, clean_registry: None):
         """Should store custom scope and project markers."""
+
         @language_checker([".rs"], scope="project", project_markers=["Cargo.toml"])
         def rust_checker(path: Path, tool_name: str | None = None) -> int:
             return 0
@@ -81,6 +87,7 @@ class TestLanguageCheckerDecorator:
 
     def test_returns_original_function(self, clean_registry: None):
         """Decorator should return the original function unchanged."""
+
         @language_checker([".fn"])
         def original_func(path: Path, tool_name: str | None = None) -> int:
             return 42
@@ -94,6 +101,7 @@ class TestGetChecker:
 
     def test_returns_checker_for_registered_extension(self, clean_registry: None):
         """Should return checker for registered extension."""
+
         @language_checker([".reg"])
         def registered_checker(path: Path, tool_name: str | None = None) -> int:
             return 0
@@ -111,6 +119,7 @@ class TestGetChecker:
 
     def test_normalizes_query_to_lowercase(self, clean_registry: None):
         """Should find checker regardless of query case."""
+
         @language_checker([".mix"])
         def mix_checker(path: Path, tool_name: str | None = None) -> int:
             return 0

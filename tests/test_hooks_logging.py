@@ -49,13 +49,7 @@ class TestTruncateValue:
 
     def test_handles_deeply_nested_structures(self):
         """Should handle arbitrarily nested structures."""
-        data = {
-            "level1": {
-                "level2": {
-                    "value": "a" * 300
-                }
-            }
-        }
+        data = {"level1": {"level2": {"value": "a" * 300}}}
         result = _truncate_value(data, max_len=50)
 
         assert len(result["level1"]["level2"]["value"]) == 53

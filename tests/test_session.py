@@ -155,7 +155,7 @@ class TestWorkflowSession:
         session.set_session_id(Command.CLARIFY, "test-id")
         session.set_doc_path(Command.CREATE_PLAN, "/test/path.md")
 
-        with caplog.at_level(logging.DEBUG):
+        with caplog.at_level(logging.DEBUG, logger="π.session"):
             session.log_session_state()
 
         assert "WorkflowSession state" in caplog.text

@@ -11,8 +11,10 @@ class TestCheckPython:
 
     def test_runs_ruff_via_uvx(self, python_file: Path):
         """Should run ruff via uvx when available."""
-        with patch("shutil.which", return_value="/usr/bin/uvx"), \
-             patch("π.hooks.checkers.run_check_command") as mock_run:
+        with (
+            patch("shutil.which", return_value="/usr/bin/uvx"),
+            patch("π.hooks.checkers.run_check_command") as mock_run,
+        ):
             mock_run.return_value = (0, "All checks passed", "")
             result = check_python(python_file, tool_name="Edit")
 
@@ -24,11 +26,14 @@ class TestCheckPython:
 
     def test_falls_back_to_ruff_directly(self, python_file: Path):
         """Should use ruff directly when uvx not available."""
+
         def which_side_effect(cmd: str) -> str | None:
             return "/usr/bin/ruff" if cmd == "ruff" else None
 
-        with patch("shutil.which", side_effect=which_side_effect), \
-             patch("π.hooks.checkers.run_check_command") as mock_run:
+        with (
+            patch("shutil.which", side_effect=which_side_effect),
+            patch("π.hooks.checkers.run_check_command") as mock_run,
+        ):
             mock_run.return_value = (0, "Success", "")
             result = check_python(python_file, tool_name="Write")
 
@@ -45,8 +50,10 @@ class TestCheckPython:
 
     def test_returns_zero_on_success(self, python_file: Path):
         """Should return 0 when ruff passes."""
-        with patch("shutil.which", return_value="/usr/bin/uvx"), \
-             patch("π.hooks.checkers.run_check_command") as mock_run:
+        with (
+            patch("shutil.which", return_value="/usr/bin/uvx"),
+            patch("π.hooks.checkers.run_check_command") as mock_run,
+        ):
             mock_run.return_value = (0, "All checks passed", "")
             result = check_python(python_file)
 
@@ -54,8 +61,10 @@ class TestCheckPython:
 
     def test_returns_two_on_failure(self, python_file: Path):
         """Should return 2 when ruff fails."""
-        with patch("shutil.which", return_value="/usr/bin/uvx"), \
-             patch("π.hooks.checkers.run_check_command") as mock_run:
+        with (
+            patch("shutil.which", return_value="/usr/bin/uvx"),
+            patch("π.hooks.checkers.run_check_command") as mock_run,
+        ):
             mock_run.return_value = (1, "", "Error: lint failed")
             result = check_python(python_file)
 
@@ -170,8 +179,10 @@ class TestCheckGo:
         go_file = tmp_path / "main.go"
         go_file.write_text("package main")
 
-        with patch("shutil.which", return_value="/usr/bin/golangci-lint"), \
-             patch("π.hooks.checkers.run_check_command") as mock_run:
+        with (
+            patch("shutil.which", return_value="/usr/bin/golangci-lint"),
+            patch("π.hooks.checkers.run_check_command") as mock_run,
+        ):
             mock_run.return_value = (0, "All checks passed", "")
             result = check_go(go_file)
 
@@ -185,8 +196,10 @@ class TestCheckGo:
         go_file = tmp_path / "main.go"
         go_file.write_text("package main")
 
-        with patch("shutil.which", return_value=None), \
-             patch("π.hooks.checkers.run_check_command") as mock_run:
+        with (
+            patch("shutil.which", return_value=None),
+            patch("π.hooks.checkers.run_check_command") as mock_run,
+        ):
             mock_run.return_value = (0, "No issues found", "")
             result = check_go(go_file)
 
@@ -201,8 +214,10 @@ class TestCheckGo:
         go_file = tmp_path / "main.go"
         go_file.write_text("package main")
 
-        with patch("shutil.which", return_value=None), \
-             patch("π.hooks.checkers.run_check_command") as mock_run:
+        with (
+            patch("shutil.which", return_value=None),
+            patch("π.hooks.checkers.run_check_command") as mock_run,
+        ):
             mock_run.return_value = (1, "", "Vet errors found")
             result = check_go(go_file)
 

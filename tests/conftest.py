@@ -13,6 +13,7 @@ import pytest
 # Path Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def project_root(tmp_path: Path) -> Path:
     """Create a mock project structure with pyproject.toml."""
@@ -42,6 +43,7 @@ def typescript_project(tmp_path: Path) -> Path:
 # ============================================================================
 # Claude Agent SDK Mocks
 # ============================================================================
+
 
 @pytest.fixture
 def mock_claude_client() -> Generator[MagicMock, None, None]:
@@ -87,6 +89,7 @@ def mock_hook_input() -> dict[str, Any]:
 # DSPy Mocks
 # ============================================================================
 
+
 @pytest.fixture
 def mock_dspy() -> Generator[MagicMock, None, None]:
     """Mock dspy module for CLI tests."""
@@ -107,6 +110,7 @@ def mock_dspy_configure() -> Generator[MagicMock, None, None]:
 # ============================================================================
 # Subprocess Mocks
 # ============================================================================
+
 
 @pytest.fixture
 def mock_subprocess_success() -> Generator[MagicMock, None, None]:
@@ -136,6 +140,7 @@ def mock_subprocess_failure() -> Generator[MagicMock, None, None]:
 # Environment Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear environment variables that affect tests."""
@@ -154,6 +159,7 @@ def configured_env(monkeypatch: pytest.MonkeyPatch) -> None:
 # Logging Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def log_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect hook logs to temporary directory."""
@@ -166,6 +172,7 @@ def log_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 # ============================================================================
 # Registry Isolation
 # ============================================================================
+
 
 @pytest.fixture
 def clean_registry() -> Generator[None, None, None]:
@@ -182,6 +189,7 @@ def clean_registry() -> Generator[None, None, None]:
 # ============================================================================
 # Async Event Loop Fixture
 # ============================================================================
+
 
 @pytest.fixture
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
