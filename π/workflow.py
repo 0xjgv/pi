@@ -19,6 +19,7 @@ from rich.console import Console
 from π.agent import get_agent_options
 from π.errors import AgentExecutionError
 from π.session import COMMAND_MAP, Command, WorkflowSession
+from π.utils import speak
 
 # Context variables for per-invocation isolation (thread-safe, async-safe)
 _agent_options_var: ContextVar[ClaudeAgentOptions] = ContextVar("agent_options")
@@ -235,6 +236,7 @@ def clarify_goal(
             logger.debug("Clarification last session ID: %s", last_session_id)
 
         _get_session().set_session_id(Command.CLARIFY, last_session_id)
+        speak("clarify complete")
 
         return f"Result: {result}, Clarification Session ID: {last_session_id}"
     except AgentExecutionError as e:
@@ -270,6 +272,7 @@ def research_codebase(
             logger.debug("Research last session ID: %s", last_session_id)
 
         _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
+        speak("research complete")
 
         return f"Result: {result}, Research Session ID: {last_session_id}"
     except AgentExecutionError as e:
@@ -315,6 +318,7 @@ def create_plan(
 
         _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
         _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
+        speak("plan complete")
 
         return f"Result: {result}, Plan Session ID: {last_session_id}"
     except AgentExecutionError as e:
@@ -363,6 +367,7 @@ def implement_plan(
 
         _get_session().set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
         _get_session().set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
+        speak("implementation complete")
 
         return f"Result: {result}, Implementation Session ID: {last_session_id}"
     except AgentExecutionError as e:

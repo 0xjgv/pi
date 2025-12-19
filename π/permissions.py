@@ -11,6 +11,8 @@ from claude_agent_sdk.types import (
 )
 from rich.console import Console
 
+from π.utils import speak
+
 logger = logging.getLogger(__name__)
 console = Console()
 
@@ -40,6 +42,7 @@ async def can_use_tool(
     if tool_name == "AskUserQuestion":
         question = tool_input.get("question", "Agent needs input:")
         console.print(f"\n[bold yellow]🤔 Agent asks:[/bold yellow] {question}")
+        speak("questions")
 
         # Get user input (run sync input in thread to avoid blocking event loop)
         user_response = await asyncio.to_thread(
