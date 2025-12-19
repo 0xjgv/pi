@@ -1,6 +1,7 @@
 """Shared pytest fixtures for π test suite."""
 
 import asyncio
+import logging
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -197,3 +198,22 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
+
+
+# ============================================================================
+# Logging Cleanup (autouse)
+# ============================================================================
+
+
+@pytest.fixture(autouse=True)
+def cleanup_logging_handlers():
+    """Clean up logging handlers after each test to prevent test pollution.
+    
+    This prevents tests that call setup_logging() from polluting other tests
+    with FileHandlers that write to real log files.
+    """
+    yield
+    # Cleanup after test
+    for logger_name in ("π", "π.session", "π.workflow", "π.hooks"):
+        logger = logging.getLogger(logger_name)
+        logger.handlers.clear()
