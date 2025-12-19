@@ -183,6 +183,7 @@ def _execute_claude_task(
                             if isinstance(block, TextBlock):
                                 block_text += block.text
                             elif isinstance(block, ToolUseBlock):
+                                # can_use_tool callback handles AskUserQuestion tool use.
                                 _log_tool_call(block)
                             elif isinstance(block, ToolResultBlock):
                                 _log_tool_result(block)

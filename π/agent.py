@@ -6,6 +6,7 @@ from π.hooks import (
     check_bash_command,
     check_file_format,
 )
+from π.permissions import can_use_tool
 
 # https://code.claude.com/docs/en/settings#tools-available-to-claude
 AVAILABLE_TOOLS = [
@@ -47,5 +48,6 @@ def get_agent_options(
         allowed_tools=AVAILABLE_TOOLS,
         system_prompt=system_prompt,
         setting_sources=["project"],
+        can_use_tool=can_use_tool,
         cwd=cwd,
     )

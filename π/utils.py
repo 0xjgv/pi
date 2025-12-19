@@ -2,7 +2,10 @@
 
 import logging
 from datetime import datetime
+from functools import wraps
+from os import getpid, system
 from pathlib import Path
+from typing import Any, Callable
 
 
 def setup_logging() -> Path:
@@ -15,10 +18,10 @@ def setup_logging() -> Path:
     logger.handlers.clear()
 
     # Always create log files
-    log_dir = Path.home() / ".π" / "logs"
+    log_dir = Path(__file__).parent.parent / ".logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
     _log_path = log_dir / f"{timestamp}.log"
 
     file_handler = logging.FileHandler(_log_path)
@@ -39,3 +42,20 @@ def setup_logging() -> Path:
         logging.getLogger(name).setLevel(logging.WARNING)
 
     return _log_path
+
+
+def prevent_sleep(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Prevents the system from sleeping while the function is running"""
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        pid = getpid()
+        system(f"caffeinate -disuw {pid}&")
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def speak(text: str) -> None:
+    """Speaks the given text using the system's default speech synthesizer"""
+    system(f"say '{text}'")

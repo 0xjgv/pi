@@ -3,7 +3,7 @@ import dspy
 from dotenv import load_dotenv
 
 from π.config import Provider, configure_dspy, get_model
-from π.utils import setup_logging
+from π.utils import prevent_sleep, setup_logging
 from π.workflow import (
     clarify_goal,
     create_plan,
@@ -39,6 +39,7 @@ class AgentTask(dspy.Signature):
     help="AI provider: claude (default), gemini, openai",
     default=Provider.Claude.value,
 )
+@prevent_sleep
 def main(objective: str, thinking: str, provider: str) -> None:
     """Run the ReAct agent with the given OBJECTIVE."""
     provider_enum = Provider(provider.lower())
