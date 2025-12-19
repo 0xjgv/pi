@@ -77,18 +77,17 @@ codespace: ## Set up codespace environment
 build-nuitka: install ## Build optimized binary with Nuitka
 	@$(SILENT_HELPER) && \
 		print_main_header "Building Optimized Binary (Nuitka)" && \
-		run_silent "Build executable" "uv run python -m nuitka \
+		uv run python -m nuitka \
 			--onefile \
-			--follow-imports \
-			--include-package=dspy \
-			--include-package=claude_agent_sdk \
-			--include-package=rich \
-			--include-package=httpx \
-			--include-package=httpcore \
+			--assume-yes-for-downloads \
+			--enable-plugin=dill-compat \
+			--include-package=claude-agent-sdk \
+			--include-package=python-dotenv \
 			--include-package=click \
-			--include-package=dotenv \
-			--output-filename=pi \
-			π/cli.py"
+			--include-package=rich \
+			--include-package=dspy \
+			--output-filename=π \
+			π/cli.py
 
 .PHONY: clean-build
 clean-build: ## Remove build artifacts
