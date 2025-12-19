@@ -223,7 +223,10 @@ def clarify_goal(
     """
     # Auto-resume: check for existing session
     session_id = _get_session().get_resumable_session_id(Command.CLARIFY)
-    logger.debug(f"Clarify goal tool command: {query}")
+    logger.debug(
+        f"Clarify goal tool command: {query}",
+        {"session_id": session_id, "query": query},
+    )
 
     try:
         with timed_phase("Clarifying goal"):
@@ -232,8 +235,10 @@ def clarify_goal(
                 session_id=session_id,
                 query=query,
             )
-            logger.debug("Clarification result: %s", result)
-            logger.debug("Clarification last session ID: %s", last_session_id)
+            logger.debug(
+                "Clarification result: %s",
+                {"last_session_id": last_session_id, "result": result},
+            )
 
         _get_session().set_session_id(Command.CLARIFY, last_session_id)
         speak("clarify complete")
@@ -259,7 +264,10 @@ def research_codebase(
     """
     # Auto-resume: check for existing session
     session_id = _get_session().get_resumable_session_id(Command.RESEARCH_CODEBASE)
-    logger.debug(f"Research codebase tool command: {query}")
+    logger.debug(
+        f"Research codebase tool command: {query}",
+        {"session_id": session_id, "query": query},
+    )
 
     try:
         with timed_phase("Researching codebase"):
@@ -268,8 +276,10 @@ def research_codebase(
                 session_id=session_id,
                 query=query,
             )
-            logger.debug("Research result: %s", result)
-            logger.debug("Research last session ID: %s", last_session_id)
+            logger.debug(
+                "Research result: %s",
+                {"result": result, "last_session_id": last_session_id},
+            )
 
         _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
         speak("research complete")
@@ -301,6 +311,7 @@ def create_plan(
         "Plan tool command: %s",
         {
             "research_document_path": research_document_path,
+            "session_id": session_id,
             "query": query,
         },
     )
@@ -313,8 +324,10 @@ def create_plan(
                 session_id=session_id,
                 query=query,
             )
-            logger.debug("Plan result: %s", result)
-            logger.debug("Plan last session ID: %s", last_session_id)
+            logger.debug(
+                "Plan result: %s",
+                {"result": result, "last_session_id": last_session_id},
+            )
 
         _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
         _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
@@ -347,6 +360,7 @@ def implement_plan(
         "Implement plan tool command: %s",
         {
             "plan_document_path": plan_document_path,
+            "session_id": session_id,
             "query": query,
         },
     )
@@ -362,8 +376,10 @@ def implement_plan(
                 session_id=session_id,
                 query=query,
             )
-            logger.debug("Implementation result: %s", result)
-            logger.debug("Implementation last session ID: %s", last_session_id)
+            logger.debug(
+                "Implementation result: %s",
+                {"result": result, "last_session_id": last_session_id},
+            )
 
         _get_session().set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
         _get_session().set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
