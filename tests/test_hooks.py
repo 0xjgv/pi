@@ -95,34 +95,44 @@ class TestCheckBashCommand:
     @pytest.mark.asyncio
     async def test_blocks_dangerous_command(self):
         """Should block rm -rf /."""
-        input_data = {
-            "tool_name": "Bash",
-            "tool_input": {"command": "rm -rf /"},
-        }
-        result = await check_bash_command(
-            cast(HookInput, input_data), None, HookContext(signal=None)
+        input_data = cast(
+            HookInput,
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
         )
+        context = HookContext(signal=None)
+        result = await check_bash_command(input_data, None, context)
 
-        assert result["hookSpecificOutput"] is not None
+        assert result.get("hookSpecificOutput") is not None
 
     @pytest.mark.asyncio
     async def test_allows_safe_command(self):
         """Should allow ls command."""
-        input_data = {
-            "tool_name": "Bash",
-            "tool_input": {"command": "ls -la"},
-        }
-        result = await check_bash_command(input_data, None, {})
+        input_data = cast(
+            HookInput,
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "ls -la"},
+            },
+        )
+        context = HookContext(signal=None)
+        result = await check_bash_command(input_data, None, context)
 
         assert result == {}
 
     @pytest.mark.asyncio
     async def test_ignores_non_bash_tools(self):
         """Should ignore non-Bash tools."""
-        input_data = {
-            "tool_name": "Read",
-            "tool_input": {"file_path": "/etc/passwd"},
-        }
-        result = await check_bash_command(input_data, None, {})
+        input_data = cast(
+            HookInput,
+            {
+                "tool_name": "Read",
+                "tool_input": {"file_path": "/etc/passwd"},
+            },
+        )
+        context = HookContext(signal=None)
+        result = await check_bash_command(input_data, None, context)
 
         assert result == {}

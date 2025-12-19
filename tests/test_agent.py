@@ -51,6 +51,7 @@ class TestGetAgentOptions:
         """Should configure PreToolUse and PostToolUse hooks."""
         result = get_agent_options()
 
+        assert result.hooks is not None
         assert "PreToolUse" in result.hooks
         assert "PostToolUse" in result.hooks
 
@@ -58,6 +59,7 @@ class TestGetAgentOptions:
         """PreToolUse hook should match Bash tool."""
         result = get_agent_options()
 
+        assert result.hooks is not None
         pre_hooks = result.hooks["PreToolUse"]
         assert len(pre_hooks) == 1
         assert pre_hooks[0].matcher == "Bash"
@@ -66,10 +68,13 @@ class TestGetAgentOptions:
         """PostToolUse hook should match Write and Edit tools."""
         result = get_agent_options()
 
+        assert result.hooks is not None
         post_hooks = result.hooks["PostToolUse"]
         assert len(post_hooks) == 1
-        assert "Write" in post_hooks[0].matcher
-        assert "Edit" in post_hooks[0].matcher
+        matcher = post_hooks[0].matcher
+        assert matcher is not None
+        assert "Write" in matcher
+        assert "Edit" in matcher
 
     def test_uses_provided_cwd(self, tmp_path: Path):
         """Should use the provided cwd."""
@@ -93,4 +98,5 @@ class TestGetAgentOptions:
         """Should include 'project' in setting sources."""
         result = get_agent_options()
 
+        assert result.setting_sources is not None
         assert "project" in result.setting_sources

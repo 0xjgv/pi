@@ -1,11 +1,13 @@
 """Integration tests for π CLI workflows."""
 
+from collections.abc import Generator
 from pathlib import Path
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
-from claude_agent_sdk.types import ResultMessage
+from claude_agent_sdk.types import HookContext, HookInput, ResultMessage
 
 from π.cli import main
 
@@ -19,7 +21,7 @@ class TestFullWorkflowIntegration:
         return CliRunner()
 
     @pytest.fixture
-    def mock_claude_responses(self) -> MagicMock:
+    def mock_claude_responses(self) -> Generator[AsyncMock, None, None]:
         """Set up complete mock for Claude SDK."""
         with patch("π.workflow.ClaudeSDKClient") as mock_client_class:
             # Create async mock client
@@ -46,7 +48,7 @@ class TestFullWorkflowIntegration:
             yield mock_client
 
     @pytest.fixture
-    def mock_dspy_agent(self) -> MagicMock:
+    def mock_dspy_agent(self) -> Generator[MagicMock, None, None]:
         """Mock DSPy ReAct agent."""
         with patch("π.cli.dspy") as mock_dspy:
             mock_agent = MagicMock()
@@ -57,8 +59,8 @@ class TestFullWorkflowIntegration:
     def test_cli_initializes_and_runs(
         self,
         runner: CliRunner,
-        mock_dspy_agent: MagicMock,
-        mock_claude_responses: MagicMock,
+        mock_dspy_agent: MagicMock,  # noqa: ARG002
+        mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """CLI should initialize DSPy and run agent successfully."""
         with patch("π.cli.configure_dspy"):
@@ -71,8 +73,8 @@ class TestFullWorkflowIntegration:
     def test_agent_options_flow_to_workflow(
         self,
         runner: CliRunner,
-        mock_dspy_agent: MagicMock,
-        mock_claude_responses: MagicMock,
+        mock_dspy_agent: MagicMock,  # noqa: ARG002
+        mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """Agent options should be correctly configured."""
         with (
@@ -136,27 +138,36 @@ class TestHookIntegration:
         """Bash command hook should block dangerous commands."""
         from π.hooks import check_bash_command
 
-        dangerous_input = {
-            "tool_name": "Bash",
-            "tool_input": {"command": "rm -rf /"},
-        }
+        dangerous_input = cast(
+            HookInput,
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "rm -rf /"},
+            },
+        )
+        context = HookContext(signal=None)
 
-        result = await check_bash_command(dangerous_input, None, {})
+        result = await check_bash_command(dangerous_input, None, context)
 
-        assert "hookSpecificOutput" in result
-        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+        hook_output = result.get("hookSpecificOutput")
+        assert hook_output is not None
+        assert hook_output.get("permissionDecision") == "deny"
 
     @pytest.mark.asyncio
     async def test_bash_command_hook_allows_safe(self):
         """Bash command hook should allow safe commands."""
         from π.hooks import check_bash_command
 
-        safe_input = {
-            "tool_name": "Bash",
-            "tool_input": {"command": "ls -la"},
-        }
+        safe_input = cast(
+            HookInput,
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "ls -la"},
+            },
+        )
+        context = HookContext(signal=None)
 
-        result = await check_bash_command(safe_input, None, {})
+        result = await check_bash_command(safe_input, None, context)
 
         assert result == {}
 

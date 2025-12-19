@@ -1,5 +1,7 @@
 """Tests for π.cli module."""
 
+from collections.abc import Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -35,7 +37,7 @@ class TestMain:
         return CliRunner()
 
     @pytest.fixture
-    def mock_workflow(self) -> MagicMock:
+    def mock_workflow(self) -> Generator[dict[str, Any], None, None]:
         """Mock all workflow functions."""
         with (
             patch("π.cli.research_codebase") as mock_research,
@@ -58,7 +60,10 @@ class TestMain:
         assert "Missing argument" in result.output or "OBJECTIVE" in result.output
 
     def test_accepts_objective_argument(
-        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,  # noqa: ARG002
+        mock_workflow: dict[str, Any],  # noqa: ARG002
     ):
         """Should accept objective as positional argument."""
         result = runner.invoke(main, ["test objective"])
@@ -67,7 +72,10 @@ class TestMain:
         assert "test objective" in result.output
 
     def test_default_thinking_level_is_low(
-        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,  # noqa: ARG002
+        mock_workflow: dict[str, Any],  # noqa: ARG002
     ):
         """Should default to 'low' thinking level."""
         with patch("π.cli.configure_dspy"):
@@ -79,8 +87,8 @@ class TestMain:
     def test_accepts_thinking_levels(
         self,
         runner: CliRunner,
-        mock_dspy: MagicMock,
-        mock_workflow: MagicMock,
+        mock_dspy: MagicMock,  # noqa: ARG002
+        mock_workflow: dict[str, Any],  # noqa: ARG002
         level: str,
     ):
         """Should accept all valid thinking levels."""
@@ -90,7 +98,10 @@ class TestMain:
         assert f"[claude/{level}]" in result.output
 
     def test_short_flag_for_thinking(
-        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,  # noqa: ARG002
+        mock_workflow: dict[str, Any],  # noqa: ARG002
     ):
         """Should accept -t as short flag for --thinking."""
         result = runner.invoke(main, ["test", "-t", "high"])
@@ -106,7 +117,10 @@ class TestMain:
         assert "Invalid value" in result.output or "invalid" in result.output.lower()
 
     def test_displays_final_answer(
-        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,
+        mock_workflow: dict[str, Any],  # noqa: ARG002
     ):
         """Should display the agent's final answer."""
         mock_dspy.ReAct.return_value.return_value = MagicMock(output="Agent result")
@@ -116,7 +130,10 @@ class TestMain:
         assert "Final Answer:" in result.output
 
     def test_creates_react_agent_with_tools(
-        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,
+        mock_workflow: dict[str, Any],
     ):
         """Should create ReAct agent with workflow tools."""
         runner.invoke(main, ["test"])
@@ -132,7 +149,10 @@ class TestMain:
         assert mock_workflow["clarify"] in tools
 
     def test_default_provider_is_claude(
-        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,  # noqa: ARG002
+        mock_workflow: dict[str, Any],  # noqa: ARG002
     ):
         """Should default to claude provider."""
         with patch("π.cli.configure_dspy"):
@@ -144,8 +164,8 @@ class TestMain:
     def test_accepts_valid_providers(
         self,
         runner: CliRunner,
-        mock_dspy: MagicMock,
-        mock_workflow: MagicMock,
+        mock_dspy: MagicMock,  # noqa: ARG002
+        mock_workflow: dict[str, Any],  # noqa: ARG002
         provider: str,
     ):
         """Should accept valid provider values."""
@@ -161,7 +181,10 @@ class TestMain:
         assert result.exit_code != 0
 
     def test_provider_and_thinking_combine(
-        self, runner: CliRunner, mock_dspy: MagicMock, mock_workflow: MagicMock
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,  # noqa: ARG002
+        mock_workflow: dict[str, Any],  # noqa: ARG002
     ):
         """Should combine provider and thinking options."""
         result = runner.invoke(main, ["test", "-p", "gemini", "-t", "high"])

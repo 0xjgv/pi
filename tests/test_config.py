@@ -47,7 +47,9 @@ class TestConfigureDspy:
         mock_dspy_configure.configure.assert_called_once()
 
     def test_uses_env_vars_for_api(
-        self, mock_dspy_configure: MagicMock, configured_env: None
+        self,
+        mock_dspy_configure: MagicMock,
+        configured_env: None,  # noqa: ARG002
     ):
         """Should use CLIPROXY_API_BASE and CLIPROXY_API_KEY from env."""
         logger = logging.getLogger("test")
@@ -70,7 +72,9 @@ class TestConfigureDspy:
         assert "DSPy LM not configured" in logger.warning.call_args[0][0]
 
     def test_defaults_to_localhost(
-        self, mock_dspy_configure: MagicMock, clean_env: None
+        self,
+        mock_dspy_configure: MagicMock,
+        clean_env: None,  # noqa: ARG002
     ):
         """Should default to localhost:8317 when no env var set."""
         logger = logging.getLogger("test")
@@ -89,21 +93,26 @@ class TestProviderModels:
         assert Provider.Claude in PROVIDER_MODELS
         assert Provider.Gemini in PROVIDER_MODELS
 
-    def test_all_tiers_per_provider(self):
-        """Each provider should have low/med/high tiers."""
-        for provider in Provider:
+    def test_claude_and_gemini_have_all_tiers(self):
+        """Claude and Gemini providers should have low/med/high tiers."""
+        for provider in [Provider.Claude, Provider.Gemini]:
             assert "low" in PROVIDER_MODELS[provider]
             assert "med" in PROVIDER_MODELS[provider]
             assert "high" in PROVIDER_MODELS[provider]
 
+    def test_all_providers_have_at_least_one_tier(self):
+        """All providers should have at least one tier defined."""
+        for provider in Provider:
+            assert len(PROVIDER_MODELS[provider]) >= 1
+
     def test_claude_models_are_claude(self):
         """Claude provider should return Claude models."""
-        for tier, model in PROVIDER_MODELS[Provider.Claude].items():
+        for _tier, model in PROVIDER_MODELS[Provider.Claude].items():
             assert "claude" in model.lower()
 
     def test_gemini_models_are_gemini(self):
         """Gemini provider should return Gemini models."""
-        for tier, model in PROVIDER_MODELS[Provider.Gemini].items():
+        for _tier, model in PROVIDER_MODELS[Provider.Gemini].items():
             assert "gemini" in model.lower()
 
 

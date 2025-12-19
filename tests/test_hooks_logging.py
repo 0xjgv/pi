@@ -15,6 +15,7 @@ class TestTruncateValue:
         long_string = "a" * 300
         result = _truncate_value(long_string, max_len=100)
 
+        assert isinstance(result, str)
         assert len(result) == 103  # 100 + "..."
         assert result.endswith("...")
 
@@ -30,6 +31,7 @@ class TestTruncateValue:
         data = {"key": "a" * 300}
         result = _truncate_value(data, max_len=50)
 
+        assert isinstance(result, dict)
         assert len(result["key"]) == 53  # 50 + "..."
 
     def test_truncates_nested_list_values(self):
@@ -37,6 +39,7 @@ class TestTruncateValue:
         data = ["a" * 300, "b" * 300]
         result = _truncate_value(data, max_len=50)
 
+        assert isinstance(result, list)
         assert len(result[0]) == 53
         assert len(result[1]) == 53
 
@@ -52,7 +55,12 @@ class TestTruncateValue:
         data = {"level1": {"level2": {"value": "a" * 300}}}
         result = _truncate_value(data, max_len=50)
 
-        assert len(result["level1"]["level2"]["value"]) == 53
+        assert isinstance(result, dict)
+        level1 = result["level1"]
+        assert isinstance(level1, dict)
+        level2 = level1["level2"]
+        assert isinstance(level2, dict)
+        assert len(level2["value"]) == 53
 
 
 class TestLogEvent:

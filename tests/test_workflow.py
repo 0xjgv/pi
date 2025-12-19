@@ -1,6 +1,7 @@
 """Tests for π.workflow module."""
 
 import asyncio
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -176,13 +177,16 @@ class TestWorkflowFunctions:
     """Tests for workflow functions (research, plan, implement, clarify)."""
 
     @pytest.fixture
-    def mock_execute_task(self) -> MagicMock:
+    def mock_execute_task(self) -> Generator[MagicMock, None, None]:
         """Mock _execute_claude_task."""
         with patch("π.workflow._execute_claude_task") as mock:
             mock.return_value = ("Result text", "session-123")
             yield mock
 
-    def test_research_codebase_returns_result(self, mock_execute_task: MagicMock):
+    def test_research_codebase_returns_result(
+        self,
+        mock_execute_task: MagicMock,  # noqa: ARG002
+    ):
         """Should return result with session ID."""
         result = research_codebase(query="test query")
 
@@ -197,7 +201,10 @@ class TestWorkflowFunctions:
         assert call_kwargs["query"] == "find all tests"
         assert call_kwargs["tool_command"] == Command.RESEARCH_CODEBASE
 
-    def test_clarify_goal_returns_result(self, mock_execute_task: MagicMock):
+    def test_clarify_goal_returns_result(
+        self,
+        mock_execute_task: MagicMock,  # noqa: ARG002
+    ):
         """Should return clarification result."""
         result = clarify_goal(query="what do you mean?")
 
