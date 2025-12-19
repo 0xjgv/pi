@@ -1,17 +1,18 @@
-import logging
-
 import click
 import dspy
 from dotenv import load_dotenv
-from rich.console import Console
 
 from π.config import THINKING_MODELS, configure_dspy
 from π.utils import setup_logging
-from π.workflow import build_workflow
+from π.workflow import (
+    clarify_goal,
+    create_plan,
+    implement_plan,
+    logger,
+    research_codebase,
+)
 
-# Logger, Console, and environment variables for the π CLI
-logger = logging.getLogger("π")
-console = Console()
+# Load environment variables
 load_dotenv()
 
 
@@ -41,16 +42,16 @@ class AgentTask(dspy.Signature):
 def main(objective: str, thinking: str, verbose: bool) -> None:
     """Run the ReAct agent with the given OBJECTIVE."""
     configure_dspy(model=THINKING_MODELS[thinking], logger=logger)
-    workflow = build_workflow(logger=logger, console=console)
     setup_logging(verbose)
 
     click.echo(f"Starting ReAct Agent [{thinking}] with: '{objective}'")
 
     agent = dspy.ReAct(
         tools=[
-            workflow.research_codebase,
-            workflow.implement_plan,
-            workflow.create_plan,
+            research_codebase,
+            implement_plan,
+            clarify_goal,
+            create_plan,
         ],
         signature=AgentTask,
     )

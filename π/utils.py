@@ -17,8 +17,8 @@ def setup_logging(verbose: bool = False) -> logging.Logger:
     # Configure root logger with basic format (keeps third-party libs at WARNING)
     logging.basicConfig(
         format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
         level=logging.WARNING,
+        datefmt="%H:%M:%S",
         force=True,
     )
 

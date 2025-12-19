@@ -13,6 +13,7 @@ ROOT_DIR = Path(__file__).parent.parent
 class Command(StrEnum):
     """Workflow stage commands."""
 
+    CLARIFY = "clarify"
     RESEARCH_CODEBASE = "research_codebase"
     CREATE_PLAN = "create_plan"
     IMPLEMENT_PLAN = "implement_plan"
@@ -91,3 +92,19 @@ class WorkflowSession:
                 f"Received: {plan_path}\n"
                 f"Hint: Use the plan document returned by create_plan."
             )
+
+    def log_session_state(self) -> None:
+        """Log all session IDs and input document paths for debugging."""
+        logger.debug("WorkflowSession state:")
+        logger.debug("Session IDs:")
+        for command, session_id in self.session_ids.items():
+            if session_id:
+                logger.debug("  %s: %s", command.value, session_id)
+            else:
+                logger.debug("  %s: (not set)", command.value)
+        logger.debug("Input document paths:")
+        for command, doc_path in self.input_doc_paths.items():
+            if doc_path:
+                logger.debug("  %s: %s", command.value, doc_path)
+            else:
+                logger.debug("  %s: (not set)", command.value)
