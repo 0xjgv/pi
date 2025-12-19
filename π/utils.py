@@ -21,8 +21,6 @@ def setup_logging(verbose: bool = False) -> logging.Logger:
     Returns:
         Configured logger instance
     """
-    global _log_path
-
     logger = logging.getLogger("π")
     logger.handlers.clear()
 

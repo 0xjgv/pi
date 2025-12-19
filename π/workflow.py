@@ -11,6 +11,8 @@ from claude_agent_sdk.types import (
     AssistantMessage,
     ResultMessage,
     TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
 )
 from rich.console import Console
 
@@ -43,6 +45,47 @@ def timed_phase(phase_name: str) -> Generator[None, None, None]:
         time_str = f"{mins}m {secs}s"
 
     console.print(f"[green]✓[/green] {phase_name} ({time_str})")
+
+
+def _log_tool_call(block: ToolUseBlock) -> None:
+    """Log tool invocation details."""
+    input_preview = (
+        str(block.input)[:100] + "..."
+        if len(str(block.input)) > 100
+        else str(block.input)
+    )
+    logger.debug("Tool: %s | Input: %s", block.name, input_preview)
+
+
+def _log_tool_result(block: ToolResultBlock) -> None:
+    """Log tool result details."""
+    status = "error" if block.is_error else "ok"
+    content_preview = (
+        str(block.content)[:80] + "..."
+        if len(str(block.content)) > 80
+        else str(block.content)
+    )
+    logger.debug("Tool result [%s]: %s", status, content_preview)
+
+
+def _log_result_metrics(message: ResultMessage) -> None:
+    """Log session metrics from ResultMessage."""
+    logger.debug(
+        "Session metrics: turns=%d, duration=%dms, api_duration=%dms",
+        message.num_turns,
+        message.duration_ms,
+        message.duration_api_ms,
+    )
+    if message.total_cost_usd is not None:
+        logger.debug("Cost: $%.4f", message.total_cost_usd)
+    if message.usage:
+        logger.debug(
+            "Tokens: in=%d, out=%d, cache_read=%d, cache_create=%d",
+            message.usage.get("input_tokens", 0),
+            message.usage.get("output_tokens", 0),
+            message.usage.get("cache_read_input_tokens", 0),
+            message.usage.get("cache_creation_input_tokens", 0),
+        )
 
 
 def _get_event_loop() -> asyncio.AbstractEventLoop:
@@ -125,16 +168,19 @@ def _execute_claude_task(
                         last_class_name = current_class_name
 
                     if isinstance(message, ResultMessage):
-                        # ResultMessage usually contains the structured output of a tool (e.g., complete_stage)
-                        # or the final cost/summary.
                         if message.result:
                             new_session_id = message.session_id
                             result_content = message.result
+                        _log_result_metrics(message)
                     elif isinstance(message, AssistantMessage):
                         block_text = ""
                         for block in message.content:
                             if isinstance(block, TextBlock):
                                 block_text += block.text
+                            elif isinstance(block, ToolUseBlock):
+                                _log_tool_call(block)
+                            elif isinstance(block, ToolResultBlock):
+                                _log_tool_result(block)
                         if block_text:
                             last_text_content = block_text
             except Exception as e:
