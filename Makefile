@@ -70,3 +70,28 @@ codespace: ## Set up codespace environment
 		run_silent "Sync deps" "uv sync" && \
 		run_silent "Add alias" "echo \"alias cldd='claude --dangerously-skip-permissions'\" >> ~/.bashrc" && \
 		run_silent "Activate venv" "source .venv/bin/activate && source ~/.bashrc"
+
+##@ Distribution
+
+.PHONY: build-nuitka
+build-nuitka: install ## Build optimized binary with Nuitka
+	@$(SILENT_HELPER) && \
+		print_main_header "Building Optimized Binary (Nuitka)" && \
+		run_silent "Build executable" "uv run python -m nuitka \
+			--onefile \
+			--follow-imports \
+			--include-package=dspy \
+			--include-package=claude_agent_sdk \
+			--include-package=rich \
+			--include-package=httpx \
+			--include-package=httpcore \
+			--include-package=click \
+			--include-package=dotenv \
+			--output-filename=pi \
+			π/cli.py"
+
+.PHONY: clean-build
+clean-build: ## Remove build artifacts
+	@$(SILENT_HELPER) && \
+		print_main_header "Cleaning Build Artifacts" && \
+		run_silent "Remove build files" "rm -rf pi.dist pi.build pi.onefile-build pi"
