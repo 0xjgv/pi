@@ -1,9 +1,24 @@
 [project]
-name = "pi"
+name = "pi-rpi"
 version = "0.1.0"
-description = "π CLI"
+description = "Research, plan, & implement workflows for Claude agents"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.13"
+authors = [
+    { name = "0xjgv" }
+]
+keywords = [
+    "claude", "agent", "cli", "dspy", "automation", "workflow"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Code Generators",
+]
 dependencies = [
     "claude-agent-sdk>=0.1.18",
     "click>=8.3.1",
@@ -11,6 +26,11 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/0xjgv/pi"
+Repository = "https://github.com/0xjgv/pi"
+Issues = "https://github.com/0xjgv/pi/issues"
 
 [dependency-groups]
 dev = [

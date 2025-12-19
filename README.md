@@ -45,20 +45,34 @@ The DSPy ReAct agent automatically selects between `research_codebase`, `create_
 ## Install
 
 ```bash
-git clone https://github.com/0xjgv/pi
-mv pi π
+git clone https://github.com/0xjgv/pi π
 cd π
-uv sync                        # or: make install
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+make link                      # Installs deps + links π to ~/.local/bin
+```
+
+Ensure `~/.local/bin` is in your PATH:
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 <details>
-<summary>Manual setup without uv</summary>
+<summary>Alternative: Activate venv manually</summary>
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e .
+git clone https://github.com/0xjgv/pi π
+cd π
+uv sync                        # or: make install
+source .venv/bin/activate      # Now π is available
+```
+
+</details>
+
+<details>
+<summary>Uninstall</summary>
+
+```bash
+make unlink                    # Removes symlink from ~/.local/bin
 ```
 
 </details>

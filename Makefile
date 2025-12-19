@@ -94,3 +94,16 @@ clean-build: ## Remove build artifacts
 	@$(SILENT_HELPER) && \
 		print_main_header "Cleaning Build Artifacts" && \
 		run_silent "Remove build files" "rm -rf pi.dist pi.build pi.onefile-build pi"
+
+.PHONY: link
+link: install ## Install and add π to PATH via symlink
+	@mkdir -p ~/.local/bin
+	@ln -sf "$(CURDIR)/.venv/bin/π" ~/.local/bin/π
+	@echo "✓ Linked π to ~/.local/bin/π"
+	@echo "  Ensure ~/.local/bin is in your PATH:"
+	@echo "  export PATH=\"\$$HOME/.local/bin:\$$PATH\""
+
+.PHONY: unlink
+unlink: ## Remove π symlink
+	@rm -f ~/.local/bin/π
+	@echo "✓ Removed π from ~/.local/bin"
