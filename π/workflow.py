@@ -221,6 +221,13 @@ def clarify_goal(
     Returns:
         A summary of the clarification + the file path of the clarification document or open questions to the agent.
     """
+    logger.debug(
+        "Clarify goal tool command: %s",
+        {
+            "session_id": session_id,
+            "query": query,
+        },
+    )
     if not _get_session().should_resume(Command.CLARIFY, session_id):
         session_id = None
 
@@ -232,6 +239,7 @@ def clarify_goal(
                 query=query,
             )
             logger.debug("Clarification result: %s", result)
+            logger.debug("Clarification last session ID: %s", last_session_id)
 
         _get_session().set_session_id(Command.CLARIFY, last_session_id)
 
@@ -256,6 +264,13 @@ def research_codebase(
     Returns:
         A summary of the research + the file path of the research document or open questions to the agent.
     """
+    logger.debug(
+        "Research codebase tool command: %s",
+        {
+            "session_id": session_id,
+            "query": query,
+        },
+    )
     if not _get_session().should_resume(Command.RESEARCH_CODEBASE, session_id):
         session_id = None
 
@@ -267,6 +282,7 @@ def research_codebase(
                 query=query,
             )
             logger.debug("Research result: %s", result)
+            logger.debug("Research last session ID: %s", last_session_id)
 
         _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
 
@@ -293,6 +309,14 @@ def create_plan(
     Returns:
         A summary of the plan + the file path of the plan document or open questions to the agent.
     """
+    logger.debug(
+        "Plan tool command: %s",
+        {
+            "research_document_path": research_document_path,
+            "session_id": session_id,
+            "query": query,
+        },
+    )
     if not _get_session().should_resume(Command.CREATE_PLAN, session_id):
         session_id = None
 
@@ -305,6 +329,7 @@ def create_plan(
                 query=query,
             )
             logger.debug("Plan result: %s", result)
+            logger.debug("Plan last session ID: %s", last_session_id)
 
         _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
         _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
@@ -332,6 +357,14 @@ def implement_plan(
     Returns:
         A summary of the implementation or open questions to the agent.
     """
+    logger.debug(
+        "Implement plan tool command: %s",
+        {
+            "plan_document_path": plan_document_path,
+            "session_id": session_id,
+            "query": query,
+        },
+    )
     # Validate: ensure we're not receiving the research doc by mistake
     _get_session().validate_plan_doc(str(plan_document_path))
 
@@ -348,6 +381,7 @@ def implement_plan(
                 query=query,
             )
             logger.debug("Implementation result: %s", result)
+            logger.debug("Implementation last session ID: %s", last_session_id)
 
         _get_session().set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
         _get_session().set_session_id(Command.IMPLEMENT_PLAN, last_session_id)

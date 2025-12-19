@@ -77,7 +77,18 @@ class WorkflowSession:
         """
         if not session_id:
             return False
-        return self.session_ids.get(command, "") == session_id
+
+        should_resume = self.session_ids.get(command, "") == session_id
+        logger.debug(
+            "Should resume session",
+            extra={
+                "stored_session_id": self.session_ids.get(command, ""),
+                "should_resume": should_resume,
+                "session_id": session_id,
+                "command": command,
+            },
+        )
+        return should_resume
 
     def validate_plan_doc(self, plan_path: str) -> None:
         """Validate that plan_path is not the research document.
