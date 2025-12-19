@@ -3,7 +3,7 @@ import dspy
 from dotenv import load_dotenv
 
 from π.config import Provider, configure_dspy, get_model
-from π.utils import prevent_sleep, setup_logging
+from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import (
     clarify_goal,
     create_plan,
@@ -63,6 +63,7 @@ def main(objective: str, thinking: str, provider: str) -> None:
     result = agent(objective=objective)
 
     click.echo(f"\nFinal Answer: {result.output}")
+    speak("π complete")
 
     if log_path:
         click.echo(f"\nDebug log: {log_path}")
