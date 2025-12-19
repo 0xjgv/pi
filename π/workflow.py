@@ -160,6 +160,7 @@ def clarify_goal(
                 session_id=session_id,
                 query=query,
             )
+            logger.debug("Clarification result: %s", result)
 
         _get_session().set_session_id(Command.CLARIFY, last_session_id)
 
@@ -194,6 +195,7 @@ def research_codebase(
                 session_id=session_id,
                 query=query,
             )
+            logger.debug("Research result: %s", result)
 
         _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
 
@@ -231,6 +233,7 @@ def create_plan(
                 session_id=session_id,
                 query=query,
             )
+            logger.debug("Plan result: %s", result)
 
         _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
         _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
@@ -273,6 +276,7 @@ def implement_plan(
                 session_id=session_id,
                 query=query,
             )
+            logger.debug("Implementation result: %s", result)
 
         _get_session().set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
         _get_session().set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
