@@ -29,6 +29,12 @@ AVAILABLE_TOOLS = [
 ]
 
 
+class AgentExecutionError(Exception):
+    """Raised when the Claude agent fails to execute a task."""
+
+    ...
+
+
 def get_agent_options(
     *,
     system_prompt: str | None = None,
