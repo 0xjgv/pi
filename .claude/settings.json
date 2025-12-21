@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/juan/Code/0xjgv/pi && make check"
+            "command": "cd /Users/juan/Code/0xjgv/pi && make quality-check"
           }
         ]
       }
