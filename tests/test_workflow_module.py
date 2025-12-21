@@ -364,12 +364,12 @@ class TestPiWorkflowPrediction:
         """forward() should return Prediction with all stage outputs."""
         from π.workflow_module import PiWorkflow
 
-        mock_deps["react"].return_value = MagicMock(
-            clarified_objective="The clarified goal",
-            research_doc_path="/docs/research.md",
-            plan_doc_path="/docs/plan.md",
-            implementation_summary="Implementation complete",
-        )
+        mock_deps["react"].side_effect = [
+            MagicMock(clarified_objective="The clarified goal"),
+            MagicMock(research_doc_path="/docs/research.md"),
+            MagicMock(plan_doc_path="/docs/plan.md"),
+            MagicMock(implementation_summary="Implementation complete"),
+        ]
 
         workflow = PiWorkflow()
         result = workflow(objective="original goal")
