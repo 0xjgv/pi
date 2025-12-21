@@ -63,11 +63,16 @@ class TestFullWorkflowIntegration:
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """CLI should initialize DSPy and run agent successfully."""
-        with patch("π.cli.configure_dspy"):
+        from π.router import ExecutionMode
+
+        with (
+            patch("π.cli.configure_dspy"),
+            patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE),
+        ):
             result = runner.invoke(main, ["test objective", "-t", "low"])
 
         assert result.exit_code == 0
-        assert "Starting ReAct Agent" in result.output
+        assert "[Simple Mode]" in result.output
         assert "Final Answer:" in result.output
 
     def test_agent_options_flow_to_workflow(
