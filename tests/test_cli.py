@@ -42,13 +42,11 @@ class TestMain:
         with (
             patch("π.cli.research_codebase") as mock_research,
             patch("π.cli.create_plan") as mock_plan,
-            patch("π.cli.implement_plan") as mock_impl,
             patch("π.cli.clarify_goal") as mock_clarify,
         ):
             yield {
                 "research": mock_research,
                 "plan": mock_plan,
-                "implement": mock_impl,
                 "clarify": mock_clarify,
             }
 
@@ -145,7 +143,6 @@ class TestMain:
         tools = call_kwargs["tools"]
         assert mock_workflow["research"] in tools
         assert mock_workflow["plan"] in tools
-        assert mock_workflow["implement"] in tools
         assert mock_workflow["clarify"] in tools
 
     def test_default_provider_is_claude(

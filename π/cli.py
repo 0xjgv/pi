@@ -22,18 +22,6 @@ class AgentTask(dspy.Signature):
     output: str = dspy.OutputField()
 
 
-# ReAct agent with the available tools
-agent = dspy.ReAct(
-    tools=[
-        research_codebase,
-        # implement_plan, # disabled for now
-        clarify_goal,
-        create_plan,
-    ],
-    signature=AgentTask,
-)
-
-
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("objective")
 @click.option(
@@ -63,7 +51,11 @@ def main(objective: str, thinking: str, provider: str) -> None:
     click.echo(f"Logging to: {log_path}")
     click.echo(f"Using model: {model}")
 
-    # Execute the agent
+    # Create and execute the agent
+    agent = dspy.ReAct(
+        tools=[research_codebase, clarify_goal, create_plan],
+        signature=AgentTask,
+    )
     result = agent(objective=objective)
 
     click.echo(f"\nFinal Answer: {result.output}")
