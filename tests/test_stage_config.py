@@ -55,8 +55,8 @@ class TestStageConfig:
         """StageConfig should be immutable."""
         config = StageConfig(model_tier="low", max_iters=3)
 
-        with pytest.raises(AttributeError):
-            config.model_tier = "high"  # type: ignore[misc]
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            config.model_tier = "high"
 
 
 class TestDefaultStageConfigs:
