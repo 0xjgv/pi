@@ -117,9 +117,8 @@ class TestHumanInputProviderProtocol:
         assert hasattr(provider, "ask")
         assert callable(provider.ask)
 
-    def test_mock_provider_works_with_factory(self):
-        """Any object with ask() method should work."""
-
+        # Protocol check
+        assert isinstance(provider, HumanInputProvider)
         class CustomProvider:
             def ask(self, question: str) -> str:
                 return f"Custom answer to: {question}"
