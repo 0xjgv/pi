@@ -8,18 +8,17 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-def setup_logging() -> Path:
+def setup_logging(log_dir: Path) -> Path:
     """Configure logging for the π CLI.
 
+    Args:
+        log_dir: Directory to store log files.
+
     Returns:
-        Path to the log file
+        Path to the log file.
     """
     logger = logging.getLogger("π")
     logger.handlers.clear()
-
-    # Always create log files
-    log_dir = Path(__file__).parent.parent / ".logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
     _log_path = log_dir / f"{timestamp}.log"
