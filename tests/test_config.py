@@ -91,11 +91,11 @@ class TestProviderModels:
     def test_all_providers_defined(self):
         """Should have models for all providers."""
         assert Provider.Claude in PROVIDER_MODELS
-        assert Provider.Gemini in PROVIDER_MODELS
+        assert Provider.Antigravity in PROVIDER_MODELS
 
-    def test_claude_and_gemini_have_all_tiers(self):
-        """Claude and Gemini providers should have low/med/high tiers."""
-        for provider in [Provider.Claude, Provider.Gemini]:
+    def test_claude_and_antigravity_have_all_tiers(self):
+        """Claude and Antigravity providers should have low/med/high tiers."""
+        for provider in [Provider.Claude, Provider.Antigravity]:
             assert "low" in PROVIDER_MODELS[provider]
             assert "med" in PROVIDER_MODELS[provider]
             assert "high" in PROVIDER_MODELS[provider]
@@ -110,9 +110,9 @@ class TestProviderModels:
         for _tier, model in PROVIDER_MODELS[Provider.Claude].items():
             assert "claude" in model.lower()
 
-    def test_gemini_models_are_gemini(self):
-        """Gemini provider should return Gemini models."""
-        for _tier, model in PROVIDER_MODELS[Provider.Gemini].items():
+    def test_antigravity_models_contain_gemini(self):
+        """Antigravity provider should return Gemini-based models."""
+        for _tier, model in PROVIDER_MODELS[Provider.Antigravity].items():
             assert "gemini" in model.lower()
 
 
@@ -124,10 +124,10 @@ class TestGetModel:
         model = get_model(provider=Provider.Claude, tier="low")
         assert "haiku" in model.lower()
 
-    def test_returns_gemini_pro_for_gemini_high(self):
-        """Should return Pro for Gemini high tier."""
-        model = get_model(provider=Provider.Gemini, tier="high")
-        assert "pro" in model.lower()
+    def test_returns_opus_thinking_for_antigravity_high(self):
+        """Should return Opus thinking for Antigravity high tier."""
+        model = get_model(provider=Provider.Antigravity, tier="high")
+        assert "gemini" in model.lower()
 
     def test_raises_for_invalid_tier(self):
         """Should raise KeyError for invalid tier."""

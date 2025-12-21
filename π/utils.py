@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 from functools import wraps
-from os import getpid, system
+from os import getenv, getpid, system
 from pathlib import Path
 from typing import Any, Callable
 
@@ -56,5 +56,7 @@ def prevent_sleep(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def speak(text: str) -> None:
-    """Speaks the given text using the system's default speech synthesizer"""
+    """Speaks the given text using the system's default speech synthesizer."""
+    if getenv("PYTEST_CURRENT_TEST"):
+        return
     system(f"say '{text}'")
