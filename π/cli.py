@@ -36,7 +36,7 @@ class AgentTask(dspy.Signature):
     "--provider",
     "-p",
     type=click.Choice([p.value for p in Provider], case_sensitive=False),
-    help="AI provider: claude (default), gemini, openai",
+    help="AI provider: claude (default), antigravity, openai",
     default=Provider.Claude.value,
 )
 @prevent_sleep
