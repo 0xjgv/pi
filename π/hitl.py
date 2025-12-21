@@ -48,7 +48,7 @@ class ConsoleInputProvider:
         Returns:
             User's typed response
         """
-        self.console.print(f"\n[bold yellow]Clarification needed:[/bold yellow]")
+        self.console.print("\n[bold yellow]Clarification needed:[/bold yellow]")
         self.console.print(f"  {question}\n")
         return Prompt.ask("[bold green]Your answer[/bold green]")
 

@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from π.hitl import ConsoleInputProvider, create_ask_human_tool
 
 
@@ -111,8 +109,6 @@ class TestHumanInputProviderProtocol:
 
     def test_console_provider_implements_protocol(self):
         """ConsoleInputProvider should implement HumanInputProvider protocol."""
-        from π.hitl import HumanInputProvider
-
         provider = ConsoleInputProvider(console=MagicMock())
 
         # Protocol check - has ask method with correct signature
