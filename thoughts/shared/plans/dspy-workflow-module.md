@@ -408,7 +408,7 @@ class TestPiWorkflow:
         assert workflow.configs[Stage.CLARIFY].model_tier == "low"
         assert workflow.configs[Stage.PLAN].model_tier == "high"
         # Defaults preserved
-        assert workflow.configs[Stage.RESEARCH].model_tier == "med"
+        assert workflow.configs[Stage.RESEARCH].model_tier == "high"
 
     def test_hitl_tool_available_in_clarify(self):
         """Clarify agent has ask_human tool."""
