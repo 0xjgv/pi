@@ -305,8 +305,7 @@ class TestPiWorkflowModelSelection:
         tiers_requested = [call.args[1] for call in lm_calls]
 
         # Default tiers: low, high, high, med
-        assert "low" in tiers_requested  # clarify
-        assert tiers_requested.count("high") >= 2  # research, plan
+        assert tiers_requested == ["low", "high", "high", "med"]
 
     def test_uses_dspy_context_for_model_override(self, mock_deps: dict):
         """Should use dspy.context() for per-stage model."""
