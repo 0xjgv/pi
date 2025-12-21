@@ -16,3 +16,6 @@ wheels/
 
 # Environment variables
 .env
+
+# Project-specific
+.π/

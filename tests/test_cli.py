@@ -157,7 +157,7 @@ class TestMain:
 
         assert "[claude" in result.output.lower()
 
-    @pytest.mark.parametrize("provider", ["claude", "gemini"])
+    @pytest.mark.parametrize("provider", ["claude", "antigravity"])
     def test_accepts_valid_providers(
         self,
         runner: CliRunner,
@@ -171,9 +171,21 @@ class TestMain:
         assert result.exit_code == 0
         assert provider in result.output.lower()
 
+    def test_accepts_openai_provider(
+        self,
+        runner: CliRunner,
+        mock_dspy: MagicMock,  # noqa: ARG002
+        mock_workflow: dict[str, Any],  # noqa: ARG002
+    ):
+        """Should accept openai as a valid provider."""
+        result = runner.invoke(main, ["test", "-p", "openai"])
+
+        assert result.exit_code == 0
+        assert "openai" in result.output.lower()
+
     def test_rejects_invalid_provider(self, runner: CliRunner):
         """Should reject invalid provider values."""
-        result = runner.invoke(main, ["test", "-p", "openai"])
+        result = runner.invoke(main, ["test", "-p", "invalid_provider"])
 
         assert result.exit_code != 0
 
@@ -184,8 +196,8 @@ class TestMain:
         mock_workflow: dict[str, Any],  # noqa: ARG002
     ):
         """Should combine provider and thinking options."""
-        result = runner.invoke(main, ["test", "-p", "gemini", "-t", "high"])
+        result = runner.invoke(main, ["test", "-p", "antigravity", "-t", "high"])
 
         assert result.exit_code == 0
-        assert "gemini" in result.output.lower()
+        assert "antigravity" in result.output.lower()
         assert "high" in result.output.lower()

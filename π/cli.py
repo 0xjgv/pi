@@ -3,6 +3,7 @@ import dspy
 from dotenv import load_dotenv
 
 from π.config import Provider, configure_dspy, get_model
+from π.directory import get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import (
     clarify_goal,
@@ -35,7 +36,7 @@ class AgentTask(dspy.Signature):
     "--provider",
     "-p",
     type=click.Choice([p.value for p in Provider], case_sensitive=False),
-    help="AI provider: claude (default), gemini, openai",
+    help="AI provider: claude (default), antigravity, openai",
     default=Provider.Claude.value,
 )
 @prevent_sleep
@@ -45,7 +46,7 @@ def main(objective: str, thinking: str, provider: str) -> None:
     model = get_model(provider=provider_enum, tier=thinking.lower())
 
     configure_dspy(model=model, logger=logger)
-    log_path = setup_logging()
+    log_path = setup_logging(get_logs_dir())
 
     click.echo(f"Starting ReAct Agent [{provider}/{thinking}] with: '{objective}'")
     click.echo(f"Logging to: {log_path}")

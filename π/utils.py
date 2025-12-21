@@ -3,23 +3,22 @@
 import logging
 from datetime import datetime
 from functools import wraps
-from os import getpid, system
+from os import getenv, getpid, system
 from pathlib import Path
 from typing import Any, Callable
 
 
-def setup_logging() -> Path:
+def setup_logging(log_dir: Path) -> Path:
     """Configure logging for the π CLI.
 
+    Args:
+        log_dir: Directory to store log files.
+
     Returns:
-        Path to the log file
+        Path to the log file.
     """
     logger = logging.getLogger("π")
     logger.handlers.clear()
-
-    # Always create log files
-    log_dir = Path(__file__).parent.parent / ".logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
     _log_path = log_dir / f"{timestamp}.log"
@@ -57,5 +56,7 @@ def prevent_sleep(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def speak(text: str) -> None:
-    """Speaks the given text using the system's default speech synthesizer"""
+    """Speaks the given text using the system's default speech synthesizer."""
+    if getenv("PYTEST_CURRENT_TEST"):
+        return
     system(f"say '{text}'")
