@@ -1,7 +1,6 @@
 """Tests for π.utils module."""
 
 import logging
-from pathlib import Path
 
 import π.utils
 from π.utils import setup_logging

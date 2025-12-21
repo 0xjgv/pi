@@ -208,7 +208,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 @pytest.fixture(autouse=True)
 def cleanup_logging_handlers():
     """Clean up logging handlers after each test to prevent test pollution.
-    
+
     This prevents tests that call setup_logging() from polluting other tests
     with FileHandlers that write to real log files.
     """
