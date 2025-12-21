@@ -88,7 +88,7 @@ def get_lm(provider: Provider, tier: str) -> dspy.LM:
 # -----------------------------------------------------------------------------
 
 
-class PiWorkflow(dspy.Module):
+class RPIWorkflow(dspy.Module):
     """Workflow module with per-stage ReAct agents.
 
     Enforces sequential execution: clarify → research → plan → implement.
