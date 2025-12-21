@@ -72,9 +72,9 @@ DEFAULT_STAGE_CONFIGS: dict[Stage, StageConfig] = {
         description="Fast model for human interaction loops",
     ),
     Stage.RESEARCH: StageConfig(
-        model_tier="med",
+        model_tier="high",
         max_iters=3,
-        description="Balanced model for codebase exploration",
+        description="Powerful model for deep codebase exploration",
     ),
     Stage.PLAN: StageConfig(
         model_tier="high",
