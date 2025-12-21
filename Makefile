@@ -73,28 +73,6 @@ codespace: ## Set up codespace environment
 
 ##@ Distribution
 
-.PHONY: build-nuitka
-build-nuitka: install ## Build optimized binary with Nuitka
-	@$(SILENT_HELPER) && \
-		print_main_header "Building Optimized Binary (Nuitka)" && \
-		uv run python -m nuitka \
-			--onefile \
-			--assume-yes-for-downloads \
-			--enable-plugin=dill-compat \
-			--include-package=claude-agent-sdk \
-			--include-package=python-dotenv \
-			--include-package=click \
-			--include-package=rich \
-			--include-package=dspy \
-			--output-filename=π \
-			π/cli.py
-
-.PHONY: clean-build
-clean-build: ## Remove build artifacts
-	@$(SILENT_HELPER) && \
-		print_main_header "Cleaning Build Artifacts" && \
-		run_silent "Remove build files" "rm -rf pi.dist pi.build pi.onefile-build pi"
-
 .PHONY: link
 link: install ## Install and add π to PATH via symlink
 	@mkdir -p ~/.local/bin
