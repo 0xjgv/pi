@@ -6,18 +6,62 @@ sequential stage execution with per-stage model selection.
 
 from functools import lru_cache
 from os import getenv
-from pathlib import Path
-from typing import TYPE_CHECKING
 
 import dspy
 
-from π.config import Provider
+from π.config import Provider, get_model
 from π.hitl import ConsoleInputProvider, HumanInputProvider, create_ask_human_tool
 from π.stage_config import DEFAULT_STAGE_CONFIGS, Stage, StageConfig
 from π.workflow import clarify_goal, create_plan, implement_plan, research_codebase
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
+# -----------------------------------------------------------------------------
+# Stage Signatures
+# -----------------------------------------------------------------------------
+
+
+class ClarifySignature(dspy.Signature):
+    """Clarify the user's objective through interactive questioning."""
+
+    objective: str = dspy.InputField(desc="The user's original objective or task")
+    clarified_objective: str = dspy.OutputField(
+        desc="The refined, unambiguous objective after clarification"
+    )
+
+
+class ResearchSignature(dspy.Signature):
+    """Research the codebase to understand patterns and architecture."""
+
+    objective: str = dspy.InputField(desc="The clarified objective to research")
+    research_summary: str = dspy.OutputField(
+        desc="Summary of research findings about the codebase"
+    )
+    research_doc_path: str = dspy.OutputField(
+        desc="Path to the detailed research document"
+    )
+
+
+class PlanSignature(dspy.Signature):
+    """Create an implementation plan based on research findings."""
+
+    objective: str = dspy.InputField(desc="The clarified objective to plan for")
+    research_doc_path: str = dspy.InputField(desc="Path to the research document")
+    plan_summary: str = dspy.OutputField(desc="Summary of the implementation plan")
+    plan_doc_path: str = dspy.OutputField(desc="Path to the detailed plan document")
+
+
+class ImplementSignature(dspy.Signature):
+    """Implement the plan by making code changes."""
+
+    objective: str = dspy.InputField(desc="The clarified objective to implement")
+    plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
+    implementation_summary: str = dspy.OutputField(
+        desc="Summary of the implementation changes made"
+    )
+
+
+# -----------------------------------------------------------------------------
+# LM Factory
+# -----------------------------------------------------------------------------
 
 
 @lru_cache(maxsize=6)
@@ -31,14 +75,17 @@ def get_lm(provider: Provider, tier: str) -> dspy.LM:
     Returns:
         Configured dspy.LM instance
     """
-    from π.config import get_model
-
     model = get_model(provider=provider, tier=tier)
     return dspy.LM(
         api_base=getenv("CLIPROXY_API_BASE", "http://localhost:8317"),
         api_key=getenv("CLIPROXY_API_KEY"),
         model=model,
     )
+
+
+# -----------------------------------------------------------------------------
+# Workflow Module
+# -----------------------------------------------------------------------------
 
 
 class PiWorkflow(dspy.Module):
@@ -56,9 +103,9 @@ class PiWorkflow(dspy.Module):
     def __init__(
         self,
         *,
-        provider: Provider = Provider.Claude,
-        stage_configs: dict[Stage, StageConfig] | None = None,
         human_input_provider: HumanInputProvider | None = None,
+        stage_configs: dict[Stage, StageConfig] | None = None,
+        provider: Provider = Provider.Claude,
     ):
         """Initialize workflow with configuration.
 
@@ -68,9 +115,9 @@ class PiWorkflow(dspy.Module):
             human_input_provider: HITL provider (default: ConsoleInputProvider)
         """
         super().__init__()
-        self.provider = provider
         self.configs = {**DEFAULT_STAGE_CONFIGS, **(stage_configs or {})}
         self.human_input = human_input_provider or ConsoleInputProvider()
+        self.provider = provider
 
         # Build per-stage ReAct agents
         self._clarify_agent = self._build_clarify_agent()
@@ -81,40 +128,37 @@ class PiWorkflow(dspy.Module):
     def _build_clarify_agent(self) -> dspy.ReAct:
         """Build clarify stage agent with HITL tool."""
         return dspy.ReAct(
-            signature="objective -> clarified_objective",
-            tools=[
-                self._wrap_clarify_tool(),
-                create_ask_human_tool(self.human_input),
-            ],
+            signature=ClarifySignature,
+            tools=[clarify_goal, create_ask_human_tool(self.human_input)],
             max_iters=self.configs[Stage.CLARIFY].max_iters,
         )
 
     def _build_research_agent(self) -> dspy.ReAct:
         """Build research stage agent."""
         return dspy.ReAct(
-            signature="objective -> research_summary, research_doc_path",
-            tools=[self._wrap_research_tool()],
+            signature=ResearchSignature,
+            tools=[research_codebase],
             max_iters=self.configs[Stage.RESEARCH].max_iters,
         )
 
     def _build_plan_agent(self) -> dspy.ReAct:
         """Build plan stage agent."""
         return dspy.ReAct(
-            signature="objective, research_doc_path -> plan_summary, plan_doc_path",
-            tools=[self._wrap_plan_tool()],
+            signature=PlanSignature,
+            tools=[create_plan],
             max_iters=self.configs[Stage.PLAN].max_iters,
         )
 
     def _build_implement_agent(self) -> dspy.ReAct:
         """Build implement stage agent."""
         return dspy.ReAct(
-            signature="objective, plan_doc_path -> implementation_summary",
-            tools=[self._wrap_implement_tool()],
+            signature=ImplementSignature,
+            tools=[implement_plan],
             max_iters=self.configs[Stage.IMPLEMENT].max_iters,
         )
 
     def _run_stage(
-        self, stage: Stage, agent: dspy.ReAct, **kwargs
+        self, *, stage: Stage, agent: dspy.ReAct, **kwargs
     ) -> dspy.Prediction:
         """Run agent with stage-specific model via dspy.context().
 
@@ -148,126 +192,39 @@ class PiWorkflow(dspy.Module):
         """
         # Stage 1: Clarify (uses HITL for human interaction)
         clarified = self._run_stage(
-            Stage.CLARIFY,
-            self._clarify_agent,
+            agent=self._clarify_agent,
             objective=objective,
+            stage=Stage.CLARIFY,
         )
         working_objective = clarified.get("clarified_objective") or objective
 
         # Stage 2: Research (deep codebase exploration)
         researched = self._run_stage(
-            Stage.RESEARCH,
-            self._research_agent,
             objective=working_objective,
+            agent=self._research_agent,
+            stage=Stage.RESEARCH,
         )
 
         # Stage 3: Plan (architectural reasoning)
         planned = self._run_stage(
-            Stage.PLAN,
-            self._plan_agent,
-            objective=working_objective,
             research_doc_path=researched.research_doc_path,
+            objective=working_objective,
+            agent=self._plan_agent,
+            stage=Stage.PLAN,
         )
 
         # Stage 4: Implement (code generation)
         implemented = self._run_stage(
-            Stage.IMPLEMENT,
-            self._implement_agent,
-            objective=working_objective,
             plan_doc_path=planned.plan_doc_path,
+            objective=working_objective,
+            agent=self._implement_agent,
+            stage=Stage.IMPLEMENT,
         )
 
         return dspy.Prediction(
-            objective=working_objective,
+            implementation_summary=implemented.implementation_summary,
+            clarified_objective=clarified.clarified_objective,
             research_doc_path=researched.research_doc_path,
             plan_doc_path=planned.plan_doc_path,
-            implementation_summary=implemented.implementation_summary,
+            objective=working_objective,
         )
-
-    # -------------------------------------------------------------------------
-    # Tool Wrappers (delegate to existing workflow functions)
-    # -------------------------------------------------------------------------
-
-    def _wrap_clarify_tool(self) -> "Callable":
-        """Wrap clarify_goal as a DSPy tool."""
-
-        def clarify_tool(query: str) -> str:
-            """Run clarification via Claude SDK.
-
-            Use this to clarify the user's objective by engaging
-            with the clarification workflow.
-
-            Args:
-                query: The objective or question to clarify
-
-            Returns:
-                Clarification result with session info
-            """
-            return clarify_goal(query=query)
-
-        return clarify_tool
-
-    def _wrap_research_tool(self) -> "Callable":
-        """Wrap research_codebase as a DSPy tool."""
-
-        def research_tool(query: str) -> str:
-            """Research codebase via Claude SDK.
-
-            Explores the codebase to understand existing patterns,
-            architecture, and relevant code for the objective.
-
-            Args:
-                query: What to research in the codebase
-
-            Returns:
-                Research summary with document path
-            """
-            return research_codebase(query=query)
-
-        return research_tool
-
-    def _wrap_plan_tool(self) -> "Callable":
-        """Wrap create_plan as a DSPy tool."""
-
-        def plan_tool(research_doc_path: str, query: str) -> str:
-            """Create implementation plan via Claude SDK.
-
-            Uses research findings to create a detailed
-            implementation plan.
-
-            Args:
-                research_doc_path: Path to research document
-                query: Planning objective
-
-            Returns:
-                Plan summary with document path
-            """
-            return create_plan(
-                research_document_path=Path(research_doc_path),
-                query=query,
-            )
-
-        return plan_tool
-
-    def _wrap_implement_tool(self) -> "Callable":
-        """Wrap implement_plan as a DSPy tool."""
-
-        def implement_tool(plan_doc_path: str, query: str) -> str:
-            """Implement plan via Claude SDK.
-
-            Executes the implementation plan, making code changes
-            as specified.
-
-            Args:
-                plan_doc_path: Path to plan document
-                query: Implementation objective
-
-            Returns:
-                Implementation summary
-            """
-            return implement_plan(
-                plan_document_path=Path(plan_doc_path),
-                query=query,
-            )
-
-        return implement_tool

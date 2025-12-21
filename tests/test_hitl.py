@@ -101,7 +101,9 @@ class TestCreateAskHumanTool:
         tool = create_ask_human_tool(mock_provider)
         tool("Complex question with special chars: @#$%")
 
-        mock_provider.ask.assert_called_with("Complex question with special chars: @#$%")
+        mock_provider.ask.assert_called_with(
+            "Complex question with special chars: @#$%"
+        )
 
 
 class TestHumanInputProviderProtocol:

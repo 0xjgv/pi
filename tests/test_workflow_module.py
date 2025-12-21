@@ -194,12 +194,15 @@ class TestPiWorkflowStageExecution:
 
         def capture_calls(**kwargs):
             calls.append(kwargs)
-            return MagicMock(
+            mock_result = MagicMock(
                 clarified_objective="CLARIFIED GOAL",
                 research_doc_path="/research.md",
                 plan_doc_path="/plan.md",
                 implementation_summary="done",
             )
+            # Configure .get() to return the clarified_objective
+            mock_result.get.return_value = "CLARIFIED GOAL"
+            return mock_result
 
         mock_workflow_deps["react"].side_effect = capture_calls
 
@@ -383,12 +386,15 @@ class TestPiWorkflowPrediction:
         """Result should contain the clarified objective."""
         from π.workflow_module import PiWorkflow
 
-        mock_deps["react"].return_value = MagicMock(
+        mock_result = MagicMock(
             clarified_objective="Clarified: Add Redis caching",
             research_doc_path="/r.md",
             plan_doc_path="/p.md",
             implementation_summary="done",
         )
+        # Configure .get() to return the clarified_objective
+        mock_result.get.return_value = "Clarified: Add Redis caching"
+        mock_deps["react"].return_value = mock_result
 
         workflow = PiWorkflow()
         result = workflow(objective="add caching")

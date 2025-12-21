@@ -292,7 +292,7 @@ def research_codebase(
 
 def create_plan(
     *,
-    research_document_path: Path,
+    research_document_path: Path | str,
     query: str,
 ) -> str:
     """
@@ -305,6 +305,7 @@ def create_plan(
     Returns:
         A summary of the plan + the file path of the plan document or open questions to the agent.
     """
+    research_document_path = Path(research_document_path)
     # Auto-resume: check for existing session
     session_id = _get_session().get_resumable_session_id(Command.CREATE_PLAN)
     logger.debug(
@@ -341,7 +342,7 @@ def create_plan(
 
 def implement_plan(
     *,
-    plan_document_path: Path,
+    plan_document_path: Path | str,
     query: str,
 ) -> str:
     """
@@ -354,6 +355,7 @@ def implement_plan(
     Returns:
         A summary of the implementation or open questions to the agent.
     """
+    plan_document_path = Path(plan_document_path)
     # Auto-resume: check for existing session
     session_id = _get_session().get_resumable_session_id(Command.IMPLEMENT_PLAN)
     logger.debug(

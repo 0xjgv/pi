@@ -1,5 +1,7 @@
 """Tests for π.stage_config module."""
 
+import dataclasses
+
 import pytest
 
 from π.stage_config import DEFAULT_STAGE_CONFIGS, Stage, StageConfig
