@@ -5,7 +5,7 @@
 Replace current single ReAct agent with a structured `PiWorkflow` module that:
 1. Enforces sequential stage execution (clarify → research → plan → implement)
 2. Uses per-stage ReAct agents for tool feedback handling
-3. Supports per-stage model selection (Haiku/Sonnet/Opus)
+3. Supports per-stage model selection (Haiku/Sonnet/Opus or Antigravity models)
 4. Integrates human-in-the-loop (HITL) for the clarify stage
 
 ## Architecture
@@ -18,7 +18,7 @@ Replace current single ReAct agent with a structured `PiWorkflow` module that:
 │                                                                         │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐      │
 │  │ ClarifyAgent     │  │ ResearchAgent    │  │ PlanAgent        │ ...  │
-│  │ (ReAct + Haiku)  │  │ (ReAct + Sonnet) │  │ (ReAct + Opus)   │      │
+│  │ (ReAct + Haiku)  │  │ (ReAct + Opus)   │  │ (ReAct + Opus)   │      │
 │  │                  │  │                  │  │                  │      │
 │  │ tools:           │  │ tools:           │  │ tools:           │      │
 │  │ - clarify_tool   │  │ - research_tool  │  │ - plan_tool      │      │
