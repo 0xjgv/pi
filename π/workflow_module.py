@@ -152,7 +152,7 @@ class PiWorkflow(dspy.Module):
             self._clarify_agent,
             objective=objective,
         )
-        working_objective = getattr(clarified, "clarified_objective", None) or objective
+        working_objective = clarified.get("clarified_objective") or objective
 
         # Stage 2: Research (deep codebase exploration)
         researched = self._run_stage(
