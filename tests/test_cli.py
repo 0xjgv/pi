@@ -58,12 +58,12 @@ class TestMain:
             mock.return_value = ExecutionMode.SIMPLE
             yield mock
 
-    def test_requires_objective_argument(self, runner: CliRunner):
-        """Should fail without objective argument."""
+    def test_shows_help_without_objective(self, runner: CliRunner):
+        """Should show help when no objective is provided."""
         result = runner.invoke(main, [])
 
-        assert result.exit_code != 0
-        assert "Missing argument" in result.output or "OBJECTIVE" in result.output
+        assert result.exit_code == 0
+        assert "OBJECTIVE" in result.output or "Usage:" in result.output
 
     def test_accepts_objective_argument(
         self,
