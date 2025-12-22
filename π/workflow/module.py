@@ -4,18 +4,27 @@ Provides PiWorkflow, a structured dspy.Module that enforces
 sequential stage execution with per-stage model selection.
 """
 
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
 import dspy
 
-from π.config import Provider, get_lm
-from π.hitl import ConsoleInputProvider, HumanInputProvider, create_ask_human_tool
-from π.stage_config import DEFAULT_STAGE_CONFIGS, Stage, StageConfig
-from π.workflow import (
+from π.config import Provider, get_lm, DEFAULT_STAGE_CONFIGS, Stage, StageConfig
+from π.support import ConsoleInputProvider, HumanInputProvider, create_ask_human_tool
+from π.workflow.bridge import (
     clarify_goal,
     create_plan,
     implement_plan,
     research_codebase,
     review_plan,
 )
+
+logger = logging.getLogger(__name__)
+
+# Default path for optimized workflow
+DEFAULT_OPTIMIZED_PATH = Path("π/optimized_workflow.json")
 
 # -----------------------------------------------------------------------------
 # Stage Signatures
@@ -85,6 +94,31 @@ class RPIWorkflow(dspy.Module):
         configs: Per-stage configuration (model tier, max iterations)
         human_input: Provider for human-in-the-loop interactions
     """
+
+    @classmethod
+    def load_optimized(
+        cls,
+        path: str | Path = DEFAULT_OPTIMIZED_PATH,
+        **kwargs,
+    ) -> "RPIWorkflow":
+        """Load GEPA-optimized workflow if available.
+
+        Falls back to unoptimized workflow if no saved state exists.
+
+        Args:
+            path: Path to optimized workflow JSON
+            **kwargs: Additional arguments passed to __init__ if fallback
+
+        Returns:
+            RPIWorkflow instance (optimized if available, default otherwise)
+        """
+        path = Path(path)
+        if path.exists():
+            logger.info(f"Loading optimized workflow from {path}")
+            # dspy.Module.load() loads from JSON
+            return cls.load(path=str(path))  # type: ignore[call-arg]
+        logger.info("No optimized workflow found, using default")
+        return cls(**kwargs)
 
     def __init__(
         self,

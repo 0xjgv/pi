@@ -6,7 +6,7 @@ from π.hooks import (
     check_bash_command,
     check_file_format,
 )
-from π.permissions import can_use_tool
+from π.support import can_use_tool
 
 # https://code.claude.com/docs/en/settings#tools-available-to-claude
 AVAILABLE_TOOLS = [

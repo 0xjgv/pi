@@ -17,9 +17,9 @@ from claude_agent_sdk.types import (
 from rich.console import Console
 from rich.status import Status
 
-from π.agent import get_agent_options
+from π.config import get_agent_options
 from π.errors import AgentExecutionError
-from π.session import COMMAND_MAP, Command, WorkflowSession
+from π.workflow.session import COMMAND_MAP, Command, WorkflowSession
 from π.utils import speak
 
 # Context variables for per-invocation isolation (thread-safe, async-safe)
