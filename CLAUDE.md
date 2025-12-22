@@ -1,48 +1,60 @@
 # π
 
-CLI tool orchestrating Claude agents via DSPy ReAct for research → plan → implement workflows.
+CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan → review → implement workflows.
 
 ## Stack
 
-- Python 3.13+ with uv
+- Python 3.13+ with uv, hatchling build
 - claude-agent-sdk, dspy, click, rich
-- ruff for linting/formatting
-
-## Structure
-
-```markdown
-π/                    # Main package
-├── cli.py            # CLI entry + DSPy ReAct orchestration
-├── agent.py          # Agent configuration factory
-├── session.py        # Workflow state management
-├── hooks/            # Pre/PostToolUse validation
-└── utils.py          # Helpers, logging
-.claude/
-├── agents/           # Sub-agent definitions
-└── commands/         # Slash commands (1-4)
-```
+- pytest + pytest-asyncio for testing
+- ruff for lint/format
 
 ## Commands
 
-- Run: `π "prompt"` or `π "prompt" -t high -v`
-- Quality: `make check` (fix, format, lint, test) — see [Makefile](Makefile)
+- Run: `π "prompt"` or `π "prompt" -t high -m workflow`
+- Quality: `make check` (fix → format → lint → test)
+- Test: `make test` or `make test-cov`
 
 ## CLI Options
 
-- `-t/--thinking`: Model tier (low=haiku, med=sonnet, high=opus)
-- `-v/--verbose`: Debug logging
+| Flag | Values | Default | Description |
+|------|--------|---------|-------------|
+| `-t/--thinking` | low/med/high | low | Model tier (haiku/sonnet/opus) |
+| `-p/--provider` | claude/antigravity/openai | claude | LM provider |
+| `-m/--mode` | auto/simple/workflow | auto | Execution mode |
+| `-v/--version` | — | — | Show version |
 
 ## Environment
 
 - `CLIPROXY_API_BASE` — DSPy LM endpoint (default: localhost:8317)
-- `CLIPROXY_API_KEY` — API key for DSPy
+- `CLIPROXY_API_KEY` — API key (required)
 
-## Key Patterns
+## Architecture
 
-- **DSPy ReAct**: Automatic tool selection via `research_codebase`, `create_plan`, `implement_plan`
-- **Session resumption**: WorkflowSession tracks session IDs across tool calls
-- **Hook validation**: Safety checks on bash, linters on file writes
+**Two modes:**
 
-## References
+- **Simple**: Single ReAct agent with 3 tools (research, clarify, plan)
+- **Workflow**: 5-stage pipeline with per-stage model tiers:
+  - Clarify (low) → Research (high) → Plan (high) → Review (med) → Implement (med)
 
-- [README.md](README.md)
+**Key modules:**
+
+- `cli.py` — Entry point, mode routing
+- `workflow.py` — Tool functions bridging sync→async to Claude SDK
+- `workflow_module.py` — DSPy module with 5 ReAct agents
+- `router.py` — Auto-classifies objective to simple/workflow
+- `session.py` — Tracks session IDs across tool calls
+- `hooks/` — PreToolUse (bash safety), PostToolUse (linters)
+
+## Conventions
+
+- **Type hints**: Modern syntax (`str | None`, `dict[str, T]`)
+- **Docstrings**: Google-style with Args/Returns/Raises
+- **Functions**: Use `*,` for keyword-only args
+- **Async**: Nested `async def` with sync wrapper via `run_until_complete()`
+- **Logging**: Module-level `logger = logging.getLogger(__name__)`
+- **Tests**: Class-based (`TestFeature`), `@pytest.mark.asyncio` for async
+
+## Logs
+
+Debug logs auto-saved to `.π/logs/` (7-day retention, gitignored).
