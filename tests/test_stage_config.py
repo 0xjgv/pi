@@ -11,15 +11,16 @@ class TestStage:
     """Tests for Stage enum."""
 
     def test_has_all_workflow_stages(self):
-        """Should define all four workflow stages."""
+        """Should define all five workflow stages."""
         assert Stage.CLARIFY == "clarify"
         assert Stage.RESEARCH == "research"
         assert Stage.PLAN == "plan"
+        assert Stage.REVIEW_PLAN == "review_plan"
         assert Stage.IMPLEMENT == "implement"
 
     def test_stage_count(self):
-        """Should have exactly 4 stages."""
-        assert len(Stage) == 4
+        """Should have exactly 5 stages."""
+        assert len(Stage) == 5
 
     def test_stages_are_strings(self):
         """Stage values should be strings for serialization."""
@@ -69,6 +70,7 @@ class TestDefaultStageConfigs:
         assert Stage.CLARIFY in DEFAULT_STAGE_CONFIGS
         assert Stage.RESEARCH in DEFAULT_STAGE_CONFIGS
         assert Stage.PLAN in DEFAULT_STAGE_CONFIGS
+        assert Stage.REVIEW_PLAN in DEFAULT_STAGE_CONFIGS
         assert Stage.IMPLEMENT in DEFAULT_STAGE_CONFIGS
 
     def test_clarify_uses_low_tier(self):
@@ -107,6 +109,7 @@ class TestDefaultStageConfigs:
             (Stage.CLARIFY, 5),
             (Stage.RESEARCH, 3),
             (Stage.PLAN, 3),
+            (Stage.REVIEW_PLAN, 3),
             (Stage.IMPLEMENT, 5),
         ],
     )

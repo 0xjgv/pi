@@ -54,7 +54,9 @@ def run_simple_mode(
 def run_workflow_mode(objective: str, provider: Provider) -> None:
     """Execute objective using RPIWorkflow pipeline."""
     click.echo(f"[Workflow Mode] Using {provider} with per-stage models")
-    click.echo("  Stages: Clarify(low) → Research(high) → Plan(high) → Implement(med)")
+    click.echo(
+        "  Stages: Clarify(low) → Research(high) → Plan(high) → Review(med) → Implement(med)"
+    )
 
     workflow = RPIWorkflow(provider=provider)
     result = workflow(objective=objective)

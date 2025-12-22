@@ -61,14 +61,14 @@ class TestPiWorkflowInit:
         # Defaults preserved for other stages
         assert workflow.configs[Stage.CLARIFY] == DEFAULT_STAGE_CONFIGS[Stage.CLARIFY]
 
-    def test_creates_four_react_agents(self, mock_dspy: MagicMock):
+    def test_creates_five_react_agents(self, mock_dspy: MagicMock):
         """Should create one ReAct agent per stage."""
         from π.workflow_module import RPIWorkflow
 
         RPIWorkflow()
 
-        # ReAct called 4 times (one per stage)
-        assert mock_dspy.ReAct.call_count == 4
+        # ReAct called 5 times (one per stage)
+        assert mock_dspy.ReAct.call_count == 5
 
     def test_clarify_agent_has_ask_human_tool(self, mock_dspy: MagicMock):
         """Clarify agent should include ask_human tool."""
@@ -139,21 +139,22 @@ class TestPiWorkflowStageExecution:
             }
 
     def test_forward_executes_all_stages(self, mock_workflow_deps: dict):
-        """forward() should execute all four stages."""
+        """forward() should execute all five stages."""
         from π.workflow_module import RPIWorkflow
 
         mock_workflow_deps["react"].return_value = MagicMock(
             clarified_objective="clarified",
             research_doc_path="/path/research.md",
             plan_doc_path="/path/plan.md",
+            review_summary="reviewed",
             implementation_summary="done",
         )
 
         workflow = RPIWorkflow()
         workflow(objective="test task")
 
-        # ReAct instance called 4 times (once per stage)
-        assert mock_workflow_deps["react"].call_count == 4
+        # ReAct instance called 5 times (once per stage)
+        assert mock_workflow_deps["react"].call_count == 5
 
     def test_forward_enforces_stage_order(self, mock_workflow_deps: dict):
         """Stages must execute in order: clarify → research → plan → implement."""
@@ -300,12 +301,12 @@ class TestPiWorkflowModelSelection:
         workflow = RPIWorkflow()
         workflow(objective="test")
 
-        # get_lm called 4 times with different tiers
+        # get_lm called 5 times with different tiers
         lm_calls = mock_deps["get_lm"].call_args_list
         tiers_requested = [call.args[1] for call in lm_calls]
 
-        # Default tiers: low, high, high, med
-        assert tiers_requested == ["low", "high", "high", "med"]
+        # Default tiers: low, high, high, med, med (clarify, research, plan, review, implement)
+        assert tiers_requested == ["low", "high", "high", "med", "med"]
 
     def test_uses_dspy_context_for_model_override(self, mock_deps: dict):
         """Should use dspy.context() for per-stage model."""
@@ -314,8 +315,8 @@ class TestPiWorkflowModelSelection:
         workflow = RPIWorkflow()
         workflow(objective="test")
 
-        # dspy.context called 4 times (once per stage)
-        assert mock_deps["dspy"].context.call_count == 4
+        # dspy.context called 5 times (once per stage)
+        assert mock_deps["dspy"].context.call_count == 5
 
     def test_custom_stage_config_changes_model(self, mock_deps: dict):
         """Custom stage config should change model tier."""
@@ -370,6 +371,7 @@ class TestPiWorkflowPrediction:
             MagicMock(clarified_objective="The clarified goal"),
             MagicMock(research_doc_path="/docs/research.md"),
             MagicMock(plan_doc_path="/docs/plan.md"),
+            MagicMock(review_summary="Plan reviewed"),
             MagicMock(implementation_summary="Implementation complete"),
         ]
 

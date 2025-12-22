@@ -10,6 +10,7 @@ class Stage(StrEnum):
     CLARIFY = "clarify"
     RESEARCH = "research"
     PLAN = "plan"
+    REVIEW_PLAN = "review_plan"
     IMPLEMENT = "implement"
 
 
@@ -43,6 +44,11 @@ DEFAULT_STAGE_CONFIGS: dict[Stage, StageConfig] = {
         model_tier="high",
         max_iters=3,
         description="Powerful model for architectural reasoning",
+    ),
+    Stage.REVIEW_PLAN: StageConfig(
+        model_tier="med",
+        max_iters=3,
+        description="Review plan for completeness and accuracy",
     ),
     Stage.IMPLEMENT: StageConfig(
         model_tier="med",

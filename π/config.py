@@ -1,8 +1,11 @@
+import logging
 from enum import StrEnum
 from functools import lru_cache
 from os import getenv
 
 import dspy
+
+logger = logging.getLogger(__name__)
 
 
 class AntigravityModel(StrEnum):
@@ -86,9 +89,28 @@ def get_lm(provider: Provider, tier: str) -> dspy.LM:
     Returns:
         Configured dspy.LM instance
     """
-    model = get_model(provider=provider, tier=tier)
+    base_url = getenv("CLIPROXY_API_BASE", "http://localhost:8317")
+    raw_model = get_model(provider=provider, tier=tier)
+    logger.debug(f"Resolving LM: {provider}/{tier} → {raw_model}")
+
+    # HACK: LiteLLM auto-routes gemini-* models to Vertex AI, which requires
+    # Google Cloud auth. We bypass this by prefixing with "openai/" to force
+    # the OpenAI-compatible code path through our proxy instead.
+    #
+    # Different providers also expect different endpoint paths:
+    # - Anthropic: {base}/v1/messages (LiteLLM appends /v1/messages)
+    # - OpenAI:    {base}/v1/chat/completions (LiteLLM appends /chat/completions)
+    if raw_model.startswith("gemini"):
+        model = f"openai/{raw_model}"
+        api_base = f"{base_url}/v1"
+        logger.debug(f"Gemini hack: {raw_model} → {model}, base: {api_base}")
+    else:
+        model = raw_model
+        api_base = base_url
+
+    logger.debug(f"LM config: model={model}, api_base={api_base}")
     return dspy.LM(
-        api_base=getenv("CLIPROXY_API_BASE", "http://localhost:8317"),
         api_key=getenv("CLIPROXY_API_KEY"),
+        api_base=api_base,
         model=model,
     )

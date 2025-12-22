@@ -15,6 +15,7 @@ class Command(StrEnum):
 
     CLARIFY = "clarify"
     RESEARCH_CODEBASE = "research_codebase"
+    REVIEW_PLAN = "review_plan"
     CREATE_PLAN = "create_plan"
     IMPLEMENT_PLAN = "implement_plan"
 

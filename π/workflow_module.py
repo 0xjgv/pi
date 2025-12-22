@@ -9,7 +9,13 @@ import dspy
 from π.config import Provider, get_lm
 from π.hitl import ConsoleInputProvider, HumanInputProvider, create_ask_human_tool
 from π.stage_config import DEFAULT_STAGE_CONFIGS, Stage, StageConfig
-from π.workflow import clarify_goal, create_plan, implement_plan, research_codebase
+from π.workflow import (
+    clarify_goal,
+    create_plan,
+    implement_plan,
+    research_codebase,
+    review_plan,
+)
 
 # -----------------------------------------------------------------------------
 # Stage Signatures
@@ -46,6 +52,13 @@ class PlanSignature(dspy.Signature):
     plan_doc_path: str = dspy.OutputField(desc="Path to the detailed plan document")
 
 
+class ReviewPlanSignature(dspy.Signature):
+    """Review the plan to ensure it is complete and accurate."""
+
+    plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
+    review_summary: str = dspy.OutputField(desc="Summary of the plan review")
+
+
 class ImplementSignature(dspy.Signature):
     """Implement the plan by making code changes."""
 
@@ -64,7 +77,7 @@ class ImplementSignature(dspy.Signature):
 class RPIWorkflow(dspy.Module):
     """Workflow module with per-stage ReAct agents.
 
-    Enforces sequential execution: clarify → research → plan → implement.
+    Enforces sequential execution: clarify → research → plan → review → implement.
     Each stage uses a dedicated ReAct agent with configurable model tier.
 
     Attributes:
@@ -96,6 +109,7 @@ class RPIWorkflow(dspy.Module):
         self._clarify_agent = self._build_clarify_agent()
         self._research_agent = self._build_research_agent()
         self._plan_agent = self._build_plan_agent()
+        self._review_plan_agent = self._build_review_plan_agent()
         self._implement_agent = self._build_implement_agent()
 
     def _build_clarify_agent(self) -> dspy.ReAct:
@@ -120,6 +134,14 @@ class RPIWorkflow(dspy.Module):
             signature=PlanSignature,
             tools=[create_plan],
             max_iters=self.configs[Stage.PLAN].max_iters,
+        )
+
+    def _build_review_plan_agent(self) -> dspy.ReAct:
+        """Build review plan stage agent."""
+        return dspy.ReAct(
+            signature=ReviewPlanSignature,
+            tools=[review_plan],
+            max_iters=self.configs[Stage.REVIEW_PLAN].max_iters,
         )
 
     def _build_implement_agent(self) -> dspy.ReAct:
@@ -150,7 +172,7 @@ class RPIWorkflow(dspy.Module):
     def forward(self, objective: str) -> dspy.Prediction:
         """Execute workflow with enforced stage order.
 
-        Stages execute sequentially: clarify → research → plan → implement.
+        Stages execute sequentially: clarify → research → plan → review → implement.
         Each stage's output feeds into the next stage.
 
         Args:
@@ -186,7 +208,14 @@ class RPIWorkflow(dspy.Module):
             stage=Stage.PLAN,
         )
 
-        # Stage 4: Implement (code generation)
+        # Stage 4: Review Plan (validation)
+        self._run_stage(
+            plan_doc_path=planned.plan_doc_path,
+            agent=self._review_plan_agent,
+            stage=Stage.REVIEW_PLAN,
+        )
+
+        # Stage 5: Implement (code generation)
         implemented = self._run_stage(
             plan_doc_path=planned.plan_doc_path,
             objective=working_objective,

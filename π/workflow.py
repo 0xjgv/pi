@@ -354,6 +354,59 @@ def create_plan(
         return f"[ERROR] {e}"
 
 
+def review_plan(
+    *,
+    plan_document_path: Path | str,
+    query: str,
+) -> str:
+    """
+    Review the plan for the codebase.
+
+    Args:
+        query: The query to review the plan for the codebase (review, question, doubts, feedback, etc.).
+        plan_document_path: Required path to the plan document.
+
+    Returns:
+        A summary of the review or open questions to the agent.
+    """
+    plan_document_path = Path(plan_document_path)
+    # Auto-resume: check for existing session
+    session_id = _get_session().get_resumable_session_id(Command.REVIEW_PLAN)
+    logger.debug(
+        "Review plan tool command: %s",
+        {
+            "plan_document_path": plan_document_path,
+            "session_id": session_id,
+            "query": query,
+        },
+    )
+
+    # Validate: ensure we're not receiving the research doc by mistake
+    _get_session().validate_plan_doc(str(plan_document_path))
+
+    try:
+        with timed_phase("Reviewing plan"):
+            result, last_session_id = _execute_claude_task(
+                path_to_document=plan_document_path,
+                tool_command=Command.REVIEW_PLAN,
+                session_id=session_id,
+                query=query,
+            )
+            logger.debug(
+                "Review result: %s",
+                {"result": result, "last_session_id": last_session_id},
+            )
+
+        _get_session().set_doc_path(Command.REVIEW_PLAN, str(plan_document_path))
+        _get_session().set_session_id(Command.REVIEW_PLAN, last_session_id)
+        speak("review complete")
+
+        return f"Result: {result}, Review Session ID: {last_session_id}"
+    except AgentExecutionError as e:
+        logger.exception("Review failed")
+        return f"[ERROR] {e}"
+
+
 def implement_plan(
     *,
     plan_document_path: Path | str,
