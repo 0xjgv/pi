@@ -101,13 +101,6 @@ def mock_dspy() -> Generator[MagicMock, None, None]:
         yield mock
 
 
-@pytest.fixture
-def mock_dspy_configure() -> Generator[MagicMock, None, None]:
-    """Mock dspy.configure for config tests."""
-    with patch("π.config.dspy") as mock:
-        yield mock
-
-
 # ============================================================================
 # Subprocess Mocks
 # ============================================================================

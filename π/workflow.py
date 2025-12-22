@@ -15,6 +15,7 @@ from claude_agent_sdk.types import (
     ToolUseBlock,
 )
 from rich.console import Console
+from rich.status import Status
 
 from π.agent import get_agent_options
 from π.errors import AgentExecutionError
@@ -26,6 +27,15 @@ _agent_options_var: ContextVar[ClaudeAgentOptions] = ContextVar("agent_options")
 _event_loop_var: ContextVar[asyncio.AbstractEventLoop] = ContextVar("event_loop")
 _session_var: ContextVar[WorkflowSession] = ContextVar("session")
 
+# Shared status for spinner suspension during user input
+_current_status: ContextVar[Status | None] = ContextVar("current_status", default=None)
+
+
+def get_current_status() -> Status | None:
+    """Get the current spinner status (if any) for suspension during user input."""
+    return _current_status.get()
+
+
 # Logger and Console for the workflow
 logger = logging.getLogger(__name__)
 console = Console()
@@ -35,8 +45,12 @@ console = Console()
 def timed_phase(phase_name: str) -> Generator[None, None, None]:
     """Context manager that shows spinner during execution and timing after."""
     start = time.monotonic()
-    with console.status(f"[bold cyan]{phase_name}..."):
-        yield
+    with console.status(f"[bold cyan]{phase_name}...") as status:
+        _current_status.set(status)
+        try:
+            yield
+        finally:
+            _current_status.set(None)
     elapsed = time.monotonic() - start
 
     if elapsed < 60:
@@ -292,7 +306,7 @@ def research_codebase(
 
 def create_plan(
     *,
-    research_document_path: Path,
+    research_document_path: Path | str,
     query: str,
 ) -> str:
     """
@@ -305,6 +319,7 @@ def create_plan(
     Returns:
         A summary of the plan + the file path of the plan document or open questions to the agent.
     """
+    research_document_path = Path(research_document_path)
     # Auto-resume: check for existing session
     session_id = _get_session().get_resumable_session_id(Command.CREATE_PLAN)
     logger.debug(
@@ -341,7 +356,7 @@ def create_plan(
 
 def implement_plan(
     *,
-    plan_document_path: Path,
+    plan_document_path: Path | str,
     query: str,
 ) -> str:
     """
@@ -354,6 +369,7 @@ def implement_plan(
     Returns:
         A summary of the implementation or open questions to the agent.
     """
+    plan_document_path = Path(plan_document_path)
     # Auto-resume: check for existing session
     session_id = _get_session().get_resumable_session_id(Command.IMPLEMENT_PLAN)
     logger.debug(

@@ -41,6 +41,15 @@ async def can_use_tool(
     # TODO: Keep track of the agent TodoWrite to display progress in the CLI
     if tool_name == "AskUserQuestion":
         question = tool_input.get("question", "Agent needs input:")
+
+        # Suspend spinner during user input so prompt is visible
+        # Late import to avoid circular dependency (workflow -> agent -> permissions)
+        from π.workflow import get_current_status
+
+        status = get_current_status()
+        if status:
+            status.stop()
+
         console.print(f"\n[bold yellow]🤔 Agent asks:[/bold yellow] {question}")
         speak("questions")
 
@@ -48,6 +57,10 @@ async def can_use_tool(
         user_response = await asyncio.to_thread(
             console.input, "[bold green]Your response:[/bold green] "
         )
+
+        # Resume spinner after user input
+        if status:
+            status.start()
 
         logger.debug("User responded to AskUserQuestion: %s", user_response[:50])
 

@@ -1,5 +1,5 @@
 from enum import StrEnum
-from logging import Logger
+from functools import lru_cache
 from os import getenv
 
 import dspy
@@ -75,14 +75,20 @@ def get_model(*, provider: Provider, tier: str) -> str:
     return PROVIDER_MODELS[provider][tier]
 
 
-def configure_dspy(*, model: str, logger: Logger) -> None:
-    """Configure DSPy with the specified model."""
-    try:
-        lm = dspy.LM(
-            api_base=getenv("CLIPROXY_API_BASE", "http://localhost:8317"),
-            api_key=getenv("CLIPROXY_API_KEY"),
-            model=model,
-        )
-        dspy.configure(lm=lm)
-    except Exception as e:
-        logger.warning("DSPy LM not configured: %s", e, exc_info=True)
+@lru_cache(maxsize=6)
+def get_lm(provider: Provider, tier: str) -> dspy.LM:
+    """Get cached LM instance for provider/tier combination.
+
+    Args:
+        provider: AI provider (claude, antigravity, openai)
+        tier: Model tier (low, med, high)
+
+    Returns:
+        Configured dspy.LM instance
+    """
+    model = get_model(provider=provider, tier=tier)
+    return dspy.LM(
+        api_base=getenv("CLIPROXY_API_BASE", "http://localhost:8317"),
+        api_key=getenv("CLIPROXY_API_KEY"),
+        model=model,
+    )
