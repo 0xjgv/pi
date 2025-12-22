@@ -1,3 +1,4 @@
+import logging
 from importlib.metadata import version
 
 import click
@@ -5,16 +6,18 @@ import dspy
 from dotenv import load_dotenv
 
 from π.config import Provider, get_lm, get_model
-from π.directory import cleanup_old_logs, get_logs_dir
-from π.router import ExecutionMode, classify_objective
+from π.support import cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import (
+    ExecutionMode,
+    RPIWorkflow,
     clarify_goal,
+    classify_objective,
     create_plan,
-    logger,
     research_codebase,
 )
-from π.workflow_module import RPIWorkflow
+
+logger = logging.getLogger(__name__)  # Use module's own logger
 
 # Load environment variables
 load_dotenv()

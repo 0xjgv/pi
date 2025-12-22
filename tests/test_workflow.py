@@ -9,18 +9,20 @@ import pytest
 from claude_agent_sdk.types import ResultMessage
 
 from π.errors import AgentExecutionError
-from π.session import Command
 from π.workflow import (
+    Command,
+    clarify_goal,
+    create_plan,
+    implement_plan,
+    research_codebase,
+)
+from π.workflow.bridge import (
     _get_agent_options,
     _get_event_loop,
     _get_session,
     _log_result_metrics,
     _log_tool_call,
     _log_tool_result,
-    clarify_goal,
-    create_plan,
-    implement_plan,
-    research_codebase,
     timed_phase,
 )
 
@@ -50,7 +52,7 @@ class TestTimedPhase:
     def test_formats_minutes_correctly(self, capsys: pytest.CaptureFixture):
         """Should format times over 60s as minutes."""
         # Mock time.monotonic to simulate long duration
-        with patch("π.workflow.time") as mock_time:
+        with patch("π.workflow.bridge.time") as mock_time:
             mock_time.monotonic.side_effect = [0, 125]  # 2m 5s
 
             with timed_phase("Long Task"):
@@ -158,7 +160,7 @@ class TestContextVarHelpers:
 
     def test_get_session_creates_new_session(self):
         """Should create new WorkflowSession if none exists."""
-        from π.session import WorkflowSession
+        from π.workflow import WorkflowSession
 
         session = _get_session()
 
@@ -179,7 +181,7 @@ class TestWorkflowFunctions:
     @pytest.fixture
     def mock_execute_task(self) -> Generator[MagicMock, None, None]:
         """Mock _execute_claude_task."""
-        with patch("π.workflow._execute_claude_task") as mock:
+        with patch("π.workflow.bridge._execute_claude_task") as mock:
             mock.return_value = ("Result text", "session-123")
             yield mock
 
@@ -223,8 +225,8 @@ class TestWorkflowFunctions:
 
     def test_implement_plan_validates_plan_doc(self):
         """Should validate plan document is not research doc."""
-        from π.session import WorkflowSession
-        from π.workflow import _session_var
+        from π.workflow import WorkflowSession
+        from π.workflow.bridge import _session_var
 
         # Set up a session with research doc
         session = WorkflowSession()
@@ -251,8 +253,8 @@ class TestWorkflowFunctions:
 
     def test_auto_resumes_existing_session(self, mock_execute_task: MagicMock):
         """Should automatically resume when session exists."""
-        from π.session import WorkflowSession
-        from π.workflow import _session_var
+        from π.workflow import WorkflowSession
+        from π.workflow.bridge import _session_var
 
         session = WorkflowSession()
         session.set_session_id(Command.RESEARCH_CODEBASE, "auto-resume-session")
@@ -265,8 +267,8 @@ class TestWorkflowFunctions:
 
     def test_starts_new_session_when_none_exists(self, mock_execute_task: MagicMock):
         """Should start new session when no prior session exists."""
-        from π.session import WorkflowSession
-        from π.workflow import _session_var
+        from π.workflow import WorkflowSession
+        from π.workflow.bridge import _session_var
 
         session = WorkflowSession()  # Fresh session, no IDs
         _session_var.set(session)
@@ -278,8 +280,8 @@ class TestWorkflowFunctions:
 
     def test_stores_session_for_future_resumption(self, mock_execute_task: MagicMock):
         """Should store session ID for future auto-resumption."""
-        from π.session import WorkflowSession
-        from π.workflow import _session_var
+        from π.workflow import WorkflowSession
+        from π.workflow.bridge import _session_var
 
         mock_execute_task.return_value = ("Result", "new-session-xyz")
         session = WorkflowSession()

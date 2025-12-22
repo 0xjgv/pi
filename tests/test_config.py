@@ -45,7 +45,7 @@ class TestGetLm:
 
     def test_returns_cached_lm(self, configured_env: None):  # noqa: ARG002
         """Should return cached LM instances."""
-        with patch("π.config.dspy") as mock_dspy:
+        with patch("π.config.providers.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
 
             lm1 = get_lm(Provider.Claude, "low")
@@ -56,7 +56,7 @@ class TestGetLm:
 
     def test_different_tiers_return_different_lms(self, configured_env: None):  # noqa: ARG002
         """Different tiers should return different LM instances."""
-        with patch("π.config.dspy") as mock_dspy:
+        with patch("π.config.providers.dspy") as mock_dspy:
             mock_dspy.LM.side_effect = [MagicMock(), MagicMock()]
 
             lm_low = get_lm(Provider.Claude, "low")
@@ -67,7 +67,7 @@ class TestGetLm:
 
     def test_uses_env_vars_for_api(self, configured_env: None):  # noqa: ARG002
         """Should use CLIPROXY_API_BASE and CLIPROXY_API_KEY from env."""
-        with patch("π.config.dspy") as mock_dspy:
+        with patch("π.config.providers.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
 
             get_lm(Provider.Claude, "low")
@@ -78,7 +78,7 @@ class TestGetLm:
 
     def test_defaults_to_localhost(self, clean_env: None):  # noqa: ARG002
         """Should default to localhost:8317 when no env var set."""
-        with patch("π.config.dspy") as mock_dspy:
+        with patch("π.config.providers.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
 
             get_lm(Provider.Claude, "low")

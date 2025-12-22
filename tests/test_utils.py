@@ -2,7 +2,7 @@
 
 import logging
 
-from π.directory import get_logs_dir
+from π.support import get_logs_dir
 from π.utils import setup_logging
 
 

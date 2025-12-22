@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from π.directory import cleanup_old_logs, get_logs_dir
+from π.support import cleanup_old_logs, get_logs_dir
 
 
 class TestGetLogsDir:

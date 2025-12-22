@@ -23,7 +23,7 @@ class TestFullWorkflowIntegration:
     @pytest.fixture
     def mock_claude_responses(self) -> Generator[AsyncMock, None, None]:
         """Set up complete mock for Claude SDK."""
-        with patch("π.workflow.ClaudeSDKClient") as mock_client_class:
+        with patch("π.workflow.bridge.ClaudeSDKClient") as mock_client_class:
             # Create async mock client
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
@@ -63,7 +63,7 @@ class TestFullWorkflowIntegration:
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """CLI should initialize DSPy and run agent successfully."""
-        from π.router import ExecutionMode
+        from π.workflow import ExecutionMode
 
         with patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE):
             result = runner.invoke(main, ["test objective", "-t", "low"])
@@ -79,11 +79,11 @@ class TestFullWorkflowIntegration:
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """Agent options should be correctly configured."""
-        from π.router import ExecutionMode
+        from π.workflow import ExecutionMode
 
         with (
             patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE),
-            patch("π.workflow._get_agent_options") as mock_opts,
+            patch("π.workflow.bridge._get_agent_options") as mock_opts,
         ):
             from claude_agent_sdk import ClaudeAgentOptions
 
@@ -180,8 +180,8 @@ class TestSessionStateIntegration:
 
     def test_session_persists_across_workflow_calls(self):
         """Session state should persist across multiple workflow calls."""
-        from π.session import Command, WorkflowSession
-        from π.workflow import _get_session, _session_var
+        from π.workflow import Command, WorkflowSession
+        from π.workflow.bridge import _get_session, _session_var
 
         # Clear any existing session
         try:
@@ -198,7 +198,7 @@ class TestSessionStateIntegration:
 
     def test_command_map_built_correctly(self):
         """Command map should be built from actual command files."""
-        from π.session import COMMAND_MAP, Command
+        from π.workflow import COMMAND_MAP, Command
 
         # Should have entries for commands that have files
         # (depends on actual .claude/commands/ content)
@@ -227,7 +227,7 @@ class TestLogCleanupIntegration:
         """CLI should cleanup old application logs at startup."""
         from datetime import datetime, timedelta
 
-        from π.router import ExecutionMode
+        from π.workflow import ExecutionMode
 
         # Create test log directory
         logs_dir = tmp_path / ".π" / "logs"
@@ -296,7 +296,7 @@ class TestLogCleanupIntegration:
         monkeypatch: pytest.MonkeyPatch,
     ):
         """Cleanup should handle empty log directories gracefully."""
-        from π.router import ExecutionMode
+        from π.workflow import ExecutionMode
 
         # Create empty log directory
         logs_dir = tmp_path / ".π" / "logs"

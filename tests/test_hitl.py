@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from π.hitl import ConsoleInputProvider, create_ask_human_tool
+from π.support import ConsoleInputProvider, create_ask_human_tool
 
 
 class TestConsoleInputProvider:
@@ -27,7 +27,7 @@ class TestConsoleInputProvider:
         mock_console = MagicMock()
         provider = ConsoleInputProvider(console=mock_console)
 
-        with patch("π.hitl.Prompt.ask", return_value="user response"):
+        with patch("π.support.hitl.Prompt.ask", return_value="user response"):
             provider.ask("What is your goal?")
 
         # Verify console.print was called with the question
@@ -38,7 +38,7 @@ class TestConsoleInputProvider:
         """Should return the user's response."""
         provider = ConsoleInputProvider(console=MagicMock())
 
-        with patch("π.hitl.Prompt.ask", return_value="Add authentication"):
+        with patch("π.support.hitl.Prompt.ask", return_value="Add authentication"):
             result = provider.ask("What feature do you want?")
 
         assert result == "Add authentication"
@@ -47,7 +47,7 @@ class TestConsoleInputProvider:
         """Should use Rich Prompt for input."""
         provider = ConsoleInputProvider(console=MagicMock())
 
-        with patch("π.hitl.Prompt.ask") as mock_ask:
+        with patch("π.support.hitl.Prompt.ask") as mock_ask:
             mock_ask.return_value = "response"
             provider.ask("Question?")
 

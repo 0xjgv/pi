@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from π.cli import AgentTask, main
-from π.router import ExecutionMode
+from π.workflow import ExecutionMode
 
 
 class TestAgentTask:

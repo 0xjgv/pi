@@ -49,7 +49,7 @@ def typescript_project(tmp_path: Path) -> Path:
 @pytest.fixture
 def mock_claude_client() -> Generator[MagicMock, None, None]:
     """Mock ClaudeSDKClient for workflow tests."""
-    with patch("π.workflow.ClaudeSDKClient") as mock_class:
+    with patch("π.workflow.bridge.ClaudeSDKClient") as mock_class:
         mock_client = AsyncMock()
         mock_class.return_value.__aenter__.return_value = mock_client
         mock_class.return_value.__aexit__.return_value = None

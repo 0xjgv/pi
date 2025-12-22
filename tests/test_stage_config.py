@@ -4,7 +4,7 @@ import dataclasses
 
 import pytest
 
-from π.stage_config import DEFAULT_STAGE_CONFIGS, Stage, StageConfig
+from π.config import DEFAULT_STAGE_CONFIGS, Stage, StageConfig
 
 
 class TestStage:

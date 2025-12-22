@@ -5,8 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from π.config import Provider
-from π.stage_config import DEFAULT_STAGE_CONFIGS, Stage, StageConfig
+from π.config import Provider, DEFAULT_STAGE_CONFIGS, Stage, StageConfig
 
 
 class TestPiWorkflowInit:
@@ -15,7 +14,7 @@ class TestPiWorkflowInit:
     @pytest.fixture
     def mock_dspy(self) -> Generator[MagicMock, None, None]:
         """Mock dspy module."""
-        with patch("π.workflow_module.dspy") as mock:
+        with patch("π.workflow.module.dspy") as mock:
             mock.ReAct.return_value = MagicMock()
             mock.context.return_value.__enter__ = MagicMock()
             mock.context.return_value.__exit__ = MagicMock()
@@ -23,7 +22,7 @@ class TestPiWorkflowInit:
 
     def test_creates_with_default_provider(self, mock_dspy: MagicMock):
         """Should default to Claude provider."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         workflow = RPIWorkflow()
 
@@ -31,7 +30,7 @@ class TestPiWorkflowInit:
 
     def test_accepts_custom_provider(self, mock_dspy: MagicMock):
         """Should accept Antigravity provider."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         workflow = RPIWorkflow(provider=Provider.Antigravity)
 
@@ -39,7 +38,7 @@ class TestPiWorkflowInit:
 
     def test_uses_default_stage_configs(self, mock_dspy: MagicMock):
         """Should use DEFAULT_STAGE_CONFIGS when none provided."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         workflow = RPIWorkflow()
 
@@ -47,7 +46,7 @@ class TestPiWorkflowInit:
 
     def test_accepts_custom_stage_configs(self, mock_dspy: MagicMock):
         """Should merge custom configs with defaults."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         custom_configs = {
             Stage.PLAN: StageConfig(model_tier="med", max_iters=10),
@@ -63,7 +62,7 @@ class TestPiWorkflowInit:
 
     def test_creates_five_react_agents(self, mock_dspy: MagicMock):
         """Should create one ReAct agent per stage."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         RPIWorkflow()
 
@@ -72,7 +71,7 @@ class TestPiWorkflowInit:
 
     def test_clarify_agent_has_ask_human_tool(self, mock_dspy: MagicMock):
         """Clarify agent should include ask_human tool."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         RPIWorkflow()
 
@@ -85,7 +84,7 @@ class TestPiWorkflowInit:
 
     def test_research_agent_no_ask_human(self, mock_dspy: MagicMock):
         """Non-clarify agents should not have ask_human tool."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         RPIWorkflow()
 
@@ -98,7 +97,7 @@ class TestPiWorkflowInit:
 
     def test_accepts_custom_human_input_provider(self, mock_dspy: MagicMock):
         """Should accept custom HITL provider."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         mock_provider = MagicMock()
 
@@ -114,12 +113,12 @@ class TestPiWorkflowStageExecution:
     def mock_workflow_deps(self) -> Generator[dict, None, None]:
         """Mock all workflow dependencies."""
         with (
-            patch("π.workflow_module.dspy") as mock_dspy,
-            patch("π.workflow_module.clarify_goal") as mock_clarify,
-            patch("π.workflow_module.research_codebase") as mock_research,
-            patch("π.workflow_module.create_plan") as mock_plan,
-            patch("π.workflow_module.implement_plan") as mock_impl,
-            patch("π.workflow_module.get_lm") as mock_get_lm,
+            patch("π.workflow.module.dspy") as mock_dspy,
+            patch("π.workflow.module.clarify_goal") as mock_clarify,
+            patch("π.workflow.module.research_codebase") as mock_research,
+            patch("π.workflow.module.create_plan") as mock_plan,
+            patch("π.workflow.module.implement_plan") as mock_impl,
+            patch("π.workflow.module.get_lm") as mock_get_lm,
         ):
             # Setup ReAct mock to return predictions
             mock_react_instance = MagicMock()
@@ -140,7 +139,7 @@ class TestPiWorkflowStageExecution:
 
     def test_forward_executes_all_stages(self, mock_workflow_deps: dict):
         """forward() should execute all five stages."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         mock_workflow_deps["react"].return_value = MagicMock(
             clarified_objective="clarified",
@@ -158,7 +157,7 @@ class TestPiWorkflowStageExecution:
 
     def test_forward_enforces_stage_order(self, mock_workflow_deps: dict):
         """Stages must execute in order: clarify → research → plan → implement."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         call_order = []
 
@@ -189,7 +188,7 @@ class TestPiWorkflowStageExecution:
         self, mock_workflow_deps: dict
     ):
         """Research/plan/implement should use clarified objective."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         calls = []
 
@@ -218,7 +217,7 @@ class TestPiWorkflowStageExecution:
 
     def test_passes_research_doc_to_plan(self, mock_workflow_deps: dict):
         """Plan stage should receive research_doc_path."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         calls = []
 
@@ -243,7 +242,7 @@ class TestPiWorkflowStageExecution:
 
     def test_passes_plan_doc_to_implement(self, mock_workflow_deps: dict):
         """Implement stage should receive plan_doc_path."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         calls = []
 
@@ -274,12 +273,12 @@ class TestPiWorkflowModelSelection:
     def mock_deps(self) -> Generator[dict, None, None]:
         """Mock dependencies for model selection tests."""
         with (
-            patch("π.workflow_module.dspy") as mock_dspy,
-            patch("π.workflow_module.get_lm") as mock_get_lm,
-            patch("π.workflow_module.clarify_goal"),
-            patch("π.workflow_module.research_codebase"),
-            patch("π.workflow_module.create_plan"),
-            patch("π.workflow_module.implement_plan"),
+            patch("π.workflow.module.dspy") as mock_dspy,
+            patch("π.workflow.module.get_lm") as mock_get_lm,
+            patch("π.workflow.module.clarify_goal"),
+            patch("π.workflow.module.research_codebase"),
+            patch("π.workflow.module.create_plan"),
+            patch("π.workflow.module.implement_plan"),
         ):
             mock_react = MagicMock()
             mock_react.return_value = MagicMock(
@@ -296,7 +295,7 @@ class TestPiWorkflowModelSelection:
 
     def test_uses_different_models_per_stage(self, mock_deps: dict):
         """Each stage should request its configured model tier."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         workflow = RPIWorkflow()
         workflow(objective="test")
@@ -310,7 +309,7 @@ class TestPiWorkflowModelSelection:
 
     def test_uses_dspy_context_for_model_override(self, mock_deps: dict):
         """Should use dspy.context() for per-stage model."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         workflow = RPIWorkflow()
         workflow(objective="test")
@@ -320,7 +319,7 @@ class TestPiWorkflowModelSelection:
 
     def test_custom_stage_config_changes_model(self, mock_deps: dict):
         """Custom stage config should change model tier."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         custom = {
             Stage.CLARIFY: StageConfig(model_tier="high", max_iters=2),
@@ -341,12 +340,12 @@ class TestPiWorkflowPrediction:
     def mock_deps(self) -> Generator[dict, None, None]:
         """Mock dependencies."""
         with (
-            patch("π.workflow_module.dspy") as mock_dspy,
-            patch("π.workflow_module.get_lm"),
-            patch("π.workflow_module.clarify_goal"),
-            patch("π.workflow_module.research_codebase"),
-            patch("π.workflow_module.create_plan"),
-            patch("π.workflow_module.implement_plan"),
+            patch("π.workflow.module.dspy") as mock_dspy,
+            patch("π.workflow.module.get_lm"),
+            patch("π.workflow.module.clarify_goal"),
+            patch("π.workflow.module.research_codebase"),
+            patch("π.workflow.module.create_plan"),
+            patch("π.workflow.module.implement_plan"),
         ):
             mock_react = MagicMock()
             mock_dspy.ReAct.return_value = mock_react
@@ -365,7 +364,7 @@ class TestPiWorkflowPrediction:
 
     def test_returns_prediction_with_all_outputs(self, mock_deps: dict):
         """forward() should return Prediction with all stage outputs."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         mock_deps["react"].side_effect = [
             MagicMock(clarified_objective="The clarified goal"),
@@ -385,7 +384,7 @@ class TestPiWorkflowPrediction:
 
     def test_returns_clarified_objective(self, mock_deps: dict):
         """Result should contain the clarified objective."""
-        from π.workflow_module import RPIWorkflow
+        from π.workflow import RPIWorkflow
 
         mock_result = MagicMock(
             clarified_objective="Clarified: Add Redis caching",

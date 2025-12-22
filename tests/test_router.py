@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from π.config import Provider
-from π.router import ExecutionMode, ObjectiveRouter, classify_objective
+from π.workflow import ExecutionMode, classify_objective
+from π.workflow.router import ObjectiveRouter
 
 
 class TestExecutionMode:
@@ -50,13 +51,13 @@ class TestClassifyObjective:
     @pytest.fixture
     def mock_dspy(self) -> Generator[MagicMock, None, None]:
         """Mock dspy module."""
-        with patch("π.router.dspy") as mock:
+        with patch("π.workflow.router.dspy") as mock:
             yield mock
 
     @pytest.fixture
     def mock_config(self) -> Generator[MagicMock, None, None]:
         """Mock config functions."""
-        with patch("π.router.get_lm") as mock_get_lm:
+        with patch("π.workflow.router.get_lm") as mock_get_lm:
             mock_get_lm.return_value = MagicMock()
             yield {"get_lm": mock_get_lm}
 

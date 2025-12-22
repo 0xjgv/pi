@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from π.session import (
+from π.workflow import (
     Command,
     WorkflowSession,
     build_command_map,

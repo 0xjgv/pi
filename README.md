@@ -102,19 +102,35 @@ make unlink                    # Removes symlink from ~/.local/bin
 ## Project Structure
 
 ```
-π/                    # Main package
-├── cli.py            # CLI entry + DSPy ReAct orchestration
-├── agent.py          # Agent configuration factory
-├── session.py        # Workflow state management
-├── hooks/            # Pre/PostToolUse validation
-│   ├── safety.py     # Dangerous command blocking
-│   ├── checkers.py   # Language-specific linters
-│   └── registry.py   # Checker registration
-└── utils.py          # Logging helpers
+π/                              # Main package
+├── cli.py                      # CLI entry + DSPy ReAct orchestration
+├── errors.py                   # Package-wide exceptions
+├── utils.py                    # Core utilities
+├── workflow/                   # Core workflow execution
+│   ├── bridge.py               # Sync-async bridge
+│   ├── module.py               # DSPy workflow module
+│   ├── router.py               # Objective classifier
+│   └── session.py              # Workflow state management
+├── config/                     # Configuration
+│   ├── providers.py            # Provider/model setup
+│   ├── stages.py               # Stage definitions
+│   └── agent.py                # Agent options factory
+├── optimization/               # GEPA optimization
+│   ├── metrics.py              # Plan quality metrics
+│   ├── optimizer.py            # GEPA utilities
+│   └── training.py             # Training data loading
+├── support/                    # Supporting infrastructure
+│   ├── directory.py            # Log management
+│   ├── permissions.py          # Tool permissions
+│   └── hitl.py                 # Human-in-the-loop
+└── hooks/                      # Pre/PostToolUse validation
+    ├── safety.py               # Dangerous command blocking
+    ├── checkers.py             # Language-specific linters
+    └── registry.py             # Checker registration
 
 .claude/
-├── agents/           # Sub-agent definitions
-└── commands/         # Slash commands (phases 1-4)
+├── agents/                     # Sub-agent definitions
+└── commands/                   # Slash commands (phases 1-5)
 ```
 
 ## Sub-Agents
