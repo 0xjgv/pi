@@ -5,7 +5,7 @@ import dspy
 from dotenv import load_dotenv
 
 from π.config import Provider, get_lm, get_model
-from π.directory import get_logs_dir
+from π.directory import cleanup_old_logs, get_logs_dir
 from π.router import ExecutionMode, classify_objective
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import (
@@ -31,7 +31,6 @@ def run_simple_mode(
     objective: str,
     provider: Provider,
     tier: str,
-    log_path: str,
 ) -> None:
     """Execute objective using simple ReAct agent."""
     model = get_model(provider=provider, tier=tier)
@@ -52,7 +51,7 @@ def run_simple_mode(
     click.echo(f"\nFinal Answer: {result.output}")
 
 
-def run_workflow_mode(objective: str, provider: Provider, log_path: str) -> None:
+def run_workflow_mode(objective: str, provider: Provider) -> None:
     """Execute objective using RPIWorkflow pipeline."""
     click.echo(f"[Workflow Mode] Using {provider} with per-stage models")
     click.echo("  Stages: Clarify(low) → Research(high) → Plan(high) → Implement(med)")
@@ -95,7 +94,9 @@ def run_workflow_mode(objective: str, provider: Provider, log_path: str) -> None
 def main(objective: str, thinking: str, provider: str, mode: str) -> None:
     """Run the π agent with the given OBJECTIVE."""
     provider_enum = Provider(provider.lower())
-    log_path = setup_logging(get_logs_dir())
+    logs_dir = get_logs_dir()
+    cleanup_old_logs(logs_dir)  # Clean old logs first
+    log_path = setup_logging(logs_dir)
 
     click.echo(f"Objective: '{objective}'")
     click.echo(f"Logging to: {log_path}")
@@ -115,9 +116,9 @@ def main(objective: str, thinking: str, provider: str, mode: str) -> None:
 
     # Execute based on mode
     if exec_mode == ExecutionMode.SIMPLE:
-        run_simple_mode(objective, provider_enum, thinking.lower(), log_path)
+        run_simple_mode(objective, provider_enum, thinking.lower())
     else:
-        run_workflow_mode(objective, provider_enum, log_path)
+        run_workflow_mode(objective, provider_enum)
 
     speak("π complete")
 
