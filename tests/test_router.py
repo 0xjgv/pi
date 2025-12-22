@@ -56,12 +56,9 @@ class TestClassifyObjective:
     @pytest.fixture
     def mock_config(self) -> Generator[MagicMock, None, None]:
         """Mock config functions."""
-        with (
-            patch("π.router.get_model") as mock_get_model,
-            patch("π.router.configure_dspy") as mock_configure,
-        ):
-            mock_get_model.return_value = "claude-haiku-4-5-20251001"
-            yield {"get_model": mock_get_model, "configure_dspy": mock_configure}
+        with patch("π.router.get_lm") as mock_get_lm:
+            mock_get_lm.return_value = MagicMock()
+            yield {"get_lm": mock_get_lm}
 
     def test_uses_low_tier_model(self, mock_dspy: MagicMock, mock_config: dict):
         """Router should always use low-tier model for fast classification."""
@@ -72,7 +69,7 @@ class TestClassifyObjective:
 
         classify_objective("test", provider=Provider.Claude, logger=logger)
 
-        mock_config["get_model"].assert_called_once_with(
+        mock_config["get_lm"].assert_called_once_with(
             provider=Provider.Claude, tier="low"
         )
 
@@ -148,6 +145,17 @@ class TestClassifyObjective:
 
         classify_objective("test", provider=Provider.Antigravity, logger=logger)
 
-        mock_config["get_model"].assert_called_once_with(
+        mock_config["get_lm"].assert_called_once_with(
             provider=Provider.Antigravity, tier="low"
         )
+
+    def test_uses_dspy_context(self, mock_dspy: MagicMock, mock_config: dict):
+        """Should use dspy.context() for scoped LM usage."""
+        mock_dspy.ChainOfThought.return_value.return_value = MagicMock(
+            mode="simple", reasoning="test"
+        )
+        logger = MagicMock()
+
+        classify_objective("test", provider=Provider.Claude, logger=logger)
+
+        mock_dspy.context.assert_called_once_with(lm=mock_config["get_lm"].return_value)

@@ -6,7 +6,7 @@ from typing import Literal
 
 import dspy
 
-from π.config import Provider, configure_dspy, get_model
+from π.config import Provider, get_lm
 
 
 class ExecutionMode(StrEnum):
@@ -46,11 +46,11 @@ def classify_objective(
     Returns:
         ExecutionMode.SIMPLE or ExecutionMode.WORKFLOW
     """
-    model = get_model(provider=provider, tier="low")
-    configure_dspy(model=model, logger=logger)
-
+    lm = get_lm(provider=provider, tier="low")
     router = dspy.ChainOfThought(ObjectiveRouter)
-    result = router(objective=objective)
+
+    with dspy.context(lm=lm):
+        result = router(objective=objective)
 
     logger.debug("Router: %s (reason: %s)", result.mode, result.reasoning[:100])
     return ExecutionMode(result.mode)

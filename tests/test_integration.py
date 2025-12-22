@@ -65,10 +65,7 @@ class TestFullWorkflowIntegration:
         """CLI should initialize DSPy and run agent successfully."""
         from π.router import ExecutionMode
 
-        with (
-            patch("π.cli.configure_dspy"),
-            patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE),
-        ):
+        with patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE):
             result = runner.invoke(main, ["test objective", "-t", "low"])
 
         assert result.exit_code == 0
@@ -85,7 +82,6 @@ class TestFullWorkflowIntegration:
         from π.router import ExecutionMode
 
         with (
-            patch("π.cli.configure_dspy"),
             patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE),
             patch("π.workflow._get_agent_options") as mock_opts,
         ):
@@ -108,8 +104,7 @@ class TestFullWorkflowIntegration:
         """Errors should be handled gracefully."""
         mock_dspy_agent.ReAct.return_value.side_effect = Exception("Agent error")
 
-        with patch("π.cli.configure_dspy"):
-            result = runner.invoke(main, ["test"])
+        result = runner.invoke(main, ["test"])
 
         # Should not crash, but may show error
         assert result.exit_code != 0 or "error" in result.output.lower()

@@ -4,12 +4,9 @@ Provides PiWorkflow, a structured dspy.Module that enforces
 sequential stage execution with per-stage model selection.
 """
 
-from functools import lru_cache
-from os import getenv
-
 import dspy
 
-from π.config import Provider, get_model
+from π.config import Provider, get_lm
 from π.hitl import ConsoleInputProvider, HumanInputProvider, create_ask_human_tool
 from π.stage_config import DEFAULT_STAGE_CONFIGS, Stage, StageConfig
 from π.workflow import clarify_goal, create_plan, implement_plan, research_codebase
@@ -56,30 +53,6 @@ class ImplementSignature(dspy.Signature):
     plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
     implementation_summary: str = dspy.OutputField(
         desc="Summary of the implementation changes made"
-    )
-
-
-# -----------------------------------------------------------------------------
-# LM Factory
-# -----------------------------------------------------------------------------
-
-
-@lru_cache(maxsize=6)
-def get_lm(provider: Provider, tier: str) -> dspy.LM:
-    """Get cached LM instance for provider/tier combination.
-
-    Args:
-        provider: AI provider (claude, antigravity, openai)
-        tier: Model tier (low, med, high)
-
-    Returns:
-        Configured dspy.LM instance
-    """
-    model = get_model(provider=provider, tier=tier)
-    return dspy.LM(
-        api_base=getenv("CLIPROXY_API_BASE", "http://localhost:8317"),
-        api_key=getenv("CLIPROXY_API_KEY"),
-        model=model,
     )
 
 

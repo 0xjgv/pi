@@ -86,8 +86,7 @@ class TestMain:
         mock_router: MagicMock,  # noqa: ARG002
     ):
         """Should default to 'low' thinking level in simple mode."""
-        with patch("π.cli.configure_dspy"):
-            result = runner.invoke(main, ["test"])
+        result = runner.invoke(main, ["test"])
 
         assert "claude/low" in result.output
 
@@ -167,8 +166,7 @@ class TestMain:
         mock_router: MagicMock,  # noqa: ARG002
     ):
         """Should default to claude provider."""
-        with patch("π.cli.configure_dspy"):
-            result = runner.invoke(main, ["test"])
+        result = runner.invoke(main, ["test"])
 
         assert "claude" in result.output.lower()
 

@@ -1,7 +1,6 @@
 """Tests for π.config module."""
 
-import logging
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -9,7 +8,7 @@ from π.config import (
     DEFAULT_MODELS,
     PROVIDER_MODELS,
     Provider,
-    configure_dspy,
+    get_lm,
     get_model,
 )
 
@@ -34,55 +33,58 @@ class TestThinkingModels:
             assert "claude" in model.lower(), f"{level} model doesn't contain 'claude'"
 
 
-class TestConfigureDspy:
-    """Tests for configure_dspy function."""
+class TestGetLm:
+    """Tests for get_lm function."""
 
-    def test_configures_with_default_model(self, mock_dspy_configure: MagicMock):
-        """Should configure DSPy with the provided model."""
-        logger = logging.getLogger("test")
+    @pytest.fixture(autouse=True)
+    def clear_lru_cache(self):
+        """Clear LRU cache before each test."""
+        get_lm.cache_clear()
+        yield
+        get_lm.cache_clear()
 
-        configure_dspy(model="claude-haiku-4-5-20251001", logger=logger)
+    def test_returns_cached_lm(self, configured_env: None):  # noqa: ARG002
+        """Should return cached LM instances."""
+        with patch("π.config.dspy") as mock_dspy:
+            mock_dspy.LM.return_value = MagicMock()
 
-        mock_dspy_configure.LM.assert_called_once()
-        mock_dspy_configure.configure.assert_called_once()
+            lm1 = get_lm(Provider.Claude, "low")
+            lm2 = get_lm(Provider.Claude, "low")
 
-    def test_uses_env_vars_for_api(
-        self,
-        mock_dspy_configure: MagicMock,
-        configured_env: None,  # noqa: ARG002
-    ):
+            assert lm1 is lm2
+            mock_dspy.LM.assert_called_once()
+
+    def test_different_tiers_return_different_lms(self, configured_env: None):  # noqa: ARG002
+        """Different tiers should return different LM instances."""
+        with patch("π.config.dspy") as mock_dspy:
+            mock_dspy.LM.side_effect = [MagicMock(), MagicMock()]
+
+            lm_low = get_lm(Provider.Claude, "low")
+            lm_high = get_lm(Provider.Claude, "high")
+
+            assert lm_low is not lm_high
+            assert mock_dspy.LM.call_count == 2
+
+    def test_uses_env_vars_for_api(self, configured_env: None):  # noqa: ARG002
         """Should use CLIPROXY_API_BASE and CLIPROXY_API_KEY from env."""
-        logger = logging.getLogger("test")
+        with patch("π.config.dspy") as mock_dspy:
+            mock_dspy.LM.return_value = MagicMock()
 
-        configure_dspy(model="test-model", logger=logger)
+            get_lm(Provider.Claude, "low")
 
-        call_kwargs = mock_dspy_configure.LM.call_args
-        assert call_kwargs.kwargs["api_base"] == "http://test:8317"
-        assert call_kwargs.kwargs["api_key"] == "test-key"
+            call_kwargs = mock_dspy.LM.call_args
+            assert call_kwargs.kwargs["api_base"] == "http://test:8317"
+            assert call_kwargs.kwargs["api_key"] == "test-key"
 
-    def test_logs_warning_on_exception(self, mock_dspy_configure: MagicMock):
-        """Should log warning when DSPy configuration fails."""
-        mock_dspy_configure.LM.side_effect = Exception("Connection failed")
-        logger = MagicMock(spec=logging.Logger)
-
-        # Should not raise
-        configure_dspy(model="test-model", logger=logger)
-
-        logger.warning.assert_called_once()
-        assert "DSPy LM not configured" in logger.warning.call_args[0][0]
-
-    def test_defaults_to_localhost(
-        self,
-        mock_dspy_configure: MagicMock,
-        clean_env: None,  # noqa: ARG002
-    ):
+    def test_defaults_to_localhost(self, clean_env: None):  # noqa: ARG002
         """Should default to localhost:8317 when no env var set."""
-        logger = logging.getLogger("test")
+        with patch("π.config.dspy") as mock_dspy:
+            mock_dspy.LM.return_value = MagicMock()
 
-        configure_dspy(model="test-model", logger=logger)
+            get_lm(Provider.Claude, "low")
 
-        call_kwargs = mock_dspy_configure.LM.call_args
-        assert "localhost:8317" in call_kwargs.kwargs["api_base"]
+            call_kwargs = mock_dspy.LM.call_args
+            assert "localhost:8317" in call_kwargs.kwargs["api_base"]
 
 
 class TestProviderModels:

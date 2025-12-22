@@ -1,6 +1,6 @@
 [project]
 name = "pi-rpi"
-version = "0.1.0"
+version = "0.1.1"
 description = "Research, plan, & implement workflows for Claude agents"
 readme = "README.md"
 license = "MIT"

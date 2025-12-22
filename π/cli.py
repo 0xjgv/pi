@@ -1,8 +1,10 @@
+from importlib.metadata import version
+
 import click
 import dspy
 from dotenv import load_dotenv
 
-from π.config import Provider, configure_dspy, get_model
+from π.config import Provider, get_lm, get_model
 from π.directory import get_logs_dir
 from π.router import ExecutionMode, classify_objective
 from π.utils import prevent_sleep, setup_logging, speak
@@ -33,16 +35,19 @@ def run_simple_mode(
 ) -> None:
     """Execute objective using simple ReAct agent."""
     model = get_model(provider=provider, tier=tier)
-    configure_dspy(model=model, logger=logger)
+    lm = get_lm(provider=provider, tier=tier)
 
     click.echo(f"[Simple Mode] Using {provider}/{tier}")
     click.echo(f"Model: {model}")
 
     agent = dspy.ReAct(
+        # tools=[research_codebase, clarify_goal, create_plan, implement_plan],
         tools=[research_codebase, clarify_goal, create_plan],
         signature=AgentTask,
     )
-    result = agent(objective=objective)
+
+    with dspy.context(lm=lm):
+        result = agent(objective=objective)
 
     click.echo(f"\nFinal Answer: {result.output}")
 
@@ -63,6 +68,7 @@ def run_workflow_mode(objective: str, provider: Provider, log_path: str) -> None
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(version=version("pi-rpi"), prog_name="π")
 @click.argument("objective")
 @click.option(
     "--thinking",
