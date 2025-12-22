@@ -1,6 +1,5 @@
 ---
 description: Clarify goals through guided questioning to produce precise queries
-model: opus
 ---
 # Clarify Goal
 

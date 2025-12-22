@@ -1,6 +1,5 @@
 ---
 description: Implement technical plans from thoughts/shared/plans with verification
-model: sonnet
 ---
 # Implement Plan
 

@@ -1,6 +1,5 @@
 ---
 description: Review existing implementation plans for completeness and accuracy
-model: opus
 ---
 # Review Implementation Plan
 
