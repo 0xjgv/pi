@@ -82,8 +82,11 @@ class TestFullWorkflowIntegration:
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """Agent options should be correctly configured."""
+        from π.router import ExecutionMode
+
         with (
             patch("π.cli.configure_dspy"),
+            patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE),
             patch("π.workflow._get_agent_options") as mock_opts,
         ):
             from claude_agent_sdk import ClaudeAgentOptions
