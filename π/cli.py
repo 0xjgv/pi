@@ -92,7 +92,9 @@ def run_workflow_mode(objective: str, provider: Provider) -> None:
 )
 @click.pass_context
 @prevent_sleep
-def main(ctx: click.Context, objective: str | None, thinking: str, provider: str, mode: str) -> None:
+def main(
+    ctx: click.Context, objective: str | None, thinking: str, provider: str, mode: str
+) -> None:
     """Run the π agent with the given OBJECTIVE."""
     if not objective:
         click.echo(ctx.get_help())
