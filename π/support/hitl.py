@@ -1,9 +1,14 @@
 """Human-in-the-loop (HITL) providers for π workflow."""
 
+import logging
 from typing import Protocol
 
 from rich.console import Console
 from rich.prompt import Prompt
+
+from π.utils import speak
+
+logger = logging.getLogger(__name__)
 
 
 class HumanInputProvider(Protocol):
@@ -48,9 +53,15 @@ class ConsoleInputProvider:
         Returns:
             User's typed response
         """
+        logger.debug("HITL question: %s", question)
+
         self.console.print("\n[bold yellow]Clarification needed:[/bold yellow]")
         self.console.print(f"  {question}\n")
-        return Prompt.ask("[bold green]Your answer[/bold green]")
+        speak("clarification")
+
+        response = Prompt.ask("[bold green]Your answer[/bold green]")
+        logger.debug("HITL response: %s", response[:50] if len(response) > 50 else response)
+        return response
 
 
 def create_ask_human_tool(provider: HumanInputProvider):
