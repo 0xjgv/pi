@@ -67,8 +67,8 @@ def run_workflow_mode(objective: str, provider: Provider) -> None:
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(version=version("pi-rpi"), prog_name="π")
-@click.argument("objective")
+@click.version_option(version("pi-rpi"), "-v", "--version", prog_name="π")
+@click.argument("objective", required=False)
 @click.option(
     "--thinking",
     "-t",
@@ -90,9 +90,14 @@ def run_workflow_mode(objective: str, provider: Provider) -> None:
     help="Execution mode: auto uses router, or force simple/workflow",
     default="auto",
 )
+@click.pass_context
 @prevent_sleep
-def main(objective: str, thinking: str, provider: str, mode: str) -> None:
+def main(ctx: click.Context, objective: str | None, thinking: str, provider: str, mode: str) -> None:
     """Run the π agent with the given OBJECTIVE."""
+    if not objective:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
+
     provider_enum = Provider(provider.lower())
     logs_dir = get_logs_dir()
     cleanup_old_logs(logs_dir)  # Clean old logs first
