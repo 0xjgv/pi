@@ -29,19 +29,11 @@ DEFAULT_OPTIMIZED_PATH = Path("π/optimized_workflow.json")
 # -----------------------------------------------------------------------------
 
 
-class ClarifySignature(dspy.Signature):
-    """Clarify the user's objective through interactive questioning."""
-
-    objective: str = dspy.InputField(desc="The user's original objective or task")
-    clarified_objective: str = dspy.OutputField(
-        desc="The refined, unambiguous objective after clarification"
-    )
-
-
 class ResearchSignature(dspy.Signature):
     """Research the codebase to understand patterns and architecture."""
 
     objective: str = dspy.InputField(desc="The clarified objective to research")
+
     research_summary: str = dspy.OutputField(
         desc="Summary of research findings about the codebase"
     )
@@ -55,6 +47,7 @@ class PlanSignature(dspy.Signature):
 
     objective: str = dspy.InputField(desc="The clarified objective to plan for")
     research_doc_path: str = dspy.InputField(desc="Path to the research document")
+
     plan_summary: str = dspy.OutputField(desc="Summary of the implementation plan")
     plan_doc_path: str = dspy.OutputField(desc="Path to the detailed plan document")
 
@@ -63,17 +56,17 @@ class ReviewPlanSignature(dspy.Signature):
     """Review the plan to ensure it is complete and accurate."""
 
     plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
+
     review_summary: str = dspy.OutputField(desc="Summary of the plan review")
 
 
-class ImplementSignature(dspy.Signature):
+class IteratePlanSignature(dspy.Signature):
     """Implement the plan by making code changes."""
 
-    objective: str = dspy.InputField(desc="The clarified objective to implement")
+    objective: str = dspy.InputField(desc="The clarified objective to iterate")
     plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
-    implementation_summary: str = dspy.OutputField(
-        desc="Summary of the implementation changes made"
-    )
+
+    iteration_summary: str = dspy.OutputField(desc="Summary of the plan iteration")
 
 
 # -----------------------------------------------------------------------------
