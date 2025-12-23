@@ -30,29 +30,25 @@ class StageConfig:
 
 
 DEFAULT_STAGE_CONFIGS: dict[Stage, StageConfig] = {
-    Stage.CLARIFY: StageConfig(
-        model_tier="low",
-        max_iters=5,
-        description="Fast model for human interaction loops",
-    ),
     Stage.RESEARCH: StageConfig(
+        description="Powerful model for deep codebase exploration",
         model_tier="high",
         max_iters=3,
-        description="Powerful model for deep codebase exploration",
     ),
     Stage.PLAN: StageConfig(
+        description="Powerful model for architectural reasoning",
         model_tier="high",
         max_iters=3,
-        description="Powerful model for architectural reasoning",
     ),
     Stage.REVIEW_PLAN: StageConfig(
-        model_tier="med",
-        max_iters=3,
         description="Review plan for completeness and accuracy",
+        model_tier="high",
+        max_iters=3,
     ),
-    Stage.IMPLEMENT: StageConfig(
-        model_tier="med",
-        max_iters=5,
-        description="Balanced model for code generation",
-    ),
+    # TODO: implement the iterate_plan
+    # Stage.ITERATE_PLAN: StageConfig(
+    #     description="Iterate plan for completeness and accuracy",
+    #     model_tier="high",
+    #     max_iters=3,
+    # ),
 }

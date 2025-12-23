@@ -19,7 +19,7 @@ class TestCommand:
         assert Command.CLARIFY == "clarify"
         assert Command.RESEARCH_CODEBASE == "research_codebase"
         assert Command.CREATE_PLAN == "create_plan"
-        assert Command.IMPLEMENT_PLAN == "implement_plan"
+        assert Command.ITERATE_PLAN == "implement_plan"
 
     def test_is_string_enum(self):
         """Command values should be usable as strings."""

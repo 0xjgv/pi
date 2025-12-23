@@ -7,7 +7,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-ROOT_DIR = Path(__file__).parent.parent
+# Project root is 3 levels up from session.py: workflow/ -> π/ -> π/
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 class Command(StrEnum):
@@ -17,12 +18,12 @@ class Command(StrEnum):
     RESEARCH_CODEBASE = "research_codebase"
     REVIEW_PLAN = "review_plan"
     CREATE_PLAN = "create_plan"
-    IMPLEMENT_PLAN = "implement_plan"
+    ITERATE_PLAN = "iterate_plan"
 
 
 def build_command_map(
     *,
-    command_dir: Path = ROOT_DIR / ".claude/commands",
+    command_dir: Path = PROJECT_ROOT / ".claude/commands",
 ) -> dict[Command, str]:
     """Build a command map from the command directory."""
     command_map = {}

@@ -19,8 +19,8 @@ from rich.status import Status
 
 from π.config import get_agent_options
 from π.errors import AgentExecutionError
-from π.workflow.session import COMMAND_MAP, Command, WorkflowSession
 from π.utils import speak
+from π.workflow.session import COMMAND_MAP, Command, WorkflowSession
 
 # Context variables for per-invocation isolation (thread-safe, async-safe)
 _agent_options_var: ContextVar[ClaudeAgentOptions] = ContextVar("agent_options")
@@ -265,34 +265,42 @@ def clarify_goal(
 
 def research_codebase(
     *,
+    research_document_path: Path | str,
     query: str,
 ) -> str:
     """
     Research the codebase and return the results.
 
     Args:
+        research_document_path: Optional path to the research document.
         query: The query to research the codebase (goal, question, etc.).
 
     Returns:
         A summary of the research + the file path of the research document or open questions to the agent.
     """
-    # Auto-resume: check for existing session
-    session_id = _get_session().get_resumable_session_id(Command.RESEARCH_CODEBASE)
-    logger.debug(
-        f"Research codebase tool command: {query}",
-        {"session_id": session_id, "query": query},
-    )
-
+    logger.debug(">>> Entering research_codebase tool")
     try:
+        research_document_path = Path(research_document_path)
+        # Auto-resume: check for existing session
+        session_id = _get_session().get_resumable_session_id(Command.RESEARCH_CODEBASE)
+        logger.debug(
+            "Research codebase - session_id=%s, research_document_path=%s, query=%s",
+            session_id,
+            research_document_path,
+            query,
+        )
+
         with timed_phase("Researching codebase"):
             result, last_session_id = _execute_claude_task(
+                path_to_document=research_document_path,
                 tool_command=Command.RESEARCH_CODEBASE,
                 session_id=session_id,
                 query=query,
             )
             logger.debug(
-                "Research result: %s",
-                {"result": result, "last_session_id": last_session_id},
+                "Research result - last_session_id=%s, result=%s",
+                last_session_id,
+                result[:200] if result else None,
             )
 
         _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
@@ -300,8 +308,12 @@ def research_codebase(
 
         return f"Result: {result}, Research Session ID: {last_session_id}"
     except AgentExecutionError as e:
-        logger.exception("Research failed")
+        logger.exception("Research failed (AgentExecutionError)")
         return f"[ERROR] {e}"
+    except Exception as e:
+        # Catch ALL exceptions to ensure DSPy doesn't swallow errors silently
+        logger.exception("Research failed (unexpected error: %s)", type(e).__name__)
+        return f"[ERROR] Unexpected error: {type(e).__name__}: {e}"
 
 
 def create_plan(
@@ -319,19 +331,18 @@ def create_plan(
     Returns:
         A summary of the plan + the file path of the plan document or open questions to the agent.
     """
-    research_document_path = Path(research_document_path)
-    # Auto-resume: check for existing session
-    session_id = _get_session().get_resumable_session_id(Command.CREATE_PLAN)
-    logger.debug(
-        "Plan tool command: %s",
-        {
-            "research_document_path": research_document_path,
-            "session_id": session_id,
-            "query": query,
-        },
-    )
-
+    logger.debug(">>> Entering create_plan tool")
     try:
+        research_document_path = Path(research_document_path)
+        # Auto-resume: check for existing session
+        session_id = _get_session().get_resumable_session_id(Command.CREATE_PLAN)
+        logger.debug(
+            "Create plan - research_doc=%s, session_id=%s, query=%s",
+            research_document_path,
+            session_id,
+            query,
+        )
+
         with timed_phase("Creating plan"):
             result, last_session_id = _execute_claude_task(
                 path_to_document=research_document_path,
@@ -340,8 +351,9 @@ def create_plan(
                 query=query,
             )
             logger.debug(
-                "Plan result: %s",
-                {"result": result, "last_session_id": last_session_id},
+                "Plan result - last_session_id=%s, result=%s",
+                last_session_id,
+                result,
             )
 
         _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
@@ -350,8 +362,12 @@ def create_plan(
 
         return f"Result: {result}, Plan Session ID: {last_session_id}"
     except AgentExecutionError as e:
-        logger.exception("Planning failed")
+        logger.exception("Planning failed (AgentExecutionError)")
         return f"[ERROR] {e}"
+    except Exception as e:
+        # Catch ALL exceptions to ensure DSPy doesn't swallow errors silently
+        logger.exception("Planning failed (unexpected error: %s)", type(e).__name__)
+        return f"[ERROR] Unexpected error: {type(e).__name__}: {e}"
 
 
 def review_plan(
@@ -367,7 +383,7 @@ def review_plan(
         plan_document_path: Required path to the plan document.
 
     Returns:
-        A summary of the review or open questions to the agent.
+        A summary of the review (critical issues, high priority issues, optional items, clarification needed, key improvements, etc).
     """
     plan_document_path = Path(plan_document_path)
     # Auto-resume: check for existing session
@@ -407,30 +423,30 @@ def review_plan(
         return f"[ERROR] {e}"
 
 
-def implement_plan(
+def iterate_plan(
     *,
     plan_document_path: Path | str,
-    query: str,
+    review_feedback: str,
 ) -> str:
     """
-    Implement the plan for the codebase.
+    Iterate the plan for the codebase.
 
     Args:
-        query: The query to implement the plan for the codebase (goal, question, etc.).
+        review_feedback: The review feedback to iterate the plan for the codebase (critical issues, high priority issues, optional items, clarification needed, key improvements, etc).
         plan_document_path: Required path to the plan document.
 
     Returns:
-        A summary of the implementation or open questions to the agent.
+        A summary of the iteration (updated plan document) or open questions to the agent.
     """
     plan_document_path = Path(plan_document_path)
     # Auto-resume: check for existing session
-    session_id = _get_session().get_resumable_session_id(Command.IMPLEMENT_PLAN)
+    session_id = _get_session().get_resumable_session_id(Command.ITERATE_PLAN)
     logger.debug(
-        "Implement plan tool command: %s",
+        "Iterate plan tool command: %s",
         {
             "plan_document_path": plan_document_path,
+            "review_feedback": review_feedback,
             "session_id": session_id,
-            "query": query,
         },
     )
 
@@ -438,23 +454,23 @@ def implement_plan(
     _get_session().validate_plan_doc(str(plan_document_path))
 
     try:
-        with timed_phase("Implementing plan"):
+        with timed_phase("Iterating plan"):
             result, last_session_id = _execute_claude_task(
                 path_to_document=plan_document_path,
-                tool_command=Command.IMPLEMENT_PLAN,
+                tool_command=Command.ITERATE_PLAN,
+                query=review_feedback,
                 session_id=session_id,
-                query=query,
             )
             logger.debug(
-                "Implementation result: %s",
+                "Iteration result: %s",
                 {"result": result, "last_session_id": last_session_id},
             )
 
-        _get_session().set_doc_path(Command.IMPLEMENT_PLAN, str(plan_document_path))
-        _get_session().set_session_id(Command.IMPLEMENT_PLAN, last_session_id)
-        speak("implementation complete")
+        _get_session().set_doc_path(Command.ITERATE_PLAN, str(plan_document_path))
+        _get_session().set_session_id(Command.ITERATE_PLAN, last_session_id)
+        speak("iteration complete")
 
-        return f"Result: {result}, Implementation Session ID: {last_session_id}"
+        return f"Result: {result}, Iteration Session ID: {last_session_id}"
     except AgentExecutionError as e:
-        logger.exception("Implementation failed")
+        logger.exception("Iteration failed")
         return f"[ERROR] {e}"

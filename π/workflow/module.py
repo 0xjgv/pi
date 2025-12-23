@@ -11,12 +11,10 @@ from pathlib import Path
 
 import dspy
 
-from π.config import Provider, get_lm, DEFAULT_STAGE_CONFIGS, Stage, StageConfig
-from π.support import ConsoleInputProvider, HumanInputProvider, create_ask_human_tool
+from π.config import DEFAULT_STAGE_CONFIGS, Provider, Stage, StageConfig, get_lm
+from π.support import ConsoleInputProvider, HumanInputProvider
 from π.workflow.bridge import (
-    clarify_goal,
     create_plan,
-    implement_plan,
     research_codebase,
     review_plan,
 )
@@ -114,7 +112,7 @@ class RPIWorkflow(dspy.Module):
         """
         path = Path(path)
         if path.exists():
-            logger.info(f"Loading optimized workflow from {path}")
+            logger.info("Loading optimized workflow from %s", path)
             # dspy.Module.load() loads from JSON
             return cls.load(path=str(path))  # type: ignore[call-arg]
         logger.info("No optimized workflow found, using default")
@@ -140,51 +138,42 @@ class RPIWorkflow(dspy.Module):
         self.provider = provider
 
         # Build per-stage ReAct agents
-        self._clarify_agent = self._build_clarify_agent()
         self._research_agent = self._build_research_agent()
         self._plan_agent = self._build_plan_agent()
         self._review_plan_agent = self._build_review_plan_agent()
-        self._implement_agent = self._build_implement_agent()
-
-    def _build_clarify_agent(self) -> dspy.ReAct:
-        """Build clarify stage agent with HITL tool."""
-        return dspy.ReAct(
-            signature=ClarifySignature,
-            tools=[clarify_goal, create_ask_human_tool(self.human_input)],
-            max_iters=self.configs[Stage.CLARIFY].max_iters,
-        )
+        # self._iterate_plan_agent = self._build_iterate_plan_agent()
 
     def _build_research_agent(self) -> dspy.ReAct:
         """Build research stage agent."""
         return dspy.ReAct(
+            max_iters=self.configs[Stage.RESEARCH].max_iters,
             signature=ResearchSignature,
             tools=[research_codebase],
-            max_iters=self.configs[Stage.RESEARCH].max_iters,
         )
 
     def _build_plan_agent(self) -> dspy.ReAct:
         """Build plan stage agent."""
         return dspy.ReAct(
+            max_iters=self.configs[Stage.PLAN].max_iters,
             signature=PlanSignature,
             tools=[create_plan],
-            max_iters=self.configs[Stage.PLAN].max_iters,
         )
 
     def _build_review_plan_agent(self) -> dspy.ReAct:
         """Build review plan stage agent."""
         return dspy.ReAct(
+            max_iters=self.configs[Stage.REVIEW_PLAN].max_iters,
             signature=ReviewPlanSignature,
             tools=[review_plan],
-            max_iters=self.configs[Stage.REVIEW_PLAN].max_iters,
         )
 
-    def _build_implement_agent(self) -> dspy.ReAct:
-        """Build implement stage agent."""
-        return dspy.ReAct(
-            signature=ImplementSignature,
-            tools=[implement_plan],
-            max_iters=self.configs[Stage.IMPLEMENT].max_iters,
-        )
+    # def _build_iterate_plan_agent(self) -> dspy.ReAct:
+    #     """Build iterate plan stage agent."""
+    #     return dspy.ReAct(
+    #         max_iters=self.configs[Stage.ITERATE_PLAN].max_iters,
+    #         signature=IteratePlanSignature,
+    #         tools=[iterate_plan],
+    #     )
 
     def _run_stage(
         self, *, stage: Stage, agent: dspy.ReAct, **kwargs
@@ -201,12 +190,23 @@ class RPIWorkflow(dspy.Module):
         """
         lm = get_lm(self.provider, self.configs[stage].model_tier)
         with dspy.context(lm=lm):
-            return agent(**kwargs)
+            result = agent(**kwargs)
+
+        # Log DSPy trajectory to expose any tool execution errors
+        # TODO: raise an error and let it be handled by the caller (including logging)
+        if hasattr(result, "trajectory") and result.trajectory:
+            for key, value in result.trajectory.items():
+                if "observation" in key and "error" in str(value).lower():
+                    logger.error("DSPy trajectory error [%s]: %s", key, value)
+                elif "observation" in key:
+                    logger.debug("DSPy trajectory [%s]: %s", key, str(value)[:200])
+
+        return result
 
     def forward(self, objective: str) -> dspy.Prediction:
         """Execute workflow with enforced stage order.
 
-        Stages execute sequentially: clarify → research → plan → review → implement.
+        Stages execute sequentially: research → plan → review -> iterate_plan.
         Each stage's output feeds into the next stage.
 
         Args:
@@ -214,53 +214,39 @@ class RPIWorkflow(dspy.Module):
 
         Returns:
             Prediction containing all stage outputs:
-            - objective: The clarified objective
             - research_doc_path: Path to research document
             - plan_doc_path: Path to plan document
-            - implementation_summary: Summary of implementation
         """
-        # Stage 1: Clarify (uses HITL for human interaction)
-        clarified = self._run_stage(
-            agent=self._clarify_agent,
-            objective=objective,
-            stage=Stage.CLARIFY,
-        )
-        working_objective = clarified.get("clarified_objective") or objective
-
-        # Stage 2: Research (deep codebase exploration)
+        # Stage 1: Research (deep codebase exploration)
         researched = self._run_stage(
-            objective=working_objective,
             agent=self._research_agent,
             stage=Stage.RESEARCH,
+            objective=objective,
         )
 
-        # Stage 3: Plan (architectural reasoning)
+        # Stage 2: Plan (architectural reasoning)
         planned = self._run_stage(
             research_doc_path=researched.research_doc_path,
-            objective=working_objective,
             agent=self._plan_agent,
+            objective=objective,
             stage=Stage.PLAN,
         )
 
-        # Stage 4: Review Plan (validation)
+        # Stage 3: Review Plan (validation)
         self._run_stage(
             plan_doc_path=planned.plan_doc_path,
             agent=self._review_plan_agent,
             stage=Stage.REVIEW_PLAN,
         )
 
-        # Stage 5: Implement (code generation)
-        implemented = self._run_stage(
-            plan_doc_path=planned.plan_doc_path,
-            objective=working_objective,
-            agent=self._implement_agent,
-            stage=Stage.IMPLEMENT,
-        )
+        # Stage 4: Iterate Plan (code generation)
+        # implemented = self._run_stage(
+        #     plan_doc_path=planned.plan_doc_path,
+        #     agent=self._iterate_plan_agent,
+        #     stage=Stage.ITERATE_PLAN,
+        # )
 
         return dspy.Prediction(
-            implementation_summary=implemented.implementation_summary,
-            clarified_objective=clarified.clarified_objective,
             research_doc_path=researched.research_doc_path,
             plan_doc_path=planned.plan_doc_path,
-            objective=working_objective,
         )

@@ -57,18 +57,14 @@ def run_simple_mode(
 def run_workflow_mode(objective: str, provider: Provider) -> None:
     """Execute objective using RPIWorkflow pipeline."""
     click.echo(f"[Workflow Mode] Using {provider} with per-stage models")
-    click.echo(
-        "  Stages: Clarify(low) → Research(high) → Plan(high) → Review(med) → Implement(med)"
-    )
+    click.echo(">  Stages: Research(high) → Plan(high) → Review(high)")
 
     workflow = RPIWorkflow(provider=provider)
     result = workflow(objective=objective)
 
     click.echo("\n=== Workflow Complete ===")
-    click.echo(f"Clarified Objective: {result.clarified_objective}")
     click.echo(f"Research Doc: {result.research_doc_path}")
     click.echo(f"Plan Doc: {result.plan_doc_path}")
-    click.echo(f"\nImplementation Summary:\n{result.implementation_summary}")
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -110,7 +106,6 @@ def main(
     cleanup_old_logs(logs_dir)  # Clean old logs first
     log_path = setup_logging(logs_dir)
 
-    click.echo(f"Objective: '{objective}'")
     click.echo(f"Logging to: {log_path}")
 
     # Determine execution mode
@@ -127,10 +122,11 @@ def main(
         click.echo(f"Forced mode: {exec_mode.value}")
 
     # Execute based on mode
-    if exec_mode == ExecutionMode.SIMPLE:
-        run_simple_mode(objective, provider_enum, thinking.lower())
-    else:
-        run_workflow_mode(objective, provider_enum)
+    # if exec_mode == ExecutionMode.SIMPLE:
+    #     run_simple_mode(objective, provider_enum, thinking.lower())
+    # else:
+    # TODO: bring back simple mode (maybe)
+    run_workflow_mode(objective, provider_enum)
 
     speak("π complete")
 

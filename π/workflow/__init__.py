@@ -3,7 +3,7 @@
 from π.workflow.bridge import (
     clarify_goal,
     create_plan,
-    implement_plan,
+    iterate_plan,
     research_codebase,
     review_plan,
 )
@@ -21,7 +21,7 @@ __all__ = [
     "clarify_goal",
     "classify_objective",
     "create_plan",
-    "implement_plan",
+    "iterate_plan",
     "research_codebase",
     "review_plan",
 ]
