@@ -60,7 +60,9 @@ class ConsoleInputProvider:
         speak("clarification")
 
         response = Prompt.ask("[bold green]Your answer[/bold green]")
-        logger.debug("HITL response: %s", response[:50] if len(response) > 50 else response)
+        logger.debug(
+            "HITL response: %s", response[:50] if len(response) > 50 else response
+        )
         return response
 
 

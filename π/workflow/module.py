@@ -168,6 +168,42 @@ class RPIWorkflow(dspy.Module):
     #         tools=[iterate_plan],
     #     )
 
+    # Mapping of stages to their output path fields
+    _STAGE_PATH_FIELDS: dict[Stage, str] = {
+        Stage.RESEARCH: "research_doc_path",
+        Stage.PLAN: "plan_doc_path",
+    }
+
+    def _validate_stage_output(self, stage: Stage, result: dspy.Prediction) -> None:
+        """Validate that stage output paths exist on filesystem.
+
+        Args:
+            stage: The workflow stage that just completed
+            result: The prediction result from the stage
+
+        Raises:
+            ValueError: If a required path field doesn't exist on filesystem
+        """
+        field = self._STAGE_PATH_FIELDS.get(stage)
+        if not field:
+            return  # Stage doesn't produce a path output
+
+        path_str = getattr(result, field, None)
+        if not path_str:
+            raise ValueError(
+                f"Stage {stage.value} did not produce required output: {field}"
+            )
+
+        path = Path(path_str)
+        if not path.exists():
+            raise ValueError(
+                f"Stage {stage.value} output path does not exist: {path_str}\n"
+                f"The agent may have fabricated this path. Check that the Claude agent "
+                f"is creating documents correctly and mentioning the path in its response."
+            )
+
+        logger.info("Validated %s: %s", field, path_str)
+
     def _run_stage(
         self, *, stage: Stage, agent: dspy.ReAct, **kwargs
     ) -> dspy.Prediction:
@@ -180,19 +216,24 @@ class RPIWorkflow(dspy.Module):
 
         Returns:
             Agent's prediction output
+
+        Raises:
+            ValueError: If stage output path doesn't exist (fabrication detected)
         """
         lm = get_lm(self.provider, self.configs[stage].model_tier)
         with dspy.context(lm=lm):
             result = agent(**kwargs)
 
         # Log DSPy trajectory to expose any tool execution errors
-        # TODO: raise an error and let it be handled by the caller (including logging)
         if hasattr(result, "trajectory") and result.trajectory:
             for key, value in result.trajectory.items():
                 if "observation" in key and "error" in str(value).lower():
                     logger.error("DSPy trajectory error [%s]: %s", key, value)
                 elif "observation" in key:
                     logger.debug("DSPy trajectory [%s]: %s", key, str(value)[:200])
+
+        # Validate output paths exist before returning
+        self._validate_stage_output(stage, result)
 
         return result
 

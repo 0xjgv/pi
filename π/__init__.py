@@ -6,7 +6,7 @@ from π.workflow import (
     RPIWorkflow,
     clarify_goal,
     create_plan,
-    implement_plan,
+    iterate_plan,
     research_codebase,
     review_plan,
 )
@@ -19,7 +19,7 @@ __all__ = [
     "create_plan",
     "get_lm",
     "get_model",
-    "implement_plan",
+    "iterate_plan",
     "research_codebase",
     "review_plan",
 ]

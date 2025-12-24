@@ -13,7 +13,7 @@ from π.workflow import (
     Command,
     clarify_goal,
     create_plan,
-    implement_plan,
+    iterate_plan,
     research_codebase,
 )
 from π.workflow.bridge import (
@@ -190,14 +190,21 @@ class TestWorkflowFunctions:
         mock_execute_task: MagicMock,  # noqa: ARG002
     ):
         """Should return result with session ID."""
-        result = research_codebase(query="test query")
+        result = research_codebase(
+            query="test query",
+            research_document_path=Path("/path/to/research.md"),
+        )
 
-        assert "Result:" in result
+        # With markers, result should contain [IN_PROGRESS] or [COMPLETE]
+        assert "[IN_PROGRESS]" in result or "[COMPLETE]" in result
         assert "session-123" in result
 
     def test_research_codebase_passes_query(self, mock_execute_task: MagicMock):
         """Should pass query to execute task."""
-        research_codebase(query="find all tests")
+        research_codebase(
+            query="find all tests",
+            research_document_path=Path("/path/to/research.md"),
+        )
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["query"] == "find all tests"
@@ -223,7 +230,7 @@ class TestWorkflowFunctions:
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["path_to_document"] == Path("/path/to/research.md")
 
-    def test_implement_plan_validates_plan_doc(self):
+    def test_iterate_plan_validates_plan_doc(self):
         """Should validate plan document is not research doc."""
         from π.workflow import WorkflowSession
         from π.workflow.bridge import _session_var
@@ -235,8 +242,8 @@ class TestWorkflowFunctions:
 
         # Should raise when plan path matches research doc
         with pytest.raises(ValueError) as exc_info:
-            implement_plan(
-                query="implement",
+            iterate_plan(
+                review_feedback="implement",
                 plan_document_path=Path("/research.md"),
             )
 
@@ -246,7 +253,10 @@ class TestWorkflowFunctions:
         """Should return error message on AgentExecutionError."""
         mock_execute_task.side_effect = AgentExecutionError("Agent failed")
 
-        result = research_codebase(query="test")
+        result = research_codebase(
+            query="test",
+            research_document_path=Path("/path/to/research.md"),
+        )
 
         assert "[ERROR]" in result
         assert "Agent failed" in result
@@ -260,7 +270,10 @@ class TestWorkflowFunctions:
         session.set_session_id(Command.RESEARCH_CODEBASE, "auto-resume-session")
         _session_var.set(session)
 
-        research_codebase(query="continue work")
+        research_codebase(
+            query="continue work",
+            research_document_path=Path("/path/to/research.md"),
+        )
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["session_id"] == "auto-resume-session"
@@ -273,7 +286,10 @@ class TestWorkflowFunctions:
         session = WorkflowSession()  # Fresh session, no IDs
         _session_var.set(session)
 
-        research_codebase(query="new research")
+        research_codebase(
+            query="new research",
+            research_document_path=Path("/path/to/research.md"),
+        )
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["session_id"] is None
@@ -287,7 +303,10 @@ class TestWorkflowFunctions:
         session = WorkflowSession()
         _session_var.set(session)
 
-        research_codebase(query="first call")
+        research_codebase(
+            query="first call",
+            research_document_path=Path("/path/to/research.md"),
+        )
 
         # Session should now be stored
         assert session.get_session_id(Command.RESEARCH_CODEBASE) == "new-session-xyz"

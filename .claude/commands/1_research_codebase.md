@@ -90,6 +90,11 @@ Then wait for the user's research query.
 
 6. **Generate research document:**
    - Use the metadata gathered in step 4
+   - **CRITICAL**: After saving the document, you MUST output this exact format:
+     ```
+     Document saved at: thoughts/shared/research/YYYY-MM-DD-description.md
+     ```
+     This is required for the workflow to correctly identify the document path.
    - Structure the document with YAML frontmatter followed by content:
 
      ```markdown

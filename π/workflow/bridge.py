@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -135,6 +136,64 @@ def _get_session() -> WorkflowSession:
         session = WorkflowSession()
         _session_var.set(session)
         return session
+
+
+# Document path patterns for extraction
+_DOC_PATH_PATTERNS: dict[str, str] = {
+    "research": r"(thoughts/shared/research/[\w\-]+\.md)",
+    "plan": r"(thoughts/shared/plans/[\w\-]+\.md)",
+}
+
+
+def _extract_doc_path(result: str, doc_type: str) -> str | None:
+    """Extract and validate document path from agent response.
+
+    Args:
+        result: Claude agent response text
+        doc_type: Type of document ("research" or "plan")
+
+    Returns:
+        Absolute path if found and exists, None otherwise
+    """
+    pattern = _DOC_PATH_PATTERNS.get(doc_type)
+    if not pattern:
+        logger.warning("Unknown doc_type: %s", doc_type)
+        return None
+
+    if match := re.search(pattern, result):
+        path = Path.cwd() / match.group(1)
+        if path.exists():
+            logger.debug("Extracted and validated doc path: %s", path)
+            return str(path)
+        logger.debug("Extracted path does not exist: %s", path)
+    return None
+
+
+def _format_tool_result(
+    *,
+    result: str,
+    session_id: str,
+    doc_path: str | None,
+    tool_name: str,
+) -> str:
+    """Format tool result with completion markers.
+
+    Args:
+        result: Raw result from Claude agent
+        session_id: Session ID for continuation
+        doc_path: Extracted document path (if any)
+        tool_name: Name of the tool for continuation hint
+
+    Returns:
+        Formatted result with [COMPLETE] or [IN_PROGRESS] marker
+    """
+    if doc_path:
+        return f"[COMPLETE] Document saved at: {doc_path}\n{result}"
+    return (
+        f"[IN_PROGRESS] Continue with session\n"
+        f"Session ID: {session_id} (call {tool_name} again to continue)\n"
+        f"{result}"
+    )
 
 
 def _execute_claude_task(
@@ -306,7 +365,14 @@ def research_codebase(
         _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
         speak("research complete")
 
-        return f"Result: {result}, Research Session ID: {last_session_id}"
+        # Extract and validate document path, format with markers
+        doc_path = _extract_doc_path(result, "research")
+        return _format_tool_result(
+            result=result,
+            session_id=last_session_id,
+            doc_path=doc_path,
+            tool_name="research_codebase",
+        )
     except AgentExecutionError as e:
         logger.exception("Research failed (AgentExecutionError)")
         return f"[ERROR] {e}"
@@ -360,7 +426,14 @@ def create_plan(
         _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
         speak("plan complete")
 
-        return f"Result: {result}, Plan Session ID: {last_session_id}"
+        # Extract and validate document path, format with markers
+        doc_path = _extract_doc_path(result, "plan")
+        return _format_tool_result(
+            session_id=last_session_id,
+            tool_name="create_plan",
+            doc_path=doc_path,
+            result=result,
+        )
     except AgentExecutionError as e:
         logger.exception("Planning failed (AgentExecutionError)")
         return f"[ERROR] {e}"

@@ -19,7 +19,7 @@ class TestCommand:
         assert Command.CLARIFY == "clarify"
         assert Command.RESEARCH_CODEBASE == "research_codebase"
         assert Command.CREATE_PLAN == "create_plan"
-        assert Command.ITERATE_PLAN == "implement_plan"
+        assert Command.ITERATE_PLAN == "iterate_plan"
 
     def test_is_string_enum(self):
         """Command values should be usable as strings."""
@@ -156,7 +156,7 @@ class TestWorkflowSession:
         session.set_session_id(Command.CLARIFY, "test-id")
         session.set_doc_path(Command.CREATE_PLAN, "/test/path.md")
 
-        with caplog.at_level(logging.DEBUG, logger="π.session"):
+        with caplog.at_level(logging.DEBUG, logger="π.workflow.session"):
             session.log_session_state()
 
         assert "WorkflowSession state" in caplog.text

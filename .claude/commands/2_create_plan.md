@@ -175,6 +175,11 @@ After structure approval:
    - Examples:
      - With ticket: `2025-01-08-ENG-1478-parent-child-tracking.md`
      - Without ticket: `2025-01-08-improve-error-handling.md`
+   - **CRITICAL**: After saving the plan document, you MUST output this exact format:
+     ```
+     Document saved at: thoughts/shared/plans/YYYY-MM-DD-description.md
+     ```
+     This is required for the workflow to correctly identify the plan document path.
 2. **Use this template structure**:
 
 ````markdown
