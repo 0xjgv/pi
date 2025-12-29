@@ -12,7 +12,7 @@ class TestStage:
         assert Stage.RESEARCH == "research"
         assert Stage.PLAN == "plan"
         assert Stage.REVIEW_PLAN == "review_plan"
-        assert Stage.IMPLEMENT == "implement"
+        assert Stage.ITERATE_PLAN == "iterate_plan"
 
     def test_stage_count(self):
         """Should have exactly 5 stages."""

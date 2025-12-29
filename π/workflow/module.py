@@ -12,9 +12,9 @@ from pathlib import Path
 import dspy
 
 from π.config import MAX_ITERS, Provider, get_lm
-from π.support import ConsoleInputProvider, HumanInputProvider
 from π.workflow.bridge import (
     create_plan,
+    iterate_plan,
     research_codebase,
     review_plan,
 )
@@ -57,16 +57,20 @@ class ReviewPlanSignature(dspy.Signature):
 
     plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
 
-    review_summary: str = dspy.OutputField(desc="Summary of the plan review")
+    plan_review_feedback: str = dspy.OutputField(desc="Review and feedback on the plan")
 
 
 class IteratePlanSignature(dspy.Signature):
-    """Implement the plan by making code changes."""
+    """Iterate on the plan based on review feedback."""
 
-    objective: str = dspy.InputField(desc="The clarified objective to iterate")
     plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
+    plan_review_feedback: str = dspy.InputField(
+        desc="Review and feedback on the plan from the review stage"
+    )
 
-    iteration_summary: str = dspy.OutputField(desc="Summary of the plan iteration")
+    iteration_summary: str = dspy.OutputField(
+        desc="Summary of changes made to the plan"
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -77,12 +81,11 @@ class IteratePlanSignature(dspy.Signature):
 class RPIWorkflow(dspy.Module):
     """Workflow module with per-stage ReAct agents.
 
-    Enforces sequential execution: research → plan → review.
+    Enforces sequential execution: research → plan → review → iterate.
     Each stage uses a dedicated ReAct agent with configurable model tier.
 
     Attributes:
         provider: AI provider for model selection
-        human_input: Provider for human-in-the-loop interactions
     """
 
     @classmethod
@@ -110,49 +113,45 @@ class RPIWorkflow(dspy.Module):
         logger.info("No optimized workflow found, using default")
         return cls(**kwargs)
 
-    def __init__(
-        self,
-        *,
-        human_input_provider: HumanInputProvider | None = None,
-        provider: Provider = Provider.Claude,
-    ):
-        """Initialize workflow with configuration.
-
-        Args:
-            provider: AI provider (default: Claude)
-            human_input_provider: HITL provider (default: ConsoleInputProvider)
-        """
+    def __init__(self):
         super().__init__()
-        self.human_input = human_input_provider or ConsoleInputProvider()
-        self.provider = provider
 
         # Build per-stage ReAct agents
         self._research_agent = self._build_research_agent()
         self._plan_agent = self._build_plan_agent()
         self._review_plan_agent = self._build_review_plan_agent()
+        self._iterate_plan_agent = self._build_iterate_plan_agent()
 
     def _build_research_agent(self) -> dspy.ReAct:
         """Build research stage agent."""
         return dspy.ReAct(
-            max_iters=MAX_ITERS,
             signature=ResearchSignature,
             tools=[research_codebase],
+            max_iters=MAX_ITERS,
         )
 
     def _build_plan_agent(self) -> dspy.ReAct:
         """Build plan stage agent."""
         return dspy.ReAct(
-            max_iters=MAX_ITERS,
             signature=PlanSignature,
             tools=[create_plan],
+            max_iters=MAX_ITERS,
         )
 
     def _build_review_plan_agent(self) -> dspy.ReAct:
         """Build review plan stage agent."""
         return dspy.ReAct(
-            max_iters=MAX_ITERS,
             signature=ReviewPlanSignature,
             tools=[review_plan],
+            max_iters=MAX_ITERS,
+        )
+
+    def _build_iterate_plan_agent(self) -> dspy.ReAct:
+        """Build iterate plan stage agent."""
+        return dspy.ReAct(
+            signature=IteratePlanSignature,
+            tools=[iterate_plan],
+            max_iters=MAX_ITERS,
         )
 
     def _validate_path(self, path_str: str | None, field_name: str) -> None:
@@ -187,16 +186,16 @@ class RPIWorkflow(dspy.Module):
                 logger.debug("DSPy trajectory [%s]: %s", key, str(value)[:200])
 
     def forward(self, objective: str) -> dspy.Prediction:
-        """Execute workflow: research → plan → review.
+        """Execute workflow: research → plan → review → iterate.
 
         Args:
             objective: The user's original objective/task
 
         Returns:
-            Prediction with research_doc_path and plan_doc_path
+            Prediction with research_doc_path, plan_doc_path, and iteration_summary
         """
         # All stages use high tier (cached LM instance)
-        lm = get_lm(self.provider, "high")
+        lm = get_lm(Provider.Claude, "high")
 
         with dspy.context(lm=lm):
             # Stage 1: Research
@@ -216,7 +215,15 @@ class RPIWorkflow(dspy.Module):
             reviewed = self._review_plan_agent(plan_doc_path=planned.plan_doc_path)
             self._log_trajectory(reviewed)
 
+            # Stage 4: Iterate
+            iterated = self._iterate_plan_agent(
+                plan_review_feedback=reviewed.plan_review_feedback,
+                plan_doc_path=planned.plan_doc_path,
+            )
+            self._log_trajectory(iterated)
+
         return dspy.Prediction(
             research_doc_path=researched.research_doc_path,
+            iteration_summary=iterated.iteration_summary,
             plan_doc_path=planned.plan_doc_path,
         )

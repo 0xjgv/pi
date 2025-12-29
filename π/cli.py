@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)  # Use module's own logger
 load_dotenv()
 
 
-def run_workflow_mode(objective: str, provider: Provider) -> None:
+def run_workflow_mode(objective: str) -> None:
     """Execute objective using RPIWorkflow pipeline."""
-    click.echo(f"[Workflow Mode] Using {provider} with per-stage models")
+    click.echo(f"[Workflow Mode] Using {Provider.Claude} with per-stage models")
     click.echo(">  Stages: Research(high) → Plan(high) → Review(high)")
 
-    workflow = RPIWorkflow(provider=provider)
+    workflow = RPIWorkflow()
     result = workflow(objective=objective)
 
     click.echo("\n=== Workflow Complete ===")
@@ -50,7 +50,7 @@ def main(
 
     click.echo(f"Logging to: {log_path}")
 
-    run_workflow_mode(objective, Provider.Claude)
+    run_workflow_mode(objective)
 
     speak("π complete")
 

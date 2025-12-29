@@ -5,8 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from π.config import Provider
-
 
 class TestPiWorkflowInit:
     """Tests for PiWorkflow initialization."""
@@ -20,30 +18,14 @@ class TestPiWorkflowInit:
             mock.context.return_value.__exit__ = MagicMock()
             yield mock
 
-    def test_creates_with_default_provider(self, mock_dspy: MagicMock):
-        """Should default to Claude provider."""
-        from π.workflow import RPIWorkflow
-
-        workflow = RPIWorkflow()
-
-        assert workflow.provider == Provider.Claude
-
-    def test_accepts_custom_provider(self, mock_dspy: MagicMock):
-        """Should accept Antigravity provider."""
-        from π.workflow import RPIWorkflow
-
-        workflow = RPIWorkflow(provider=Provider.Antigravity)
-
-        assert workflow.provider == Provider.Antigravity
-
-    def test_creates_three_react_agents(self, mock_dspy: MagicMock):
-        """Should create one ReAct agent per active stage (3 total)."""
+    def test_creates_four_react_agents(self, mock_dspy: MagicMock):
+        """Should create one ReAct agent per active stage (4 total)."""
         from π.workflow import RPIWorkflow
 
         RPIWorkflow()
 
-        # ReAct called 3 times (research, plan, review_plan)
-        assert mock_dspy.ReAct.call_count == 3
+        # ReAct called 4 times (research, plan, review_plan, iterate_plan)
+        assert mock_dspy.ReAct.call_count == 4
 
     def test_research_agent_has_research_tool(self, mock_dspy: MagicMock):
         """Research agent should include research_codebase tool."""
@@ -58,15 +40,18 @@ class TestPiWorkflowInit:
         tool_names = [t.__name__ for t in tools]
         assert "research_codebase" in tool_names
 
-    def test_accepts_custom_human_input_provider(self, mock_dspy: MagicMock):
-        """Should accept custom HITL provider."""
+    def test_iterate_agent_has_iterate_tool(self, mock_dspy: MagicMock):
+        """Iterate agent should include iterate_plan tool."""
         from π.workflow import RPIWorkflow
 
-        mock_provider = MagicMock()
+        RPIWorkflow()
 
-        workflow = RPIWorkflow(human_input_provider=mock_provider)
+        # Find the iterate agent call (fourth one)
+        iterate_call = mock_dspy.ReAct.call_args_list[3]
+        tools = iterate_call.kwargs.get("tools", [])
 
-        assert workflow.human_input is mock_provider
+        tool_names = [t.__name__ for t in tools]
+        assert "iterate_plan" in tool_names
 
 
 class TestPiWorkflowStageExecution:
@@ -80,6 +65,7 @@ class TestPiWorkflowStageExecution:
             patch("π.workflow.module.research_codebase") as mock_research,
             patch("π.workflow.module.create_plan") as mock_plan,
             patch("π.workflow.module.review_plan") as mock_review,
+            patch("π.workflow.module.iterate_plan") as mock_iterate,
             patch("π.workflow.module.get_lm") as mock_get_lm,
             patch("π.workflow.module.Path") as mock_path,
         ):
@@ -98,25 +84,27 @@ class TestPiWorkflowStageExecution:
                 "research": mock_research,
                 "plan": mock_plan,
                 "review": mock_review,
+                "iterate": mock_iterate,
                 "get_lm": mock_get_lm,
                 "react": mock_react_instance,
             }
 
     def test_forward_executes_all_stages(self, mock_workflow_deps: dict):
-        """forward() should execute all three stages."""
+        """forward() should execute all four stages."""
         from π.workflow import RPIWorkflow
 
         mock_workflow_deps["react"].return_value = MagicMock(
             research_doc_path="/path/research.md",
             plan_doc_path="/path/plan.md",
-            review_summary="reviewed",
+            plan_review_feedback="reviewed",
+            iteration_summary="iterated",
         )
 
         workflow = RPIWorkflow()
         workflow(objective="test task")
 
-        # ReAct instance called 3 times (once per stage)
-        assert mock_workflow_deps["react"].call_count == 3
+        # ReAct instance called 4 times (once per stage)
+        assert mock_workflow_deps["react"].call_count == 4
 
     def test_passes_research_doc_to_plan(self, mock_workflow_deps: dict):
         """Plan stage should receive research_doc_path."""
@@ -129,7 +117,8 @@ class TestPiWorkflowStageExecution:
             return MagicMock(
                 research_doc_path="/path/to/research.md",
                 plan_doc_path="/path/to/plan.md",
-                review_summary="ok",
+                plan_review_feedback="ok",
+                iteration_summary="updated",
             )
 
         mock_workflow_deps["react"].side_effect = capture_calls
@@ -153,7 +142,8 @@ class TestPiWorkflowStageExecution:
             return MagicMock(
                 research_doc_path="/research.md",
                 plan_doc_path="/path/to/plan.md",
-                review_summary="ok",
+                plan_review_feedback="ok",
+                iteration_summary="updated",
             )
 
         mock_workflow_deps["react"].side_effect = capture_calls
@@ -165,6 +155,34 @@ class TestPiWorkflowStageExecution:
         review_call = calls[2]
         assert "plan_doc_path" in review_call
         assert review_call["plan_doc_path"] == "/path/to/plan.md"
+
+    def test_passes_review_feedback_to_iterate(self, mock_workflow_deps: dict):
+        """Iterate stage should receive plan_review_feedback from review."""
+        from π.workflow import RPIWorkflow
+
+        calls = []
+
+        def capture_calls(**kwargs):
+            calls.append(kwargs)
+            return MagicMock(
+                research_doc_path="/research.md",
+                plan_doc_path="/path/to/plan.md",
+                plan_review_feedback="Found 2 issues: missing error handling, unclear scope",
+                iteration_summary="Updated plan to address review feedback",
+            )
+
+        mock_workflow_deps["react"].side_effect = capture_calls
+
+        workflow = RPIWorkflow()
+        workflow(objective="test")
+
+        # Iterate call (4th) should have plan_review_feedback from review
+        iterate_call = calls[3]
+        assert "plan_review_feedback" in iterate_call
+        assert (
+            iterate_call["plan_review_feedback"]
+            == "Found 2 issues: missing error handling, unclear scope"
+        )
 
 
 class TestPiWorkflowModelSelection:
@@ -179,13 +197,15 @@ class TestPiWorkflowModelSelection:
             patch("π.workflow.module.research_codebase"),
             patch("π.workflow.module.create_plan"),
             patch("π.workflow.module.review_plan"),
+            patch("π.workflow.module.iterate_plan"),
             patch("π.workflow.module.Path") as mock_path,
         ):
             mock_react = MagicMock()
             mock_react.return_value = MagicMock(
                 research_doc_path="/r.md",
                 plan_doc_path="/p.md",
-                review_summary="ok",
+                plan_review_feedback="ok",
+                iteration_summary="updated",
             )
             mock_dspy.ReAct.return_value = mock_react
             mock_dspy.context.return_value.__enter__ = MagicMock()
@@ -231,6 +251,7 @@ class TestPiWorkflowPrediction:
             patch("π.workflow.module.research_codebase"),
             patch("π.workflow.module.create_plan"),
             patch("π.workflow.module.review_plan"),
+            patch("π.workflow.module.iterate_plan"),
             patch("π.workflow.module.Path") as mock_path,
         ):
             mock_react = MagicMock()
@@ -258,7 +279,8 @@ class TestPiWorkflowPrediction:
         mock_deps["react"].side_effect = [
             MagicMock(research_doc_path="/docs/research.md"),
             MagicMock(plan_doc_path="/docs/plan.md"),
-            MagicMock(review_summary="Plan reviewed"),
+            MagicMock(plan_review_feedback="Plan reviewed"),
+            MagicMock(iteration_summary="Plan updated"),
         ]
 
         workflow = RPIWorkflow()
@@ -266,3 +288,4 @@ class TestPiWorkflowPrediction:
 
         assert hasattr(result, "research_doc_path")
         assert hasattr(result, "plan_doc_path")
+        assert hasattr(result, "iteration_summary")

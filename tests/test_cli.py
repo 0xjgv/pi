@@ -63,12 +63,11 @@ class TestMain:
         mock_rpi_workflow: MagicMock,
     ):
         """Should use Claude provider."""
-        runner.invoke(main, ["test"])
+        result = runner.invoke(main, ["test"])
 
         mock_rpi_workflow.assert_called_once()
-        # Provider is passed to RPIWorkflow
-        call_kwargs = mock_rpi_workflow.call_args.kwargs
-        assert call_kwargs["provider"].value == "claude"
+        # Claude provider is displayed in output
+        assert "claude" in result.output
 
     def test_displays_workflow_completion(
         self,
