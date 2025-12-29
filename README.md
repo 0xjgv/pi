@@ -81,16 +81,14 @@ make unlink                    # Removes symlink from ~/.local/bin
 
 ```bash
 π "Summarize the project files"
-π "Implement user authentication" -t high      # Use Opus for complex tasks
-π "Fix the typo in utils.py" -t low -v         # Use Haiku with debug output
+π "Implement user authentication"
 ```
 
 ## CLI Options
 
 | Flag | Description |
 |------|-------------|
-| `-t, --thinking` | Model tier: `low` (haiku), `med` (sonnet), `high` (opus) |
-| `-v, --verbose` | Enable debug logging |
+| `-v, --version` | Show version |
 
 ## Environment Variables
 
@@ -103,18 +101,13 @@ make unlink                    # Removes symlink from ~/.local/bin
 
 ```
 π/                              # Main package
-├── cli.py                      # CLI entry + DSPy ReAct orchestration
+├── cli.py                      # CLI entry point
+├── config.py                   # Provider/model/stage configuration
 ├── errors.py                   # Package-wide exceptions
 ├── utils.py                    # Core utilities
 ├── workflow/                   # Core workflow execution
 │   ├── bridge.py               # Sync-async bridge
-│   ├── module.py               # DSPy workflow module
-│   ├── router.py               # Objective classifier
-│   └── session.py              # Workflow state management
-├── config/                     # Configuration
-│   ├── providers.py            # Provider/model setup
-│   ├── stages.py               # Stage definitions
-│   └── agent.py                # Agent options factory
+│   └── module.py               # DSPy workflow module
 ├── optimization/               # GEPA optimization
 │   ├── metrics.py              # Plan quality metrics
 │   ├── optimizer.py            # GEPA utilities

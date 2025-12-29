@@ -66,10 +66,7 @@ class TestFullWorkflowIntegration:
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """CLI should initialize workflow and run successfully."""
-        from π.workflow import ExecutionMode
-
-        with patch("π.cli.classify_objective", return_value=ExecutionMode.WORKFLOW):
-            result = runner.invoke(main, ["test objective", "-m", "workflow"])
+        result = runner.invoke(main, ["test objective"])
 
         assert result.exit_code == 0
         assert "[Workflow Mode]" in result.output
@@ -81,12 +78,7 @@ class TestFullWorkflowIntegration:
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """Agent options should be correctly configured."""
-        from π.workflow import ExecutionMode
-
-        with (
-            patch("π.cli.classify_objective", return_value=ExecutionMode.WORKFLOW),
-            patch("π.workflow.bridge._get_agent_options") as mock_opts,
-        ):
+        with patch("π.workflow.bridge._get_agent_options") as mock_opts:
             from claude_agent_sdk import ClaudeAgentOptions
 
             mock_opts.return_value = ClaudeAgentOptions(
@@ -94,7 +86,7 @@ class TestFullWorkflowIntegration:
                 allowed_tools=["Bash", "Read"],
             )
 
-            result = runner.invoke(main, ["test", "-m", "workflow"])
+            result = runner.invoke(main, ["test"])
 
             assert result.exit_code == 0
 
@@ -106,7 +98,7 @@ class TestFullWorkflowIntegration:
         """Errors should be handled gracefully."""
         mock_rpi_workflow.return_value.side_effect = Exception("Workflow error")
 
-        result = runner.invoke(main, ["test", "-m", "workflow"])
+        result = runner.invoke(main, ["test"])
 
         # Should not crash, but may show error
         assert result.exit_code != 0 or "error" in result.output.lower()
@@ -229,8 +221,6 @@ class TestLogCleanupIntegration:
         """CLI should cleanup old application logs at startup."""
         from datetime import datetime, timedelta
 
-        from π.workflow import ExecutionMode
-
         # Create test log directory
         logs_dir = tmp_path / ".π" / "logs"
         logs_dir.mkdir(parents=True)
@@ -249,10 +239,7 @@ class TestLogCleanupIntegration:
         monkeypatch.chdir(tmp_path)
 
         # Mock the workflow execution to avoid actual agent run
-        with (
-            patch("π.cli.classify_objective", return_value=ExecutionMode.WORKFLOW),
-            patch("π.cli.RPIWorkflow") as mock_workflow,
-        ):
+        with patch("π.cli.RPIWorkflow") as mock_workflow:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
                 research_doc_path="/research.md",
@@ -301,8 +288,6 @@ class TestLogCleanupIntegration:
         monkeypatch: pytest.MonkeyPatch,
     ):
         """Cleanup should handle empty log directories gracefully."""
-        from π.workflow import ExecutionMode
-
         # Create empty log directory
         logs_dir = tmp_path / ".π" / "logs"
         logs_dir.mkdir(parents=True)
@@ -311,10 +296,7 @@ class TestLogCleanupIntegration:
         monkeypatch.chdir(tmp_path)
 
         # Mock the workflow execution
-        with (
-            patch("π.cli.classify_objective", return_value=ExecutionMode.WORKFLOW),
-            patch("π.cli.RPIWorkflow") as mock_workflow,
-        ):
+        with patch("π.cli.RPIWorkflow") as mock_workflow:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
                 research_doc_path="/research.md",

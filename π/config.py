@@ -28,7 +28,7 @@ class Stage(StrEnum):
     RESEARCH = "research"
     PLAN = "plan"
     REVIEW_PLAN = "review_plan"
-    IMPLEMENT = "implement"
+    ITERATE_PLAN = "iterate_plan"
 
 
 # Provider → Tier → Model mapping
@@ -58,6 +58,7 @@ STAGE_TIERS: dict[Stage, str] = {
     Stage.RESEARCH: "high",
     Stage.PLAN: "high",
     Stage.REVIEW_PLAN: "high",
+    Stage.ITERATE_PLAN: "high",
 }
 
 # Maximum ReAct iterations (same for all stages)

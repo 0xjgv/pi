@@ -11,18 +11,15 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan 
 
 ## Commands
 
-- Run: `π "prompt"` or `π "prompt" -t high -m workflow`
+- Run: `π "prompt"`
 - Quality: `make check` (fix → format → lint → test)
 - Test: `make test` or `make test-cov`
 
 ## CLI Options
 
-| Flag | Values | Default | Description |
-|------|--------|---------|-------------|
-| `-t/--thinking` | low/med/high | low | Model tier (haiku/sonnet/opus) |
-| `-p/--provider` | claude/antigravity/openai | claude | LM provider |
-| `-m/--mode` | auto/simple/workflow | auto | Execution mode |
-| `-v/--version` | — | — | Show version |
+| Flag | Description |
+|------|-------------|
+| `-v/--version` | Show version |
 
 ## Environment
 
@@ -31,21 +28,15 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan 
 
 ## Architecture
 
-**Two modes:**
-
-- **Simple**: Single ReAct agent with 3 tools (research, clarify, plan)
-- **Workflow**: 5-stage pipeline with per-stage model tiers:
-  - Clarify (low) → Research (high) → Plan (high) → Review (med) → Implement (med)
+**Workflow**: 5-stage pipeline — Clarify → Research → Plan → Review → Implement
 
 **Module structure:**
 
-- `cli.py` — Entry point, mode routing
+- `cli.py` — Entry point
+- `config.py` — Provider/model/stage configuration
 - `workflow/` — Core workflow execution
   - `bridge.py` — Tool functions bridging sync→async to Claude SDK
   - `module.py` — DSPy module with 5 ReAct agents
-  - `router.py` — Auto-classifies objective to simple/workflow
-  - `session.py` — Tracks session IDs across tool calls
-- `config/` — Provider/model/stage configuration + agent options
 - `optimization/` — GEPA metrics and training utilities
 - `support/` — Infrastructure (directories, permissions, HITL)
 - `hooks/` — PreToolUse (bash safety), PostToolUse (linters)
