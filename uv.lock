@@ -1306,7 +1306,6 @@ version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "claude-agent-sdk" },
-    { name = "click" },
     { name = "dspy" },
     { name = "python-dotenv" },
     { name = "rich" },
@@ -1323,7 +1322,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.1.18" },
-    { name = "click", specifier = ">=8.3.1" },
     { name = "dspy", specifier = ">=3.0.4" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "rich", specifier = ">=14.2.0" },

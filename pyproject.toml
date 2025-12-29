@@ -21,7 +21,6 @@ classifiers = [
 ]
 dependencies = [
     "claude-agent-sdk>=0.1.18",
-    "click>=8.3.1",
     "dspy>=3.0.4",
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",

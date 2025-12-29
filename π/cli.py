@@ -1,7 +1,7 @@
+import argparse
 import logging
 from importlib.metadata import version as get_version
 
-import click
 from dotenv import load_dotenv
 
 from π.config import STAGE_TIERS, Provider
@@ -13,6 +13,17 @@ from π.workflow import (
 
 logger = logging.getLogger(__name__)  # Use module's own logger
 VERSION = get_version("pi-rpi")
+
+
+def _create_parser() -> argparse.ArgumentParser:
+    """Create and return the argument parser."""
+    parser = argparse.ArgumentParser(
+        prog="π",
+        description="Autonomous Research → Plan → Review → Implement workflow.",
+    )
+    parser.add_argument("objective", nargs="?", help="The objective for the agent")
+    return parser
+
 
 # Load environment variables
 load_dotenv()
@@ -29,45 +40,42 @@ def _format_stages() -> str:
 
 def run_workflow_mode(objective: str) -> None:
     """Execute objective using RPIWorkflow pipeline."""
-    click.echo(f"[Workflow Mode] Using {Provider.Claude} with per-stage models")
-    click.echo(f">  Stages: {_format_stages()}")
+    print(f"[Workflow Mode] Using {Provider.Claude} with per-stage models")
+    print(f">  Stages: {_format_stages()}")
 
     workflow = RPIWorkflow()
     result = workflow(objective=objective)
 
-    click.echo("\n=== Workflow Complete ===")
-    click.echo(f"Research Doc: {result.research_doc_path}")
-    click.echo(f"Plan Doc: {result.plan_doc_path}")
+    print("\n=== Workflow Complete ===")
+    print(f"Research Doc: {result.research_doc_path}")
+    print(f"Plan Doc: {result.plan_doc_path}")
 
 
-@click.command(context_settings={"help_option_names": ["-h", "--help"]})
-@click.argument("objective", required=False)
-@click.pass_context
 @prevent_sleep
-def main(
-    ctx: click.Context,
-    objective: str | None,
-) -> None:
+def main(argv: list[str] | None = None) -> None:
     """Run the π agent with the given OBJECTIVE."""
-    logger.info(f"π v{VERSION}")
-    click.echo(f"π v{VERSION}\n")
+    parser = _create_parser()
+    args = parser.parse_args(argv)
 
-    if not objective:
-        click.echo(ctx.get_help())
-        ctx.exit(0)
+    logger.info(f"π (v{VERSION})")
+    print(f"π (v{VERSION})\n")
+
+    if not args.objective:
+        parser.print_help()
+        return
 
     logs_dir = get_logs_dir()
     cleanup_old_logs(logs_dir)  # Clean old logs first
     log_path = setup_logging(logs_dir)
 
-    click.echo(f"Logging to: {log_path}")
+    print(f"Logging to: {log_path}")
 
-    run_workflow_mode(objective)
+    run_workflow_mode(args.objective)
 
     speak("π complete")
 
     if log_path:
-        click.echo(f"\nDebug log: {log_path}")
+        print(f"\nDebug log: {log_path}")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
 from claude_agent_sdk.types import HookContext, HookInput, ResultMessage
 
 from π.cli import main
@@ -14,11 +13,6 @@ from π.cli import main
 
 class TestFullWorkflowIntegration:
     """Integration tests for complete CLI workflows."""
-
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create an isolated CLI runner."""
-        return CliRunner()
 
     @pytest.fixture
     def mock_claude_responses(self) -> Generator[AsyncMock, None, None]:
@@ -61,19 +55,19 @@ class TestFullWorkflowIntegration:
 
     def test_cli_initializes_and_runs(
         self,
-        runner: CliRunner,
+        capsys: pytest.CaptureFixture[str],
         mock_rpi_workflow: MagicMock,  # noqa: ARG002
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """CLI should initialize workflow and run successfully."""
-        result = runner.invoke(main, ["test objective"])
+        main(["test objective"])
+        captured = capsys.readouterr()
 
-        assert result.exit_code == 0
-        assert "[Workflow Mode]" in result.output
+        assert "[Workflow Mode]" in captured.out
 
     def test_agent_options_flow_to_workflow(
         self,
-        runner: CliRunner,
+        capsys: pytest.CaptureFixture[str],
         mock_rpi_workflow: MagicMock,  # noqa: ARG002
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
@@ -86,22 +80,20 @@ class TestFullWorkflowIntegration:
                 allowed_tools=["Bash", "Read"],
             )
 
-            result = runner.invoke(main, ["test"])
+            main(["test"])
+            captured = capsys.readouterr()
 
-            assert result.exit_code == 0
+            assert "Workflow Mode" in captured.out
 
     def test_error_handling_propagates(
         self,
-        runner: CliRunner,
         mock_rpi_workflow: MagicMock,
     ):
         """Errors should be handled gracefully."""
         mock_rpi_workflow.return_value.side_effect = Exception("Workflow error")
 
-        result = runner.invoke(main, ["test"])
-
-        # Should not crash, but may show error
-        assert result.exit_code != 0 or "error" in result.output.lower()
+        with pytest.raises(Exception, match="Workflow error"):
+            main(["test"])
 
 
 class TestHookIntegration:
@@ -207,14 +199,9 @@ class TestSessionStateIntegration:
 class TestLogCleanupIntegration:
     """Integration tests for log cleanup functionality."""
 
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create an isolated CLI runner."""
-        return CliRunner()
-
     def test_cli_cleans_old_app_logs_on_startup(
         self,
-        runner: CliRunner,
+        capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
@@ -247,10 +234,11 @@ class TestLogCleanupIntegration:
             )
             mock_workflow.return_value = mock_instance
 
-            result = runner.invoke(main, ["test objective"])
+            main(["test objective"])
+            captured = capsys.readouterr()
 
         # Verify cleanup occurred
-        assert result.exit_code == 0
+        assert "Workflow Mode" in captured.out
         assert not old_log.exists(), "Old log should be deleted"
         assert recent_log.exists(), "Recent log should be preserved"
 
@@ -283,7 +271,7 @@ class TestLogCleanupIntegration:
 
     def test_cleanup_creates_no_errors_with_empty_dirs(
         self,
-        runner: CliRunner,
+        capsys: pytest.CaptureFixture[str],
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
@@ -304,7 +292,8 @@ class TestLogCleanupIntegration:
             )
             mock_workflow.return_value = mock_instance
 
-            result = runner.invoke(main, ["test objective"])
+            main(["test objective"])
+            captured = capsys.readouterr()
 
         # Should complete successfully with no errors
-        assert result.exit_code == 0
+        assert "Workflow Mode" in captured.out
