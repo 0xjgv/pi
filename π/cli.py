@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     logger.info(f"π (v{VERSION})")
-    print(f"π (v{VERSION})\n")
+    print(f"π (v{VERSION})")
 
     if not args.objective:
         parser.print_help()
