@@ -67,6 +67,7 @@ class TestPiWorkflowStageExecution:
             patch("π.workflow.module.review_plan") as mock_review,
             patch("π.workflow.module.iterate_plan") as mock_iterate,
             patch("π.workflow.module.get_lm") as mock_get_lm,
+            patch("π.workflow.module.get_extracted_path") as mock_get_extracted_path,
             patch("π.workflow.module.Path") as mock_path,
         ):
             # Setup ReAct mock to return predictions
@@ -79,6 +80,12 @@ class TestPiWorkflowStageExecution:
             # Mock Path to always report files exist
             mock_path.return_value.exists.return_value = True
 
+            # Mock get_extracted_path to return valid paths
+            mock_get_extracted_path.side_effect = lambda doc_type: {
+                "research": "/path/research.md",
+                "plan": "/path/plan.md",
+            }.get(doc_type)
+
             yield {
                 "dspy": mock_dspy,
                 "research": mock_research,
@@ -86,6 +93,7 @@ class TestPiWorkflowStageExecution:
                 "review": mock_review,
                 "iterate": mock_iterate,
                 "get_lm": mock_get_lm,
+                "get_extracted_path": mock_get_extracted_path,
                 "react": mock_react_instance,
             }
 
@@ -107,7 +115,7 @@ class TestPiWorkflowStageExecution:
         assert mock_workflow_deps["react"].call_count == 4
 
     def test_passes_research_doc_to_plan(self, mock_workflow_deps: dict):
-        """Plan stage should receive research_doc_path."""
+        """Plan stage should receive research_doc_path from context."""
         from π.workflow import RPIWorkflow
 
         calls = []
@@ -115,8 +123,8 @@ class TestPiWorkflowStageExecution:
         def capture_calls(**kwargs):
             calls.append(kwargs)
             return MagicMock(
-                research_doc_path="/path/to/research.md",
-                plan_doc_path="/path/to/plan.md",
+                research_doc_path="/path/research.md",
+                plan_doc_path="/path/plan.md",
                 plan_review_feedback="ok",
                 iteration_summary="updated",
             )
@@ -126,13 +134,13 @@ class TestPiWorkflowStageExecution:
         workflow = RPIWorkflow()
         workflow(objective="test")
 
-        # Plan call (2nd) should have research_doc_path
+        # Plan call (2nd) should have research_doc_path from get_extracted_path
         plan_call = calls[1]
         assert "research_doc_path" in plan_call
-        assert plan_call["research_doc_path"] == "/path/to/research.md"
+        assert plan_call["research_doc_path"] == "/path/research.md"
 
     def test_passes_plan_doc_to_review(self, mock_workflow_deps: dict):
-        """Review stage should receive plan_doc_path."""
+        """Review stage should receive plan_doc_path from context."""
         from π.workflow import RPIWorkflow
 
         calls = []
@@ -140,8 +148,8 @@ class TestPiWorkflowStageExecution:
         def capture_calls(**kwargs):
             calls.append(kwargs)
             return MagicMock(
-                research_doc_path="/research.md",
-                plan_doc_path="/path/to/plan.md",
+                research_doc_path="/path/research.md",
+                plan_doc_path="/path/plan.md",
                 plan_review_feedback="ok",
                 iteration_summary="updated",
             )
@@ -151,10 +159,10 @@ class TestPiWorkflowStageExecution:
         workflow = RPIWorkflow()
         workflow(objective="test")
 
-        # Review call (3rd) should have plan_doc_path
+        # Review call (3rd) should have plan_doc_path from get_extracted_path
         review_call = calls[2]
         assert "plan_doc_path" in review_call
-        assert review_call["plan_doc_path"] == "/path/to/plan.md"
+        assert review_call["plan_doc_path"] == "/path/plan.md"
 
     def test_passes_review_feedback_to_iterate(self, mock_workflow_deps: dict):
         """Iterate stage should receive plan_review_feedback from review."""
@@ -165,8 +173,8 @@ class TestPiWorkflowStageExecution:
         def capture_calls(**kwargs):
             calls.append(kwargs)
             return MagicMock(
-                research_doc_path="/research.md",
-                plan_doc_path="/path/to/plan.md",
+                research_doc_path="/path/research.md",
+                plan_doc_path="/path/plan.md",
                 plan_review_feedback="Found 2 issues: missing error handling, unclear scope",
                 iteration_summary="Updated plan to address review feedback",
             )
@@ -194,6 +202,7 @@ class TestPiWorkflowModelSelection:
         with (
             patch("π.workflow.module.dspy") as mock_dspy,
             patch("π.workflow.module.get_lm") as mock_get_lm,
+            patch("π.workflow.module.get_extracted_path") as mock_get_extracted_path,
             patch("π.workflow.module.research_codebase"),
             patch("π.workflow.module.create_plan"),
             patch("π.workflow.module.review_plan"),
@@ -213,6 +222,12 @@ class TestPiWorkflowModelSelection:
 
             # Mock Path to always report files exist
             mock_path.return_value.exists.return_value = True
+
+            # Mock get_extracted_path to return valid paths
+            mock_get_extracted_path.side_effect = lambda doc_type: {
+                "research": "/r.md",
+                "plan": "/p.md",
+            }.get(doc_type)
 
             yield {"dspy": mock_dspy, "get_lm": mock_get_lm}
 
@@ -248,6 +263,7 @@ class TestPiWorkflowPrediction:
         with (
             patch("π.workflow.module.dspy") as mock_dspy,
             patch("π.workflow.module.get_lm"),
+            patch("π.workflow.module.get_extracted_path") as mock_get_extracted_path,
             patch("π.workflow.module.research_codebase"),
             patch("π.workflow.module.create_plan"),
             patch("π.workflow.module.review_plan"),
@@ -261,6 +277,12 @@ class TestPiWorkflowPrediction:
 
             # Mock Path to always report files exist
             mock_path.return_value.exists.return_value = True
+
+            # Mock get_extracted_path to return valid paths
+            mock_get_extracted_path.side_effect = lambda doc_type: {
+                "research": "/docs/research.md",
+                "plan": "/docs/plan.md",
+            }.get(doc_type)
 
             # Create a proper Prediction mock
             class MockPrediction:

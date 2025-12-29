@@ -210,3 +210,25 @@ def cleanup_logging_handlers():
     for logger_name in ("π", "π.session", "π.workflow", "π.hooks"):
         logger = logging.getLogger(logger_name)
         logger.handlers.clear()
+
+
+# ============================================================================
+# Console & Spinner Mocks (for permissions/hitl tests)
+# ============================================================================
+
+
+@pytest.fixture
+def mock_console() -> Generator[MagicMock, None, None]:
+    """Mock Rich Console for HITL tests."""
+    with patch("π.support.permissions.console") as mock:
+        mock.input.return_value = "test response"
+        yield mock
+
+
+@pytest.fixture
+def mock_spinner() -> Generator[MagicMock, None, None]:
+    """Mock spinner status for permissions tests."""
+    with patch("π.workflow.get_current_status") as mock_get:
+        mock_status = MagicMock()
+        mock_get.return_value = mock_status
+        yield mock_status

@@ -155,27 +155,6 @@ class RPIWorkflow(dspy.Module):
             max_iters=MAX_ITERS,
         )
 
-    def _validate_path(self, path_str: str | None, field_name: str) -> None:
-        """Validate that output path exists on filesystem.
-
-        Args:
-            path_str: Path string from agent output
-            field_name: Name of the field for error messages
-
-        Raises:
-            ValueError: If path is missing or doesn't exist
-        """
-        if not path_str:
-            raise ValueError(f"Agent did not produce required output: {field_name}")
-
-        path = Path(path_str)
-        if not path.exists():
-            raise ValueError(
-                f"Output path does not exist: {path_str}\n"
-                f"The agent may have fabricated this path."
-            )
-        logger.info("Validated %s: %s", field_name, path_str)
-
     def _log_trajectory(self, result: dspy.Prediction) -> None:
         """Log DSPy trajectory errors for debugging."""
         if not hasattr(result, "trajectory") or not result.trajectory:
@@ -205,8 +184,10 @@ class RPIWorkflow(dspy.Module):
             # Use validated path from context (not LLM output which may hallucinate)
             research_doc_path = get_extracted_path("research")
             if not research_doc_path:
-                self._validate_path(researched.research_doc_path, "research_doc_path")
-                research_doc_path = researched.research_doc_path
+                raise ValueError(
+                    "Research stage did not produce a document at thoughts/shared/research/.\n"
+                    "The agent should write the document and output 'Document saved at: <path>'."
+                )
 
             # Stage 2: Plan
             planned = self._plan_agent(
@@ -217,8 +198,10 @@ class RPIWorkflow(dspy.Module):
             # Use validated path from context (not LLM output which may hallucinate)
             plan_doc_path = get_extracted_path("plan")
             if not plan_doc_path:
-                self._validate_path(planned.plan_doc_path, "plan_doc_path")
-                plan_doc_path = planned.plan_doc_path
+                raise ValueError(
+                    "Plan stage did not produce a document at thoughts/shared/plans/.\n"
+                    "The agent should write the document and output 'Document saved at: <path>'."
+                )
 
             # Stage 3: Review
             reviewed = self._review_plan_agent(plan_doc_path=plan_doc_path)
