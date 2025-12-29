@@ -14,6 +14,7 @@ import dspy
 from π.config import MAX_ITERS, Provider, get_lm
 from π.workflow.bridge import (
     create_plan,
+    get_extracted_path,
     iterate_plan,
     research_codebase,
     review_plan,
@@ -201,29 +202,37 @@ class RPIWorkflow(dspy.Module):
             # Stage 1: Research
             researched = self._research_agent(objective=objective)
             self._log_trajectory(researched)
-            self._validate_path(researched.research_doc_path, "research_doc_path")
+            # Use validated path from context (not LLM output which may hallucinate)
+            research_doc_path = get_extracted_path("research")
+            if not research_doc_path:
+                self._validate_path(researched.research_doc_path, "research_doc_path")
+                research_doc_path = researched.research_doc_path
 
             # Stage 2: Plan
             planned = self._plan_agent(
                 objective=objective,
-                research_doc_path=researched.research_doc_path,
+                research_doc_path=research_doc_path,
             )
             self._log_trajectory(planned)
-            self._validate_path(planned.plan_doc_path, "plan_doc_path")
+            # Use validated path from context (not LLM output which may hallucinate)
+            plan_doc_path = get_extracted_path("plan")
+            if not plan_doc_path:
+                self._validate_path(planned.plan_doc_path, "plan_doc_path")
+                plan_doc_path = planned.plan_doc_path
 
             # Stage 3: Review
-            reviewed = self._review_plan_agent(plan_doc_path=planned.plan_doc_path)
+            reviewed = self._review_plan_agent(plan_doc_path=plan_doc_path)
             self._log_trajectory(reviewed)
 
             # Stage 4: Iterate
             iterated = self._iterate_plan_agent(
                 plan_review_feedback=reviewed.plan_review_feedback,
-                plan_doc_path=planned.plan_doc_path,
+                plan_doc_path=plan_doc_path,
             )
             self._log_trajectory(iterated)
 
         return dspy.Prediction(
-            research_doc_path=researched.research_doc_path,
+            research_doc_path=research_doc_path,
             iteration_summary=iterated.iteration_summary,
-            plan_doc_path=planned.plan_doc_path,
+            plan_doc_path=plan_doc_path,
         )

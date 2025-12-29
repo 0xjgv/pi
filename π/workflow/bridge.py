@@ -71,6 +71,7 @@ class ExecutionContext:
     event_loop: asyncio.AbstractEventLoop | None = None
     session_ids: dict[Command, str] = field(default_factory=dict)
     doc_paths: dict[Command, str] = field(default_factory=dict)
+    extracted_paths: dict[str, str] = field(default_factory=dict)  # doc_type -> path
     current_status: Status | None = None
 
     def validate_plan_doc(self, plan_path: str) -> None:
@@ -117,6 +118,20 @@ def _get_ctx() -> ExecutionContext:
 def get_current_status() -> Status | None:
     """Get the current spinner status (if any) for suspension during user input."""
     return _get_ctx().current_status
+
+
+def get_extracted_path(doc_type: str) -> str | None:
+    """Get the last extracted and validated path for a document type.
+
+    Use this instead of LLM-generated output fields to avoid hallucinated paths.
+
+    Args:
+        doc_type: Type of document ("research" or "plan")
+
+    Returns:
+        Validated absolute path if available, None otherwise
+    """
+    return _get_ctx().extracted_paths.get(doc_type)
 
 
 # Logger and Console for the workflow
@@ -398,6 +413,8 @@ def workflow_tool(
 
                 if doc_type:
                     doc_path = _extract_doc_path(result, doc_type)
+                    if doc_path:
+                        session.extracted_paths[doc_type] = doc_path
                     return _format_tool_result(
                         result=result,
                         session_id=last_session_id,
