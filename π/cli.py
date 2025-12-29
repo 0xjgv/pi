@@ -1,10 +1,10 @@
 import logging
-from importlib.metadata import version
+from importlib.metadata import version as get_version
 
 import click
 from dotenv import load_dotenv
 
-from π.config import Provider
+from π.config import STAGE_TIERS, Provider
 from π.support import cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import (
@@ -12,15 +12,25 @@ from π.workflow import (
 )
 
 logger = logging.getLogger(__name__)  # Use module's own logger
+VERSION = get_version("pi-rpi")
 
 # Load environment variables
 load_dotenv()
 
 
+def _format_stages() -> str:
+    """Format STAGE_TIERS as 'Name(tier) → Name(tier) → ...'"""
+    parts = [
+        f"{stage.value.split('_')[0].title()}({tier})"
+        for stage, tier in STAGE_TIERS.items()
+    ]
+    return " → ".join(parts)
+
+
 def run_workflow_mode(objective: str) -> None:
     """Execute objective using RPIWorkflow pipeline."""
     click.echo(f"[Workflow Mode] Using {Provider.Claude} with per-stage models")
-    click.echo(">  Stages: Research(high) → Plan(high) → Review(high)")
+    click.echo(f">  Stages: {_format_stages()}")
 
     workflow = RPIWorkflow()
     result = workflow(objective=objective)
@@ -31,7 +41,6 @@ def run_workflow_mode(objective: str) -> None:
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(version("pi-rpi"), "-v", "--version", prog_name="π")
 @click.argument("objective", required=False)
 @click.pass_context
 @prevent_sleep
@@ -40,6 +49,9 @@ def main(
     objective: str | None,
 ) -> None:
     """Run the π agent with the given OBJECTIVE."""
+    logger.info(f"π v{VERSION}")
+    click.echo(f"π v{VERSION}\n")
+
     if not objective:
         click.echo(ctx.get_help())
         ctx.exit(0)
