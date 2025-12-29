@@ -9,7 +9,6 @@ from π.config import (
     PROVIDER_MODELS,
     Provider,
     get_lm,
-    get_model,
 )
 
 
@@ -45,7 +44,7 @@ class TestGetLm:
 
     def test_returns_cached_lm(self, configured_env: None):  # noqa: ARG002
         """Should return cached LM instances."""
-        with patch("π.config.providers.dspy") as mock_dspy:
+        with patch("π.config.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
 
             lm1 = get_lm(Provider.Claude, "low")
@@ -56,7 +55,7 @@ class TestGetLm:
 
     def test_different_tiers_return_different_lms(self, configured_env: None):  # noqa: ARG002
         """Different tiers should return different LM instances."""
-        with patch("π.config.providers.dspy") as mock_dspy:
+        with patch("π.config.dspy") as mock_dspy:
             mock_dspy.LM.side_effect = [MagicMock(), MagicMock()]
 
             lm_low = get_lm(Provider.Claude, "low")
@@ -67,7 +66,7 @@ class TestGetLm:
 
     def test_uses_env_vars_for_api(self, configured_env: None):  # noqa: ARG002
         """Should use CLIPROXY_API_BASE and CLIPROXY_API_KEY from env."""
-        with patch("π.config.providers.dspy") as mock_dspy:
+        with patch("π.config.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
 
             get_lm(Provider.Claude, "low")
@@ -78,7 +77,7 @@ class TestGetLm:
 
     def test_defaults_to_localhost(self, clean_env: None):  # noqa: ARG002
         """Should default to localhost:8317 when no env var set."""
-        with patch("π.config.providers.dspy") as mock_dspy:
+        with patch("π.config.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
 
             get_lm(Provider.Claude, "low")
@@ -117,21 +116,7 @@ class TestProviderModels:
         for _tier, model in PROVIDER_MODELS[Provider.Antigravity].items():
             assert "gemini" in model.lower()
 
-
-class TestGetModel:
-    """Tests for get_model function."""
-
-    def test_returns_claude_haiku_for_claude_low(self):
-        """Should return Haiku for Claude low tier."""
-        model = get_model(provider=Provider.Claude, tier="low")
-        assert "haiku" in model.lower()
-
-    def test_returns_opus_thinking_for_antigravity_high(self):
-        """Should return Opus thinking for Antigravity high tier."""
-        model = get_model(provider=Provider.Antigravity, tier="high")
-        assert "gemini" in model.lower()
-
     def test_raises_for_invalid_tier(self):
-        """Should raise KeyError for invalid tier."""
+        """Should raise KeyError for invalid tier via PROVIDER_MODELS."""
         with pytest.raises(KeyError):
-            get_model(provider=Provider.Claude, tier="invalid")
+            _ = PROVIDER_MODELS[Provider.Claude]["invalid"]

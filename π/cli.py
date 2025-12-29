@@ -2,56 +2,19 @@ import logging
 from importlib.metadata import version
 
 import click
-import dspy
 from dotenv import load_dotenv
 
-from π.config import Provider, get_lm, get_model
+from π.config import Provider
 from π.support import cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import (
-    ExecutionMode,
     RPIWorkflow,
-    clarify_goal,
-    classify_objective,
-    create_plan,
-    research_codebase,
 )
 
 logger = logging.getLogger(__name__)  # Use module's own logger
 
 # Load environment variables
 load_dotenv()
-
-
-class AgentTask(dspy.Signature):
-    """Answer the objective using the available tools."""
-
-    objective: str = dspy.InputField()
-    output: str = dspy.OutputField()
-
-
-def run_simple_mode(
-    objective: str,
-    provider: Provider,
-    tier: str,
-) -> None:
-    """Execute objective using simple ReAct agent."""
-    model = get_model(provider=provider, tier=tier)
-    lm = get_lm(provider=provider, tier=tier)
-
-    click.echo(f"[Simple Mode] Using {provider}/{tier}")
-    click.echo(f"Model: {model}")
-
-    agent = dspy.ReAct(
-        # tools=[research_codebase, clarify_goal, create_plan, implement_plan],
-        tools=[research_codebase, clarify_goal, create_plan],
-        signature=AgentTask,
-    )
-
-    with dspy.context(lm=lm):
-        result = agent(objective=objective)
-
-    click.echo(f"\nFinal Answer: {result.output}")
 
 
 def run_workflow_mode(objective: str, provider: Provider) -> None:
@@ -70,63 +33,24 @@ def run_workflow_mode(objective: str, provider: Provider) -> None:
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(version("pi-rpi"), "-v", "--version", prog_name="π")
 @click.argument("objective", required=False)
-@click.option(
-    "--thinking",
-    "-t",
-    help="Thinking level: low=haiku (default), med=sonnet, high=opus",
-    type=click.Choice(["low", "med", "high"], case_sensitive=False),
-    default="low",
-)
-@click.option(
-    "--provider",
-    "-p",
-    type=click.Choice([p.value for p in Provider], case_sensitive=False),
-    help="AI provider: claude (default), antigravity, openai",
-    default=Provider.Claude.value,
-)
-@click.option(
-    "--mode",
-    "-m",
-    type=click.Choice(["auto", "simple", "workflow"], case_sensitive=False),
-    help="Execution mode: auto uses router, or force simple/workflow",
-    default="auto",
-)
 @click.pass_context
 @prevent_sleep
 def main(
-    ctx: click.Context, objective: str | None, thinking: str, provider: str, mode: str
+    ctx: click.Context,
+    objective: str | None,
 ) -> None:
     """Run the π agent with the given OBJECTIVE."""
     if not objective:
         click.echo(ctx.get_help())
         ctx.exit(0)
 
-    provider_enum = Provider(provider.lower())
     logs_dir = get_logs_dir()
     cleanup_old_logs(logs_dir)  # Clean old logs first
     log_path = setup_logging(logs_dir)
 
     click.echo(f"Logging to: {log_path}")
 
-    # Determine execution mode
-    if mode == "auto":
-        click.echo("Classifying objective...")
-        exec_mode = classify_objective(
-            objective,
-            provider=provider_enum,
-            logger=logger,
-        )
-        click.echo(f"Router selected: {exec_mode.value}")
-    else:
-        exec_mode = ExecutionMode(mode)
-        click.echo(f"Forced mode: {exec_mode.value}")
-
-    # Execute based on mode
-    # if exec_mode == ExecutionMode.SIMPLE:
-    #     run_simple_mode(objective, provider_enum, thinking.lower())
-    # else:
-    # TODO: bring back simple mode (maybe)
-    run_workflow_mode(objective, provider_enum)
+    run_workflow_mode(objective, Provider.Claude)
 
     speak("π complete")
 

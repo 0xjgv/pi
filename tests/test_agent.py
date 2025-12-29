@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-from π.config import get_agent_options
-from π.config.agent import AVAILABLE_TOOLS
+from π.config import AVAILABLE_TOOLS, get_agent_options
 
 
 class TestAvailableTools:

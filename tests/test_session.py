@@ -1,4 +1,4 @@
-"""Tests for π.session module."""
+"""Tests for π.workflow.bridge module (Command, ExecutionContext)."""
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import pytest
 
 from π.workflow import (
     Command,
-    WorkflowSession,
+    ExecutionContext,
     build_command_map,
 )
 
@@ -67,98 +67,74 @@ class TestBuildCommandMap:
         assert result == {}
 
 
-class TestWorkflowSession:
-    """Tests for WorkflowSession dataclass."""
+class TestExecutionContext:
+    """Tests for ExecutionContext dataclass."""
 
     def test_initial_state_has_empty_session_ids(self):
-        """New session should have empty session IDs for all commands."""
-        session = WorkflowSession()
+        """New context should have empty session_ids dict."""
+        ctx = ExecutionContext()
 
-        for cmd in Command:
-            assert session.get_session_id(cmd) == ""
+        assert ctx.session_ids == {}
 
     def test_initial_state_has_empty_doc_paths(self):
-        """New session should have empty doc paths for all commands."""
-        session = WorkflowSession()
+        """New context should have empty doc_paths dict."""
+        ctx = ExecutionContext()
 
-        for cmd in Command:
-            assert session.get_doc_path(cmd) == ""
+        assert ctx.doc_paths == {}
 
     def test_set_and_get_session_id(self):
-        """Should store and retrieve session IDs."""
-        session = WorkflowSession()
+        """Should store and retrieve session IDs via dict."""
+        ctx = ExecutionContext()
 
-        session.set_session_id(Command.RESEARCH_CODEBASE, "session-123")
+        ctx.session_ids[Command.RESEARCH_CODEBASE] = "session-123"
 
-        assert session.get_session_id(Command.RESEARCH_CODEBASE) == "session-123"
-        assert session.get_session_id(Command.CLARIFY) == ""  # unchanged
+        assert ctx.session_ids.get(Command.RESEARCH_CODEBASE) == "session-123"
+        assert ctx.session_ids.get(Command.CLARIFY) is None  # not set
 
     def test_set_and_get_doc_path(self):
-        """Should store and retrieve doc paths."""
-        session = WorkflowSession()
+        """Should store and retrieve doc paths via dict."""
+        ctx = ExecutionContext()
 
-        session.set_doc_path(Command.CREATE_PLAN, "/path/to/research.md")
+        ctx.doc_paths[Command.CREATE_PLAN] = "/path/to/research.md"
 
-        assert session.get_doc_path(Command.CREATE_PLAN) == "/path/to/research.md"
-
-    def test_get_resumable_session_id_returns_none_when_empty(self):
-        """Should return None when no session ID is stored."""
-        session = WorkflowSession()
-
-        assert session.get_resumable_session_id(Command.CLARIFY) is None
-
-    def test_get_resumable_session_id_returns_stored_id(self):
-        """Should return stored session ID when one exists."""
-        session = WorkflowSession()
-        session.set_session_id(Command.RESEARCH_CODEBASE, "session-abc")
-
-        result = session.get_resumable_session_id(Command.RESEARCH_CODEBASE)
-
-        assert result == "session-abc"
-
-    def test_get_resumable_session_id_returns_none_for_other_commands(self):
-        """Should return None for commands without stored sessions."""
-        session = WorkflowSession()
-        session.set_session_id(Command.CLARIFY, "session-123")
-
-        assert session.get_resumable_session_id(Command.RESEARCH_CODEBASE) is None
+        assert ctx.doc_paths.get(Command.CREATE_PLAN) == "/path/to/research.md"
 
     def test_validate_plan_doc_raises_when_same_as_research(self):
         """Should raise ValueError if plan path equals research doc."""
-        session = WorkflowSession()
-        session.set_doc_path(Command.CREATE_PLAN, "/path/to/research.md")
+        ctx = ExecutionContext()
+        ctx.doc_paths[Command.CREATE_PLAN] = "/path/to/research.md"
 
         with pytest.raises(ValueError) as exc_info:
-            session.validate_plan_doc("/path/to/research.md")
+            ctx.validate_plan_doc("/path/to/research.md")
 
         assert "implement_plan requires the PLAN document" in str(exc_info.value)
 
     def test_validate_plan_doc_allows_different_paths(self):
         """Should not raise when plan path differs from research doc."""
-        session = WorkflowSession()
-        session.set_doc_path(Command.CREATE_PLAN, "/path/to/research.md")
+        ctx = ExecutionContext()
+        ctx.doc_paths[Command.CREATE_PLAN] = "/path/to/research.md"
 
         # Should not raise
-        session.validate_plan_doc("/path/to/plan.md")
+        ctx.validate_plan_doc("/path/to/plan.md")
 
     def test_validate_plan_doc_allows_when_no_research_doc(self):
         """Should not raise when no research doc is set."""
-        session = WorkflowSession()
+        ctx = ExecutionContext()
 
         # Should not raise
-        session.validate_plan_doc("/path/to/plan.md")
+        ctx.validate_plan_doc("/path/to/plan.md")
 
     def test_log_session_state_logs_all_data(self, caplog: pytest.LogCaptureFixture):
-        """Should log all session state at debug level."""
+        """Should log all context state at debug level."""
         import logging
 
-        session = WorkflowSession()
-        session.set_session_id(Command.CLARIFY, "test-id")
-        session.set_doc_path(Command.CREATE_PLAN, "/test/path.md")
+        ctx = ExecutionContext()
+        ctx.session_ids[Command.CLARIFY] = "test-id"
+        ctx.doc_paths[Command.CREATE_PLAN] = "/test/path.md"
 
-        with caplog.at_level(logging.DEBUG, logger="π.workflow.session"):
-            session.log_session_state()
+        with caplog.at_level(logging.DEBUG, logger="π.workflow.bridge"):
+            ctx.log_session_state()
 
-        assert "WorkflowSession state" in caplog.text
+        assert "ExecutionContext state" in caplog.text
         assert "test-id" in caplog.text
         assert "/test/path.md" in caplog.text

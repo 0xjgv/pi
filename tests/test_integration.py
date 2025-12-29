@@ -48,41 +48,43 @@ class TestFullWorkflowIntegration:
             yield mock_client
 
     @pytest.fixture
-    def mock_dspy_agent(self) -> Generator[MagicMock, None, None]:
-        """Mock DSPy ReAct agent."""
-        with patch("π.cli.dspy") as mock_dspy:
-            mock_agent = MagicMock()
-            mock_agent.return_value = MagicMock(output="DSPy agent output")
-            mock_dspy.ReAct.return_value = mock_agent
-            yield mock_dspy
+    def mock_rpi_workflow(self) -> Generator[MagicMock, None, None]:
+        """Mock RPIWorkflow for integration tests."""
+        with patch("π.cli.RPIWorkflow") as mock:
+            mock_instance = MagicMock()
+            mock_instance.return_value = MagicMock(
+                research_doc_path="/research.md",
+                plan_doc_path="/plan.md",
+            )
+            mock.return_value = mock_instance
+            yield mock
 
     def test_cli_initializes_and_runs(
         self,
         runner: CliRunner,
-        mock_dspy_agent: MagicMock,  # noqa: ARG002
+        mock_rpi_workflow: MagicMock,  # noqa: ARG002
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
-        """CLI should initialize DSPy and run agent successfully."""
+        """CLI should initialize workflow and run successfully."""
         from π.workflow import ExecutionMode
 
-        with patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE):
-            result = runner.invoke(main, ["test objective", "-t", "low"])
+        with patch("π.cli.classify_objective", return_value=ExecutionMode.WORKFLOW):
+            result = runner.invoke(main, ["test objective", "-m", "workflow"])
 
         assert result.exit_code == 0
-        assert "[Simple Mode]" in result.output
-        assert "Final Answer:" in result.output
+        assert "[Workflow Mode]" in result.output
 
     def test_agent_options_flow_to_workflow(
         self,
         runner: CliRunner,
-        mock_dspy_agent: MagicMock,  # noqa: ARG002
+        mock_rpi_workflow: MagicMock,  # noqa: ARG002
         mock_claude_responses: AsyncMock,  # noqa: ARG002
     ):
         """Agent options should be correctly configured."""
         from π.workflow import ExecutionMode
 
         with (
-            patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE),
+            patch("π.cli.classify_objective", return_value=ExecutionMode.WORKFLOW),
             patch("π.workflow.bridge._get_agent_options") as mock_opts,
         ):
             from claude_agent_sdk import ClaudeAgentOptions
@@ -92,19 +94,19 @@ class TestFullWorkflowIntegration:
                 allowed_tools=["Bash", "Read"],
             )
 
-            result = runner.invoke(main, ["test"])
+            result = runner.invoke(main, ["test", "-m", "workflow"])
 
             assert result.exit_code == 0
 
     def test_error_handling_propagates(
         self,
         runner: CliRunner,
-        mock_dspy_agent: MagicMock,
+        mock_rpi_workflow: MagicMock,
     ):
         """Errors should be handled gracefully."""
-        mock_dspy_agent.ReAct.return_value.side_effect = Exception("Agent error")
+        mock_rpi_workflow.return_value.side_effect = Exception("Workflow error")
 
-        result = runner.invoke(main, ["test"])
+        result = runner.invoke(main, ["test", "-m", "workflow"])
 
         # Should not crash, but may show error
         assert result.exit_code != 0 or "error" in result.output.lower()
@@ -180,21 +182,21 @@ class TestSessionStateIntegration:
 
     def test_session_persists_across_workflow_calls(self):
         """Session state should persist across multiple workflow calls."""
-        from π.workflow import Command, WorkflowSession
-        from π.workflow.bridge import _get_session, _session_var
+        from π.workflow import Command, ExecutionContext
+        from π.workflow.bridge import _ctx, _get_ctx
 
-        # Clear any existing session
+        # Clear any existing context
         try:
-            _session_var.set(WorkflowSession())
+            _ctx.set(ExecutionContext())
         except LookupError:
             pass
 
-        session = _get_session()
-        session.set_session_id(Command.RESEARCH_CODEBASE, "test-session")
+        ctx = _get_ctx()
+        ctx.session_ids[Command.RESEARCH_CODEBASE] = "test-session"
 
-        # Retrieve again - should be same session
-        retrieved = _get_session()
-        assert retrieved.get_session_id(Command.RESEARCH_CODEBASE) == "test-session"
+        # Retrieve again - should be same context
+        retrieved = _get_ctx()
+        assert retrieved.session_ids.get(Command.RESEARCH_CODEBASE) == "test-session"
 
     def test_command_map_built_correctly(self):
         """Command map should be built from actual command files."""
@@ -246,14 +248,17 @@ class TestLogCleanupIntegration:
         # Change to test directory
         monkeypatch.chdir(tmp_path)
 
-        # Mock the agent execution to avoid actual agent run
+        # Mock the workflow execution to avoid actual agent run
         with (
-            patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE),
-            patch("π.cli.dspy") as mock_dspy,
+            patch("π.cli.classify_objective", return_value=ExecutionMode.WORKFLOW),
+            patch("π.cli.RPIWorkflow") as mock_workflow,
         ):
-            mock_agent = MagicMock()
-            mock_agent.return_value = MagicMock(output="Test output")
-            mock_dspy.ReAct.return_value = mock_agent
+            mock_instance = MagicMock()
+            mock_instance.return_value = MagicMock(
+                research_doc_path="/research.md",
+                plan_doc_path="/plan.md",
+            )
+            mock_workflow.return_value = mock_instance
 
             result = runner.invoke(main, ["test objective"])
 
@@ -305,14 +310,17 @@ class TestLogCleanupIntegration:
         # Change to test directory
         monkeypatch.chdir(tmp_path)
 
-        # Mock the agent execution
+        # Mock the workflow execution
         with (
-            patch("π.cli.classify_objective", return_value=ExecutionMode.SIMPLE),
-            patch("π.cli.dspy") as mock_dspy,
+            patch("π.cli.classify_objective", return_value=ExecutionMode.WORKFLOW),
+            patch("π.cli.RPIWorkflow") as mock_workflow,
         ):
-            mock_agent = MagicMock()
-            mock_agent.return_value = MagicMock(output="Test output")
-            mock_dspy.ReAct.return_value = mock_agent
+            mock_instance = MagicMock()
+            mock_instance.return_value = MagicMock(
+                research_doc_path="/research.md",
+                plan_doc_path="/plan.md",
+            )
+            mock_workflow.return_value = mock_instance
 
             result = runner.invoke(main, ["test objective"])
 
