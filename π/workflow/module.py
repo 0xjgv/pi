@@ -11,7 +11,7 @@ from pathlib import Path
 
 import dspy
 
-from π.config import DEFAULT_STAGE_CONFIGS, Provider, Stage, StageConfig, get_lm
+from π.config import MAX_ITERS, Provider, get_lm
 from π.support import ConsoleInputProvider, HumanInputProvider
 from π.workflow.bridge import (
     create_plan,
@@ -77,12 +77,11 @@ class IteratePlanSignature(dspy.Signature):
 class RPIWorkflow(dspy.Module):
     """Workflow module with per-stage ReAct agents.
 
-    Enforces sequential execution: clarify → research → plan → review → implement.
+    Enforces sequential execution: research → plan → review.
     Each stage uses a dedicated ReAct agent with configurable model tier.
 
     Attributes:
         provider: AI provider for model selection
-        configs: Per-stage configuration (model tier, max iterations)
         human_input: Provider for human-in-the-loop interactions
     """
 
@@ -115,18 +114,15 @@ class RPIWorkflow(dspy.Module):
         self,
         *,
         human_input_provider: HumanInputProvider | None = None,
-        stage_configs: dict[Stage, StageConfig] | None = None,
         provider: Provider = Provider.Claude,
     ):
         """Initialize workflow with configuration.
 
         Args:
             provider: AI provider (default: Claude)
-            stage_configs: Custom per-stage configs (merged with defaults)
             human_input_provider: HITL provider (default: ConsoleInputProvider)
         """
         super().__init__()
-        self.configs = {**DEFAULT_STAGE_CONFIGS, **(stage_configs or {})}
         self.human_input = human_input_provider or ConsoleInputProvider()
         self.provider = provider
 
@@ -134,12 +130,11 @@ class RPIWorkflow(dspy.Module):
         self._research_agent = self._build_research_agent()
         self._plan_agent = self._build_plan_agent()
         self._review_plan_agent = self._build_review_plan_agent()
-        # self._iterate_plan_agent = self._build_iterate_plan_agent()
 
     def _build_research_agent(self) -> dspy.ReAct:
         """Build research stage agent."""
         return dspy.ReAct(
-            max_iters=self.configs[Stage.RESEARCH].max_iters,
+            max_iters=MAX_ITERS,
             signature=ResearchSignature,
             tools=[research_codebase],
         )
@@ -147,7 +142,7 @@ class RPIWorkflow(dspy.Module):
     def _build_plan_agent(self) -> dspy.ReAct:
         """Build plan stage agent."""
         return dspy.ReAct(
-            max_iters=self.configs[Stage.PLAN].max_iters,
+            max_iters=MAX_ITERS,
             signature=PlanSignature,
             tools=[create_plan],
         )
@@ -155,130 +150,71 @@ class RPIWorkflow(dspy.Module):
     def _build_review_plan_agent(self) -> dspy.ReAct:
         """Build review plan stage agent."""
         return dspy.ReAct(
-            max_iters=self.configs[Stage.REVIEW_PLAN].max_iters,
+            max_iters=MAX_ITERS,
             signature=ReviewPlanSignature,
             tools=[review_plan],
         )
 
-    # def _build_iterate_plan_agent(self) -> dspy.ReAct:
-    #     """Build iterate plan stage agent."""
-    #     return dspy.ReAct(
-    #         max_iters=self.configs[Stage.ITERATE_PLAN].max_iters,
-    #         signature=IteratePlanSignature,
-    #         tools=[iterate_plan],
-    #     )
-
-    # Mapping of stages to their output path fields
-    _STAGE_PATH_FIELDS: dict[Stage, str] = {
-        Stage.RESEARCH: "research_doc_path",
-        Stage.PLAN: "plan_doc_path",
-    }
-
-    def _validate_stage_output(self, stage: Stage, result: dspy.Prediction) -> None:
-        """Validate that stage output paths exist on filesystem.
+    def _validate_path(self, path_str: str | None, field_name: str) -> None:
+        """Validate that output path exists on filesystem.
 
         Args:
-            stage: The workflow stage that just completed
-            result: The prediction result from the stage
+            path_str: Path string from agent output
+            field_name: Name of the field for error messages
 
         Raises:
-            ValueError: If a required path field doesn't exist on filesystem
+            ValueError: If path is missing or doesn't exist
         """
-        field = self._STAGE_PATH_FIELDS.get(stage)
-        if not field:
-            return  # Stage doesn't produce a path output
-
-        path_str = getattr(result, field, None)
         if not path_str:
-            raise ValueError(
-                f"Stage {stage.value} did not produce required output: {field}"
-            )
+            raise ValueError(f"Agent did not produce required output: {field_name}")
 
         path = Path(path_str)
         if not path.exists():
             raise ValueError(
-                f"Stage {stage.value} output path does not exist: {path_str}\n"
-                f"The agent may have fabricated this path. Check that the Claude agent "
-                f"is creating documents correctly and mentioning the path in its response."
+                f"Output path does not exist: {path_str}\n"
+                f"The agent may have fabricated this path."
             )
+        logger.info("Validated %s: %s", field_name, path_str)
 
-        logger.info("Validated %s: %s", field, path_str)
-
-    def _run_stage(
-        self, *, stage: Stage, agent: dspy.ReAct, **kwargs
-    ) -> dspy.Prediction:
-        """Run agent with stage-specific model via dspy.context().
-
-        Args:
-            stage: The workflow stage being executed
-            agent: The ReAct agent for this stage
-            **kwargs: Arguments to pass to the agent
-
-        Returns:
-            Agent's prediction output
-
-        Raises:
-            ValueError: If stage output path doesn't exist (fabrication detected)
-        """
-        lm = get_lm(self.provider, self.configs[stage].model_tier)
-        with dspy.context(lm=lm):
-            result = agent(**kwargs)
-
-        # Log DSPy trajectory to expose any tool execution errors
-        if hasattr(result, "trajectory") and result.trajectory:
-            for key, value in result.trajectory.items():
-                if "observation" in key and "error" in str(value).lower():
-                    logger.error("DSPy trajectory error [%s]: %s", key, value)
-                elif "observation" in key:
-                    logger.debug("DSPy trajectory [%s]: %s", key, str(value)[:200])
-
-        # Validate output paths exist before returning
-        self._validate_stage_output(stage, result)
-
-        return result
+    def _log_trajectory(self, result: dspy.Prediction) -> None:
+        """Log DSPy trajectory errors for debugging."""
+        if not hasattr(result, "trajectory") or not result.trajectory:
+            return
+        for key, value in result.trajectory.items():
+            if "observation" in key and "error" in str(value).lower():
+                logger.error("DSPy trajectory error [%s]: %s", key, value)
+            elif "observation" in key:
+                logger.debug("DSPy trajectory [%s]: %s", key, str(value)[:200])
 
     def forward(self, objective: str) -> dspy.Prediction:
-        """Execute workflow with enforced stage order.
-
-        Stages execute sequentially: research → plan → review -> iterate_plan.
-        Each stage's output feeds into the next stage.
+        """Execute workflow: research → plan → review.
 
         Args:
             objective: The user's original objective/task
 
         Returns:
-            Prediction containing all stage outputs:
-            - research_doc_path: Path to research document
-            - plan_doc_path: Path to plan document
+            Prediction with research_doc_path and plan_doc_path
         """
-        # Stage 1: Research (deep codebase exploration)
-        researched = self._run_stage(
-            agent=self._research_agent,
-            stage=Stage.RESEARCH,
-            objective=objective,
-        )
+        # All stages use high tier (cached LM instance)
+        lm = get_lm(self.provider, "high")
 
-        # Stage 2: Plan (architectural reasoning)
-        planned = self._run_stage(
-            research_doc_path=researched.research_doc_path,
-            agent=self._plan_agent,
-            objective=objective,
-            stage=Stage.PLAN,
-        )
+        with dspy.context(lm=lm):
+            # Stage 1: Research
+            researched = self._research_agent(objective=objective)
+            self._log_trajectory(researched)
+            self._validate_path(researched.research_doc_path, "research_doc_path")
 
-        # Stage 3: Review Plan (validation)
-        self._run_stage(
-            plan_doc_path=planned.plan_doc_path,
-            agent=self._review_plan_agent,
-            stage=Stage.REVIEW_PLAN,
-        )
+            # Stage 2: Plan
+            planned = self._plan_agent(
+                objective=objective,
+                research_doc_path=researched.research_doc_path,
+            )
+            self._log_trajectory(planned)
+            self._validate_path(planned.plan_doc_path, "plan_doc_path")
 
-        # Stage 4: Iterate Plan (code generation)
-        # implemented = self._run_stage(
-        #     plan_doc_path=planned.plan_doc_path,
-        #     agent=self._iterate_plan_agent,
-        #     stage=Stage.ITERATE_PLAN,
-        # )
+            # Stage 3: Review
+            reviewed = self._review_plan_agent(plan_doc_path=planned.plan_doc_path)
+            self._log_trajectory(reviewed)
 
         return dspy.Prediction(
             research_doc_path=researched.research_doc_path,
