@@ -35,11 +35,7 @@ You are tasked with reviewing existing implementation plans for completeness and
 **Typical invocation**:
 
 ```bash
-/2.5_review_plan thoughts/plans/2025-10-XX-feature-name.md
-```
-
-```bash
-/2.5_review_plan thoughts/research/2025-10-XX-feature-name.md
+/3_review_plan thoughts/shared/plans/2025-10-XX-feature-name.md
 ```
 
 **Workflow**: Read → Verify → Research → Confirm → Update → Sync

@@ -2,9 +2,12 @@ import asyncio
 import logging
 import re
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass, field
+from enum import StrEnum
+from functools import wraps
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -21,20 +24,99 @@ from rich.status import Status
 from π.config import get_agent_options
 from π.errors import AgentExecutionError
 from π.utils import speak
-from π.workflow.session import COMMAND_MAP, Command, WorkflowSession
 
-# Context variables for per-invocation isolation (thread-safe, async-safe)
-_agent_options_var: ContextVar[ClaudeAgentOptions] = ContextVar("agent_options")
-_event_loop_var: ContextVar[asyncio.AbstractEventLoop] = ContextVar("event_loop")
-_session_var: ContextVar[WorkflowSession] = ContextVar("session")
+# Project root for command discovery
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 
-# Shared status for spinner suspension during user input
-_current_status: ContextVar[Status | None] = ContextVar("current_status", default=None)
+
+class Command(StrEnum):
+    """Workflow stage commands."""
+
+    CLARIFY = "clarify"
+    RESEARCH_CODEBASE = "research_codebase"
+    REVIEW_PLAN = "review_plan"
+    CREATE_PLAN = "create_plan"
+    ITERATE_PLAN = "iterate_plan"
+
+
+def build_command_map(
+    *,
+    command_dir: Path = PROJECT_ROOT / ".claude/commands",
+) -> dict[Command, str]:
+    """Build a command map from the command directory."""
+    command_map: dict[Command, str] = {}
+    if not command_dir.exists():
+        return command_map
+
+    for f in sorted(command_dir.glob("[0-9]_*.md")):
+        try:
+            # e.g., '1_research_codebase' -> 'RESEARCH_CODEBASE'
+            command_name = f.stem.split("_", 1)[1].upper()
+            if command_enum_member := getattr(Command, command_name, None):
+                command_map[command_enum_member] = f"/{f.stem}"
+        except (IndexError, AttributeError):
+            logging.warning("Skipping malformed command file: %s", f.name)
+
+    return command_map
+
+
+COMMAND_MAP = build_command_map()
+
+
+@dataclass
+class ExecutionContext:
+    """All execution state in one place."""
+
+    agent_options: ClaudeAgentOptions | None = None
+    event_loop: asyncio.AbstractEventLoop | None = None
+    session_ids: dict[Command, str] = field(default_factory=dict)
+    doc_paths: dict[Command, str] = field(default_factory=dict)
+    current_status: Status | None = None
+
+    def validate_plan_doc(self, plan_path: str) -> None:
+        """Validate that plan_path is not the research document.
+
+        This method prevents a common agent mistake: passing the research
+        document instead of the plan document to implement_plan.
+
+        Raises:
+            ValueError: If plan_path matches the research document.
+        """
+        research_doc = self.doc_paths.get(Command.CREATE_PLAN, "")
+        if research_doc and plan_path == research_doc:
+            raise ValueError(
+                f"implement_plan requires the PLAN document, not the research document.\n"
+                f"Received: {plan_path}\n"
+                f"Hint: Use the plan document returned by create_plan."
+            )
+
+    def log_session_state(self) -> None:
+        """Log all session IDs and document paths for debugging."""
+        logger.debug("ExecutionContext state:")
+        logger.debug("Session IDs:")
+        for command, session_id in self.session_ids.items():
+            logger.debug("  %s: %s", command.value, session_id or "(not set)")
+        logger.debug("Document paths:")
+        for command, doc_path in self.doc_paths.items():
+            logger.debug("  %s: %s", command.value, doc_path or "(not set)")
+
+
+# Single context variable for all execution state
+_ctx: ContextVar[ExecutionContext | None] = ContextVar("ctx", default=None)
+
+
+def _get_ctx() -> ExecutionContext:
+    """Get or create the execution context."""
+    ctx = _ctx.get()
+    if ctx is None:
+        ctx = ExecutionContext()
+        _ctx.set(ctx)
+    return ctx
 
 
 def get_current_status() -> Status | None:
     """Get the current spinner status (if any) for suspension during user input."""
-    return _current_status.get()
+    return _get_ctx().current_status
 
 
 # Logger and Console for the workflow
@@ -45,13 +127,14 @@ console = Console()
 @contextmanager
 def timed_phase(phase_name: str) -> Generator[None, None, None]:
     """Context manager that shows spinner during execution and timing after."""
+    ctx = _get_ctx()
     start = time.monotonic()
     with console.status(f"[bold cyan]{phase_name}...") as status:
-        _current_status.set(status)
+        ctx.current_status = status
         try:
             yield
         finally:
-            _current_status.set(None)
+            ctx.current_status = None
     elapsed = time.monotonic() - start
 
     if elapsed < 60:
@@ -106,36 +189,23 @@ def _log_result_metrics(message: ResultMessage) -> None:
 
 def _get_event_loop() -> asyncio.AbstractEventLoop:
     """Get or create a reusable event loop for the current context."""
-    try:
-        loop = _event_loop_var.get()
-        if not loop.is_closed():
-            return loop
-    except LookupError:
-        pass
+    ctx = _get_ctx()
+    if ctx.event_loop is not None and not ctx.event_loop.is_closed():
+        return ctx.event_loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    _event_loop_var.set(loop)
+    ctx.event_loop = loop
     return loop
 
 
 def _get_agent_options() -> ClaudeAgentOptions:
     """Get agent options for the current context (evaluates cwd at runtime)."""
-    try:
-        return _agent_options_var.get()
-    except LookupError:
-        options = get_agent_options(cwd=Path.cwd())
-        _agent_options_var.set(options)
-        return options
-
-
-def _get_session() -> WorkflowSession:
-    """Get workflow session for the current context."""
-    try:
-        return _session_var.get()
-    except LookupError:
-        session = WorkflowSession()
-        _session_var.set(session)
-        return session
+    ctx = _get_ctx()
+    if ctx.agent_options is not None:
+        return ctx.agent_options
+    options = get_agent_options(cwd=Path.cwd())
+    ctx.agent_options = options
+    return options
 
 
 # Document path patterns for extraction
@@ -198,7 +268,7 @@ def _format_tool_result(
 
 def _execute_claude_task(
     *,
-    path_to_document: Path | None = None,
+    path_to_document: Path | str | None = None,
     session_id: str | None = None,
     tool_command: Command,
     query: str,
@@ -275,275 +345,189 @@ def _execute_claude_task(
         )
 
     # For debugging purposes
-    _get_session().log_session_state()
+    _get_ctx().log_session_state()
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
     return _get_event_loop().run_until_complete(_run_async(session_id))
 
 
-def clarify_goal(
+def workflow_tool(
+    command: Command,
     *,
-    query: str,
-) -> str:
-    """
-    Ask the agent to clarify the goal and return the results.
+    phase_name: str,
+    doc_type: str | None = None,
+    validate_plan: bool = False,
+) -> Callable[[Callable[..., tuple[str, str]]], Callable[..., str]]:
+    """Decorator that handles session management, timing, logging, and error handling.
 
     Args:
-        query: The query to clarify the goal (goal, question, etc.).
+        command: The workflow command for session tracking.
+        phase_name: Display name for the timed phase spinner.
+        doc_type: If set, extract doc path from result ("research" or "plan").
+        validate_plan: If True, validate that plan_document_path is not a research doc.
 
     Returns:
-        A summary of the clarification + the file path of the clarification document or open questions to the agent.
+        Decorated function that handles all workflow boilerplate.
     """
-    # Auto-resume: check for existing session
-    session_id = _get_session().get_resumable_session_id(Command.CLARIFY)
-    logger.debug(
-        f"Clarify goal tool command: {query}",
-        {"session_id": session_id, "query": query},
-    )
 
-    try:
-        with timed_phase("Clarifying goal"):
-            result, last_session_id = _execute_claude_task(
-                tool_command=Command.CLARIFY,
-                session_id=session_id,
-                query=query,
-            )
-            logger.debug(
-                "Clarification result: %s",
-                {"last_session_id": last_session_id, "result": result},
-            )
+    def decorator(func: Callable[..., tuple[str, str]]) -> Callable[..., str]:
+        @wraps(func)
+        def wrapper(**kwargs: str | Path | None) -> str:
+            logger.debug(">>> Entering %s tool", command.value)
+            session = _get_ctx()
+            session_id = session.session_ids.get(command)
 
-        _get_session().set_session_id(Command.CLARIFY, last_session_id)
-        speak("clarify complete")
+            # Validate plan document if required
+            if validate_plan:
+                plan_path = kwargs.get("plan_document_path")
+                if plan_path:
+                    session.validate_plan_doc(str(plan_path))
 
-        return f"Result: {result}, Clarification Session ID: {last_session_id}"
-    except AgentExecutionError as e:
-        logger.exception("Clarification failed")
-        return f"[ERROR] {e}"
+            try:
+                with timed_phase(phase_name):
+                    result, last_session_id = func(session_id=session_id, **kwargs)
+                    logger.debug(
+                        "%s result - session_id=%s, result=%s",
+                        command.value,
+                        last_session_id,
+                        result[:200] if result else None,
+                    )
+
+                session.session_ids[command] = last_session_id
+                speak(f"{phase_name.lower()} complete")
+
+                if doc_type:
+                    doc_path = _extract_doc_path(result, doc_type)
+                    return _format_tool_result(
+                        result=result,
+                        session_id=last_session_id,
+                        doc_path=doc_path,
+                        tool_name=command.value,
+                    )
+                return f"Result: {result}, Session ID: {last_session_id}"
+
+            except AgentExecutionError as e:
+                logger.exception("%s failed (AgentExecutionError)", command.value)
+                return f"[ERROR] {e}"
+            except Exception as e:
+                logger.exception(
+                    "%s failed (unexpected error: %s)", command.value, type(e).__name__
+                )
+                return f"[ERROR] Unexpected error: {type(e).__name__}: {e}"
+
+        return wrapper
+
+    return decorator
 
 
+@workflow_tool(
+    Command.RESEARCH_CODEBASE, phase_name="Researching codebase", doc_type="research"
+)
 def research_codebase(
     *,
-    research_document_path: Path | str,
+    research_document_path: Path | str | None = None,
     query: str,
-) -> str:
-    """
-    Research the codebase and return the results.
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Research the codebase and return the results.
 
     Args:
         research_document_path: Optional path to the research document.
         query: The query to research the codebase (goal, question, etc.).
+        session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        A summary of the research + the file path of the research document or open questions to the agent.
+        Tuple of (result text, session ID).
     """
-    logger.debug(">>> Entering research_codebase tool")
-    try:
-        research_document_path = Path(research_document_path)
-        # Auto-resume: check for existing session
-        session_id = _get_session().get_resumable_session_id(Command.RESEARCH_CODEBASE)
-        logger.debug(
-            "Research codebase - session_id=%s, research_document_path=%s, query=%s",
-            session_id,
-            research_document_path,
-            query,
-        )
-
-        with timed_phase("Researching codebase"):
-            result, last_session_id = _execute_claude_task(
-                path_to_document=research_document_path,
-                tool_command=Command.RESEARCH_CODEBASE,
-                session_id=session_id,
-                query=query,
-            )
-            logger.debug(
-                "Research result - last_session_id=%s, result=%s",
-                last_session_id,
-                result[:200] if result else None,
-            )
-
-        _get_session().set_session_id(Command.RESEARCH_CODEBASE, last_session_id)
-        speak("research complete")
-
-        # Extract and validate document path, format with markers
-        doc_path = _extract_doc_path(result, "research")
-        return _format_tool_result(
-            result=result,
-            session_id=last_session_id,
-            doc_path=doc_path,
-            tool_name="research_codebase",
-        )
-    except AgentExecutionError as e:
-        logger.exception("Research failed (AgentExecutionError)")
-        return f"[ERROR] {e}"
-    except Exception as e:
-        # Catch ALL exceptions to ensure DSPy doesn't swallow errors silently
-        logger.exception("Research failed (unexpected error: %s)", type(e).__name__)
-        return f"[ERROR] Unexpected error: {type(e).__name__}: {e}"
+    return _execute_claude_task(
+        path_to_document=Path(research_document_path)
+        if research_document_path
+        else None,
+        tool_command=Command.RESEARCH_CODEBASE,
+        session_id=session_id,
+        query=query,
+    )
 
 
+@workflow_tool(Command.CREATE_PLAN, phase_name="Creating plan", doc_type="plan")
 def create_plan(
     *,
     research_document_path: Path | str,
     query: str,
-) -> str:
-    """
-    Create a plan for the codebase.
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Create a plan for the codebase.
 
     Args:
-        query: The query to create a plan for the codebase (goal, question, etc.).
         research_document_path: Required path to the research document.
+        query: The query to create a plan for the codebase (goal, question, etc.).
+        session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        A summary of the plan + the file path of the plan document or open questions to the agent.
+        Tuple of (result text, session ID).
     """
-    logger.debug(">>> Entering create_plan tool")
-    try:
-        research_document_path = Path(research_document_path)
-        # Auto-resume: check for existing session
-        session_id = _get_session().get_resumable_session_id(Command.CREATE_PLAN)
-        logger.debug(
-            "Create plan - research_doc=%s, session_id=%s, query=%s",
-            research_document_path,
-            session_id,
-            query,
-        )
+    # Store doc path for validation in later stages
+    _get_ctx().doc_paths[Command.CREATE_PLAN] = str(research_document_path)
 
-        with timed_phase("Creating plan"):
-            result, last_session_id = _execute_claude_task(
-                path_to_document=research_document_path,
-                tool_command=Command.CREATE_PLAN,
-                session_id=session_id,
-                query=query,
-            )
-            logger.debug(
-                "Plan result - last_session_id=%s, result=%s",
-                last_session_id,
-                result,
-            )
-
-        _get_session().set_doc_path(Command.CREATE_PLAN, str(research_document_path))
-        _get_session().set_session_id(Command.CREATE_PLAN, last_session_id)
-        speak("plan complete")
-
-        # Extract and validate document path, format with markers
-        doc_path = _extract_doc_path(result, "plan")
-        return _format_tool_result(
-            session_id=last_session_id,
-            tool_name="create_plan",
-            doc_path=doc_path,
-            result=result,
-        )
-    except AgentExecutionError as e:
-        logger.exception("Planning failed (AgentExecutionError)")
-        return f"[ERROR] {e}"
-    except Exception as e:
-        # Catch ALL exceptions to ensure DSPy doesn't swallow errors silently
-        logger.exception("Planning failed (unexpected error: %s)", type(e).__name__)
-        return f"[ERROR] Unexpected error: {type(e).__name__}: {e}"
+    return _execute_claude_task(
+        path_to_document=Path(research_document_path),
+        tool_command=Command.CREATE_PLAN,
+        session_id=session_id,
+        query=query,
+    )
 
 
+@workflow_tool(Command.REVIEW_PLAN, phase_name="Reviewing plan", validate_plan=True)
 def review_plan(
     *,
     plan_document_path: Path | str,
     query: str,
-) -> str:
-    """
-    Review the plan for the codebase.
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Review the plan for the codebase.
 
     Args:
-        query: The query to review the plan for the codebase (review, question, doubts, feedback, etc.).
         plan_document_path: Required path to the plan document.
+        query: The query to review the plan (review, question, doubts, feedback, etc.).
+        session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        A summary of the review (critical issues, high priority issues, optional items, clarification needed, key improvements, etc).
+        Tuple of (result text, session ID).
     """
-    plan_document_path = Path(plan_document_path)
-    # Auto-resume: check for existing session
-    session_id = _get_session().get_resumable_session_id(Command.REVIEW_PLAN)
-    logger.debug(
-        "Review plan tool command: %s",
-        {
-            "plan_document_path": plan_document_path,
-            "session_id": session_id,
-            "query": query,
-        },
+    # Store doc path for reference
+    _get_ctx().doc_paths[Command.REVIEW_PLAN] = str(plan_document_path)
+
+    return _execute_claude_task(
+        path_to_document=Path(plan_document_path),
+        tool_command=Command.REVIEW_PLAN,
+        session_id=session_id,
+        query=query,
     )
 
-    # Validate: ensure we're not receiving the research doc by mistake
-    _get_session().validate_plan_doc(str(plan_document_path))
 
-    try:
-        with timed_phase("Reviewing plan"):
-            result, last_session_id = _execute_claude_task(
-                path_to_document=plan_document_path,
-                tool_command=Command.REVIEW_PLAN,
-                session_id=session_id,
-                query=query,
-            )
-            logger.debug(
-                "Review result: %s",
-                {"result": result, "last_session_id": last_session_id},
-            )
-
-        _get_session().set_doc_path(Command.REVIEW_PLAN, str(plan_document_path))
-        _get_session().set_session_id(Command.REVIEW_PLAN, last_session_id)
-        speak("review complete")
-
-        return f"Result: {result}, Review Session ID: {last_session_id}"
-    except AgentExecutionError as e:
-        logger.exception("Review failed")
-        return f"[ERROR] {e}"
-
-
+@workflow_tool(Command.ITERATE_PLAN, phase_name="Iterating plan", validate_plan=True)
 def iterate_plan(
     *,
     plan_document_path: Path | str,
     review_feedback: str,
-) -> str:
-    """
-    Iterate the plan for the codebase.
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Iterate the plan for the codebase.
 
     Args:
-        review_feedback: The review feedback to iterate the plan for the codebase (critical issues, high priority issues, optional items, clarification needed, key improvements, etc).
         plan_document_path: Required path to the plan document.
+        review_feedback: The review feedback to iterate the plan.
+        session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        A summary of the iteration (updated plan document) or open questions to the agent.
+        Tuple of (result text, session ID).
     """
-    plan_document_path = Path(plan_document_path)
-    # Auto-resume: check for existing session
-    session_id = _get_session().get_resumable_session_id(Command.ITERATE_PLAN)
-    logger.debug(
-        "Iterate plan tool command: %s",
-        {
-            "plan_document_path": plan_document_path,
-            "review_feedback": review_feedback,
-            "session_id": session_id,
-        },
+    # Store doc path for reference
+    _get_ctx().doc_paths[Command.ITERATE_PLAN] = str(plan_document_path)
+
+    return _execute_claude_task(
+        path_to_document=Path(plan_document_path),
+        tool_command=Command.ITERATE_PLAN,
+        session_id=session_id,
+        query=review_feedback,
     )
-
-    # Validate: ensure we're not receiving the research doc by mistake
-    _get_session().validate_plan_doc(str(plan_document_path))
-
-    try:
-        with timed_phase("Iterating plan"):
-            result, last_session_id = _execute_claude_task(
-                path_to_document=plan_document_path,
-                tool_command=Command.ITERATE_PLAN,
-                query=review_feedback,
-                session_id=session_id,
-            )
-            logger.debug(
-                "Iteration result: %s",
-                {"result": result, "last_session_id": last_session_id},
-            )
-
-        _get_session().set_doc_path(Command.ITERATE_PLAN, str(plan_document_path))
-        _get_session().set_session_id(Command.ITERATE_PLAN, last_session_id)
-        speak("iteration complete")
-
-        return f"Result: {result}, Iteration Session ID: {last_session_id}"
-    except AgentExecutionError as e:
-        logger.exception("Iteration failed")
-        return f"[ERROR] {e}"
