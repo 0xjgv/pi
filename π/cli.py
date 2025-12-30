@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 from importlib.metadata import version as get_version
 
 from dotenv import load_dotenv
@@ -60,7 +61,13 @@ def main(argv: list[str] | None = None) -> None:
     logger.info(f"π (v{VERSION})")
     print(f"π (v{VERSION})")
 
-    if not args.objective:
+    # Read from stdin if piped, otherwise use positional arg
+    if not sys.stdin.isatty():
+        objective = sys.stdin.read().strip()
+    else:
+        objective = args.objective
+
+    if not objective:
         parser.print_help()
         return
 
@@ -70,7 +77,7 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"Logging to: {log_path}")
 
-    run_workflow_mode(args.objective)
+    run_workflow_mode(objective)
 
     speak("π complete")
 
