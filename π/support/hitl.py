@@ -31,21 +31,31 @@ class HumanInputProvider(Protocol):
 
 
 class ConsoleInputProvider:
-    """Console-based human input provider for CLI applications.
+    """Console-based human input provider with validation.
 
     Uses Rich library for styled console output and input prompts.
     """
 
-    def __init__(self, console: Console | None = None):
-        """Initialize with optional custom console.
+    def __init__(
+        self,
+        console: Console | None = None,
+        *,
+        allow_empty: bool = False,
+        max_retries: int = 3,
+    ):
+        """Initialize with optional custom console and validation settings.
 
         Args:
             console: Rich Console instance (creates default if None)
+            allow_empty: Whether to allow empty responses (default False)
+            max_retries: Max retries for empty response when not allowed
         """
         self.console = console or Console()
+        self.allow_empty = allow_empty
+        self.max_retries = max_retries
 
     def ask(self, question: str) -> str:
-        """Display question and get user input from console.
+        """Display question and get validated user input from console.
 
         Args:
             question: The question to display
@@ -55,11 +65,26 @@ class ConsoleInputProvider:
         """
         logger.debug("HITL question: %s", question)
 
-        self.console.print("\n[bold yellow]Clarification needed:[/bold yellow]")
+        # Match permissions.py formatting for consistent UX
+        self.console.print("\n[bold yellow]🤔 Clarification needed:[/bold yellow]")
         self.console.print(f"  {question}\n")
-        speak("clarification")
+        speak("questions")  # Use same audio cue as permissions.py
 
-        response = Prompt.ask("[bold green]Your answer[/bold green]")
+        retries = 0
+        while True:
+            response = Prompt.ask("[bold green]Your answer[/bold green]")
+
+            if response.strip() or self.allow_empty:
+                break
+
+            retries += 1
+            if retries >= self.max_retries:
+                logger.warning("Max retries reached, returning empty response")
+                response = "[No response after retries]"
+                break
+
+            self.console.print("[yellow]Please provide a non-empty response.[/yellow]")
+
         logger.debug(
             "HITL response: %s", response[:50] if len(response) > 50 else response
         )

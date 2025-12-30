@@ -154,3 +154,65 @@ class TestCanUseTool:
         assert "..." in log_call
         # Verify truncation happened (str(long_input) > 100 chars)
         assert len(str(long_input)) > 100
+
+
+class TestCanUseToolValidation:
+    """Tests for input validation in can_use_tool (Phase 2 additions)."""
+
+    @pytest.mark.asyncio
+    async def test_empty_response_replaced(self):
+        """Empty user response should be replaced with placeholder."""
+        with (
+            patch("π.support.permissions.wait_for") as mock_wait,
+            patch("π.support.permissions.console"),
+            patch("π.support.permissions.speak"),
+            patch("π.workflow.get_current_status", return_value=None),
+        ):
+            mock_wait.return_value = "   "  # Whitespace only
+
+            result = await can_use_tool(
+                tool_name="AskUserQuestion",
+                tool_input={"question": "Test?"},
+                context=MagicMock(),
+            )
+
+        assert result.updated_input["answer"] == "[No response provided]"
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_placeholder(self):
+        """Timeout should return placeholder response."""
+        with (
+            patch("π.support.permissions.wait_for") as mock_wait,
+            patch("π.support.permissions.console"),
+            patch("π.support.permissions.speak"),
+            patch("π.workflow.get_current_status", return_value=None),
+        ):
+            # Use builtin TimeoutError (not deprecated asyncio.TimeoutError)
+            mock_wait.side_effect = TimeoutError()
+
+            result = await can_use_tool(
+                tool_name="AskUserQuestion",
+                tool_input={"question": "Test?"},
+                context=MagicMock(),
+            )
+
+        assert "[No response - timed out]" in result.updated_input["answer"]
+
+    @pytest.mark.asyncio
+    async def test_empty_question_replaced(self):
+        """Empty question should be replaced with default."""
+        with (
+            patch("π.support.permissions.wait_for") as mock_wait,
+            patch("π.support.permissions.console"),
+            patch("π.support.permissions.speak"),
+            patch("π.workflow.get_current_status", return_value=None),
+        ):
+            mock_wait.return_value = "answer"
+
+            result = await can_use_tool(
+                tool_name="AskUserQuestion",
+                tool_input={"question": "   "},  # Whitespace only
+                context=MagicMock(),
+            )
+
+        assert result.updated_input["question"] == "Agent needs input:"

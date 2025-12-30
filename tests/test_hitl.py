@@ -127,3 +127,42 @@ class TestHumanInputProviderProtocol:
         result = tool("Test question")
 
         assert result == "Custom answer to: Test question"
+
+
+class TestConsoleInputProviderValidation:
+    """Tests for ConsoleInputProvider validation (Phase 2 additions)."""
+
+    def test_retries_on_empty_response(self):
+        """Should retry when empty response and allow_empty=False."""
+        mock_console = MagicMock()
+        provider = ConsoleInputProvider(console=mock_console, allow_empty=False)
+
+        with patch("π.support.hitl.Prompt.ask") as mock_ask:
+            # First call empty, second call valid
+            mock_ask.side_effect = ["", "valid response"]
+            result = provider.ask("Question?")
+
+        assert result == "valid response"
+        assert mock_ask.call_count == 2
+
+    def test_max_retries_returns_placeholder(self):
+        """Should return placeholder after max retries."""
+        mock_console = MagicMock()
+        provider = ConsoleInputProvider(
+            console=mock_console, allow_empty=False, max_retries=2
+        )
+
+        with patch("π.support.hitl.Prompt.ask", return_value=""):
+            result = provider.ask("Question?")
+
+        assert "[No response after retries]" in result
+
+    def test_allow_empty_accepts_empty(self):
+        """Should accept empty when allow_empty=True."""
+        mock_console = MagicMock()
+        provider = ConsoleInputProvider(console=mock_console, allow_empty=True)
+
+        with patch("π.support.hitl.Prompt.ask", return_value=""):
+            result = provider.ask("Question?")
+
+        assert result == ""

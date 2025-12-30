@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from asyncio import wait_for
 from typing import Any
 
 from claude_agent_sdk.types import (
@@ -15,6 +16,10 @@ from π.utils import speak
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+# Default timeout for user input (5 minutes)
+# Consider making configurable via environment variable for different contexts
+USER_INPUT_TIMEOUT = 300.0
 
 
 async def can_use_tool(
@@ -42,6 +47,10 @@ async def can_use_tool(
     if tool_name == "AskUserQuestion":
         question = tool_input.get("question", "Agent needs input:")
 
+        # Validate question is non-empty
+        if not question.strip():
+            question = "Agent needs input:"
+
         # Suspend spinner during user input so prompt is visible
         # Late import to avoid circular dependency (workflow -> agent -> permissions)
         from π.workflow import get_current_status
@@ -53,14 +62,26 @@ async def can_use_tool(
         console.print(f"\n[bold yellow]🤔 Agent asks:[/bold yellow] {question}")
         speak("questions")
 
-        # Get user input (run sync input in thread to avoid blocking event loop)
-        user_response = await asyncio.to_thread(
-            console.input, "[bold green]Your response:[/bold green] "
-        )
+        try:
+            # Get user input with timeout
+            user_response = await wait_for(
+                asyncio.to_thread(
+                    console.input, "[bold green]Your response:[/bold green] "
+                ),
+                timeout=USER_INPUT_TIMEOUT,
+            )
+        except TimeoutError:
+            logger.warning("User input timed out after %s seconds", USER_INPUT_TIMEOUT)
+            user_response = "[No response - timed out]"
 
         # Resume spinner after user input
         if status:
             status.start()
+
+        # Validate response
+        if not user_response.strip():
+            logger.warning("Empty user response received")
+            user_response = "[No response provided]"
 
         logger.debug("User responded to AskUserQuestion: %s", user_response[:50])
 
