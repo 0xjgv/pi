@@ -32,7 +32,7 @@ load_dotenv()
 def _format_stages() -> str:
     """Format STAGE_TIERS as 'Name(tier) → Name(tier) → ...'"""
     parts = [
-        f"{stage.value.split('_')[0].title()}({tier})"
+        f"{stage.value.replace('_', ' ').title()} ({tier})"
         for stage, tier in STAGE_TIERS.items()
     ]
     return " → ".join(parts)

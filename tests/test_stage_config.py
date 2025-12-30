@@ -8,8 +8,7 @@ class TestStage:
 
     def test_has_all_workflow_stages(self):
         """Should define all five workflow stages."""
-        assert Stage.CLARIFY == "clarify"
-        assert Stage.RESEARCH == "research"
+        assert Stage.RESEARCH_CODEBASE == "research"
         assert Stage.PLAN == "plan"
         assert Stage.REVIEW_PLAN == "review_plan"
         assert Stage.ITERATE_PLAN == "iterate_plan"
@@ -30,13 +29,13 @@ class TestStageTiers:
     def test_has_active_stages(self):
         """Should have configuration for active workflow stages."""
         # Only RESEARCH, PLAN, REVIEW_PLAN are currently active in workflow
-        assert Stage.RESEARCH in STAGE_TIERS
+        assert Stage.RESEARCH_CODEBASE in STAGE_TIERS
         assert Stage.PLAN in STAGE_TIERS
         assert Stage.REVIEW_PLAN in STAGE_TIERS
 
     def test_research_uses_high_tier(self):
         """Research stage should use high tier for deep understanding."""
-        assert STAGE_TIERS[Stage.RESEARCH] == "high"
+        assert STAGE_TIERS[Stage.RESEARCH_CODEBASE] == "high"
 
     def test_plan_uses_high_tier(self):
         """Plan stage should use high tier for complex reasoning."""

@@ -24,8 +24,7 @@ class Provider(StrEnum):
 class Stage(StrEnum):
     """Workflow stages."""
 
-    CLARIFY = "clarify"
-    RESEARCH = "research"
+    RESEARCH_CODEBASE = "research_codebase"
     PLAN = "plan"
     REVIEW_PLAN = "review_plan"
     ITERATE_PLAN = "iterate_plan"
@@ -55,7 +54,7 @@ DEFAULT_MODELS = PROVIDER_MODELS[Provider.Claude]
 
 # Stage → Model tier mapping (only active stages)
 STAGE_TIERS: dict[Stage, str] = {
-    Stage.RESEARCH: "high",
+    Stage.RESEARCH_CODEBASE: "high",
     Stage.PLAN: "high",
     Stage.REVIEW_PLAN: "high",
     Stage.ITERATE_PLAN: "high",
