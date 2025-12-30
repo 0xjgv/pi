@@ -1,12 +1,13 @@
 # π
 
-CLI tool orchestrating Claude agents via DSPy ReAct for autonomous research → plan → implement workflows.
+CLI tool orchestrating Claude agents via DSPy ReAct for autonomous research → plan → review → iterate workflows.
 
 ## Highlights
 
 - **DSPy ReAct orchestration** — automatic tool selection and multi-step reasoning
 - **Full Claude Agent SDK tooling** — files, shell commands, web search, task management
-- **Three-phase workflow** — structured research → planning → implementation
+- **Four-stage pipeline** — research → plan → review → iterate with per-stage models
+- **Human-in-the-loop** — `ask_human` tool for clarification during workflows
 - **Safety hooks** — blocks dangerous commands, runs linters on file changes
 - **Sub-agent system** — parallel specialized agents for codebase exploration
 
@@ -16,25 +17,33 @@ CLI tool orchestrating Claude agents via DSPy ReAct for autonomous research → 
 User Objective
      ↓
 ┌─────────────────────────────────────────────────┐
-│ Phase 1: Research (/1_research_codebase)        │
+│ Stage 1: Research (/1_research_codebase)        │
 │ • Spawns codebase-locator, analyzer agents      │
+│ • May ask for clarification via ask_human       │
 │ • Outputs: thoughts/shared/research/*.md        │
 └─────────────────────────────────────────────────┘
      ↓
 ┌─────────────────────────────────────────────────┐
-│ Phase 2: Plan (/2_create_plan)                  │
-│ • Creates implementation plan with phases       │
+│ Stage 2: Plan (/2_create_plan)                  │
+│ • Creates implementation plan based on research │
+│ • May ask for clarification via ask_human       │
 │ • Outputs: thoughts/shared/plans/*.md           │
 └─────────────────────────────────────────────────┘
      ↓
 ┌─────────────────────────────────────────────────┐
-│ Phase 3: Implement (/3_implement_plan)          │
-│ • Executes plan with safety hooks               │
-│ • Pauses for manual verification per phase      │
+│ Stage 3: Review (/3_review_plan)                │
+│ • Reviews plan for completeness and accuracy    │
+│ • Identifies gaps, inconsistencies, improvements│
+└─────────────────────────────────────────────────┘
+     ↓
+┌─────────────────────────────────────────────────┐
+│ Stage 4: Iterate (/4_iterate_plan)              │
+│ • Incorporates review feedback into plan        │
+│ • Outputs: Updated plan document                │
 └─────────────────────────────────────────────────┘
 ```
 
-The DSPy ReAct agent automatically selects between `research_codebase`, `create_plan`, and `implement_plan` tools based on the objective.
+Each stage uses a dedicated DSPy ReAct agent with configurable model tier.
 
 ## Prerequisites
 
@@ -81,7 +90,10 @@ make unlink                    # Removes symlink from ~/.local/bin
 
 ```bash
 π "Summarize the project files"
-π "Implement user authentication"
+π "Create a plan for user authentication"
+
+# Or pipe from stdin
+echo "Analyze the test coverage" | π
 ```
 
 ## CLI Options
@@ -110,6 +122,7 @@ make unlink                    # Removes symlink from ~/.local/bin
 │   └── module.py               # DSPy workflow module
 ├── optimization/               # GEPA optimization
 │   ├── metrics.py              # Plan quality metrics
+│   ├── question_metrics.py     # Question quality evaluation
 │   ├── optimizer.py            # GEPA utilities
 │   └── training.py             # Training data loading
 ├── support/                    # Supporting infrastructure
@@ -123,7 +136,7 @@ make unlink                    # Removes symlink from ~/.local/bin
 
 .claude/
 ├── agents/                     # Sub-agent definitions
-└── commands/                   # Slash commands (phases 1-5)
+└── commands/                   # Slash commands (stages 1-4)
 ```
 
 ## Sub-Agents
