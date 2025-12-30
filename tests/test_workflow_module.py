@@ -53,6 +53,32 @@ class TestPiWorkflowInit:
         tool_names = [t.__name__ for t in tools]
         assert "iterate_plan" in tool_names
 
+    def test_research_agent_has_ask_human_tool(self, mock_dspy: MagicMock):
+        """Research agent should include ask_human tool for clarification."""
+        from π.workflow import RPIWorkflow
+
+        RPIWorkflow()
+
+        # Find the research agent call (first one)
+        research_call = mock_dspy.ReAct.call_args_list[0]
+        tools = research_call.kwargs.get("tools", [])
+
+        tool_names = [t.__name__ for t in tools]
+        assert "ask_human" in tool_names
+
+    def test_plan_agent_has_ask_human_tool(self, mock_dspy: MagicMock):
+        """Plan agent should include ask_human tool for clarification."""
+        from π.workflow import RPIWorkflow
+
+        RPIWorkflow()
+
+        # Find the plan agent call (second one)
+        plan_call = mock_dspy.ReAct.call_args_list[1]
+        tools = plan_call.kwargs.get("tools", [])
+
+        tool_names = [t.__name__ for t in tools]
+        assert "ask_human" in tool_names
+
 
 class TestPiWorkflowStageExecution:
     """Tests for PiWorkflow stage execution order."""
