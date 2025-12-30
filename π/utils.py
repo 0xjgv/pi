@@ -11,11 +11,13 @@ from typing import Any, Callable
 def setup_logging(log_dir: Path) -> Path:
     """Configure logging for the π CLI.
 
+    Uses delayed file creation - log file only created when first message written.
+
     Args:
         log_dir: Directory to store log files.
 
     Returns:
-        Path to the log file.
+        Path to the log file (may not exist until first log message).
     """
     logger = logging.getLogger("π")
     logger.handlers.clear()
@@ -23,7 +25,7 @@ def setup_logging(log_dir: Path) -> Path:
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
     _log_path = log_dir / f"{timestamp}.log"
 
-    file_handler = logging.FileHandler(_log_path)
+    file_handler = logging.FileHandler(_log_path, delay=True)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(
         logging.Formatter(

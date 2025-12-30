@@ -1,25 +1,18 @@
 # π
 
-CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan → review → implement workflows.
+CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan → review → iterate workflows.
 
 ## Stack
 
-- Python 3.13+ with uv, hatchling build
+- Python 3.13+ with uv, hatchling
 - claude-agent-sdk, dspy, click, rich
-- pytest + pytest-asyncio for testing
-- ruff for lint/format
+- pytest + pytest-asyncio, ruff
 
 ## Commands
 
-- Run: `π "prompt"`
+- Run: `π "objective"`
 - Quality: `make check` (fix → format → lint → test)
 - Test: `make test` or `make test-cov`
-
-## CLI Options
-
-| Flag | Description |
-|------|-------------|
-| `-v/--version` | Show version |
 
 ## Environment
 
@@ -28,28 +21,27 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan 
 
 ## Architecture
 
-**Workflow**: 5-stage pipeline — Clarify → Research → Plan → Review → Implement
+**Workflow**: 4-stage pipeline — Research → Plan → Review → Iterate
 
-**Module structure:**
+**Output paths**: `thoughts/shared/research/*.md`, `thoughts/shared/plans/*.md`
 
-- `cli.py` — Entry point
-- `config.py` — Provider/model/stage configuration
-- `workflow/` — Core workflow execution
-  - `bridge.py` — Tool functions bridging sync→async to Claude SDK
-  - `module.py` — DSPy module with 5 ReAct agents
-- `optimization/` — GEPA metrics and training utilities
-- `support/` — Infrastructure (directories, permissions, HITL)
-- `hooks/` — PreToolUse (bash safety), PostToolUse (linters)
+**Modules:**
+- `cli.py` — Entry point, logging setup
+- `config.py` — Provider/model/stage config, available tools
+- `workflow/` — DSPy ReAct agents (`module.py`) + sync→async bridge (`bridge.py`)
+- `optimization/` — GEPA metrics, training utilities
+- `support/` — Directory management, permissions, HITL providers
+- `hooks/` — PreToolUse (bash safety), PostToolUse (ruff/eslint/cargo/go)
 
 ## Conventions
 
-- **Type hints**: Modern syntax (`str | None`, `dict[str, T]`)
-- **Docstrings**: Google-style with Args/Returns/Raises
-- **Functions**: Use `*,` for keyword-only args
-- **Async**: Nested `async def` with sync wrapper via `run_until_complete()`
-- **Logging**: Module-level `logger = logging.getLogger(__name__)`
-- **Tests**: Class-based (`TestFeature`), `@pytest.mark.asyncio` for async
+- **Type hints**: `str | None`, `dict[str, T]`
+- **Docstrings**: Google-style
+- **Functions**: `*,` for keyword-only args
+- **Async**: Nested `async def` with `run_until_complete()` wrapper
+- **Logging**: `logger = logging.getLogger(__name__)`
+- **Tests**: Class-based `TestFeature`, `@pytest.mark.asyncio`
 
 ## Logs
 
-Debug logs auto-saved to `.π/logs/` (7-day retention, gitignored).
+`.π/logs/` (7-day retention), `~/.claude/hook-logs/` (30-day retention)

@@ -74,7 +74,9 @@ def main(argv: list[str] | None = None) -> None:
 
     speak("π complete")
 
-    if log_path:
+    # Only show log path if file was actually created
+    logging.shutdown()  # Ensure all handlers flushed/closed
+    if log_path.exists():
         print(f"\nDebug log: {log_path}")
 
 
