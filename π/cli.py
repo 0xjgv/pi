@@ -61,11 +61,16 @@ def main(argv: list[str] | None = None) -> None:
     logger.info(f"π (v{VERSION})")
     print(f"π (v{VERSION})")
 
-    # Read from stdin if piped, otherwise use positional arg
-    if not sys.stdin.isatty():
-        objective = sys.stdin.read().strip()
-    else:
+    # Use positional arg if provided, otherwise try stdin if piped
+    if args.objective:
         objective = args.objective
+    elif not sys.stdin.isatty():
+        try:
+            objective = sys.stdin.read().strip()
+        except OSError:
+            objective = None
+    else:
+        objective = None
 
     if not objective:
         parser.print_help()

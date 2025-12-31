@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from π.support import ConsoleInputProvider, create_ask_human_tool
+from π.support import ConsoleInputProvider, create_ask_user_question_tool
 
 
 class TestConsoleInputProvider:
@@ -54,14 +54,14 @@ class TestConsoleInputProvider:
         mock_ask.assert_called_once()
 
 
-class TestCreateAskHumanTool:
-    """Tests for create_ask_human_tool factory."""
+class TestCreateAskUserQuestionTool:
+    """Tests for create_ask_user_question_tool factory."""
 
     def test_returns_callable(self):
         """Should return a callable function."""
         mock_provider = MagicMock()
 
-        tool = create_ask_human_tool(mock_provider)
+        tool = create_ask_user_question_tool(mock_provider)
 
         assert callable(tool)
 
@@ -69,25 +69,25 @@ class TestCreateAskHumanTool:
         """Tool should have a name for DSPy."""
         mock_provider = MagicMock()
 
-        tool = create_ask_human_tool(mock_provider)
+        tool = create_ask_user_question_tool(mock_provider)
 
-        assert tool.__name__ == "ask_human"
+        assert tool.__name__ == "ask_user_question"
 
     def test_tool_has_docstring(self):
         """Tool should have docstring for DSPy tool description."""
         mock_provider = MagicMock()
 
-        tool = create_ask_human_tool(mock_provider)
+        tool = create_ask_user_question_tool(mock_provider)
 
         assert tool.__doc__ is not None
-        assert "human" in tool.__doc__.lower() or "clarif" in tool.__doc__.lower()
+        assert "user" in tool.__doc__.lower() or "clarif" in tool.__doc__.lower()
 
     def test_tool_delegates_to_provider(self):
         """Tool should delegate to provider.ask()."""
         mock_provider = MagicMock()
         mock_provider.ask.return_value = "Human response"
 
-        tool = create_ask_human_tool(mock_provider)
+        tool = create_ask_user_question_tool(mock_provider)
         result = tool("What is the scope?")
 
         mock_provider.ask.assert_called_once_with("What is the scope?")
@@ -98,7 +98,7 @@ class TestCreateAskHumanTool:
         mock_provider = MagicMock()
         mock_provider.ask.return_value = "answer"
 
-        tool = create_ask_human_tool(mock_provider)
+        tool = create_ask_user_question_tool(mock_provider)
         tool("Complex question with special chars: @#$%")
 
         mock_provider.ask.assert_called_with(
@@ -122,7 +122,7 @@ class TestHumanInputProviderProtocol:
                 return f"Custom answer to: {question}"
 
         provider = CustomProvider()
-        tool = create_ask_human_tool(provider)
+        tool = create_ask_user_question_tool(provider)
 
         result = tool("Test question")
 

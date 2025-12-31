@@ -23,14 +23,14 @@ from rich.status import Status
 
 from π.config import get_agent_options
 from π.errors import AgentExecutionError
-from π.support.hitl import ConsoleInputProvider, create_ask_human_tool
+from π.support.hitl import ConsoleInputProvider, create_ask_user_question_tool
 from π.utils import speak
 
 # Project root for command discovery
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
-# DSPy-compatible ask_human tool for workflow stages
-ask_human = create_ask_human_tool(ConsoleInputProvider())
+# DSPy-compatible ask_user_question tool for workflow stages
+ask_user_question = create_ask_user_question_tool(ConsoleInputProvider())
 
 
 class Command(StrEnum):

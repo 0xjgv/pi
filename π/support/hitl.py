@@ -91,8 +91,8 @@ class ConsoleInputProvider:
         return response
 
 
-def create_ask_human_tool(provider: HumanInputProvider):
-    """Create a DSPy-compatible ask_human tool.
+def create_ask_user_question_tool(provider: HumanInputProvider):
+    """Create a DSPy-compatible ask_user_question tool.
 
     Factory function that wraps a HumanInputProvider into a callable
     that can be used as a DSPy ReAct tool.
@@ -104,8 +104,8 @@ def create_ask_human_tool(provider: HumanInputProvider):
         A callable function suitable for use as a DSPy tool
     """
 
-    def ask_human(question: str) -> str:
-        """Ask human for clarification.
+    def ask_user_question(question: str) -> str:
+        """Ask user for clarification.
 
         Use this tool when:
         - The objective is ambiguous or unclear
@@ -114,11 +114,11 @@ def create_ask_human_tool(provider: HumanInputProvider):
         - Critical decisions require human approval
 
         Args:
-            question: Clear, specific question for the human
+            question: Clear, specific question for the user
 
         Returns:
-            Human's response
+            User's response
         """
         return provider.ask(question)
 
-    return ask_human
+    return ask_user_question

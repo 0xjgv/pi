@@ -60,5 +60,5 @@ class TestMaxIters:
         assert MAX_ITERS > 0
 
     def test_max_iters_value(self):
-        """MAX_ITERS should be 3."""
-        assert MAX_ITERS == 3
+        """MAX_ITERS should be 5."""
+        assert MAX_ITERS == 5

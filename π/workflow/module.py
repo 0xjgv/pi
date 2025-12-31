@@ -13,7 +13,7 @@ import dspy
 
 from π.config import MAX_ITERS, Provider, get_lm
 from π.workflow.bridge import (
-    ask_human,
+    ask_user_question,
     create_plan,
     get_extracted_path,
     iterate_plan,
@@ -128,7 +128,7 @@ class RPIWorkflow(dspy.Module):
         """Build research stage agent with optional human clarification."""
         return dspy.ReAct(
             signature=ResearchSignature,
-            tools=[research_codebase, ask_human],
+            tools=[research_codebase, ask_user_question],
             max_iters=MAX_ITERS,
         )
 
@@ -136,7 +136,7 @@ class RPIWorkflow(dspy.Module):
         """Build plan stage agent with optional human clarification."""
         return dspy.ReAct(
             signature=PlanSignature,
-            tools=[create_plan, ask_human],
+            tools=[create_plan, ask_user_question],
             max_iters=MAX_ITERS,
         )
 

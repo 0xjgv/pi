@@ -53,8 +53,8 @@ class TestPiWorkflowInit:
         tool_names = [t.__name__ for t in tools]
         assert "iterate_plan" in tool_names
 
-    def test_research_agent_has_ask_human_tool(self, mock_dspy: MagicMock):
-        """Research agent should include ask_human tool for clarification."""
+    def test_research_agent_has_ask_user_question_tool(self, mock_dspy: MagicMock):
+        """Research agent should include ask_user_question tool for clarification."""
         from π.workflow import RPIWorkflow
 
         RPIWorkflow()
@@ -64,10 +64,10 @@ class TestPiWorkflowInit:
         tools = research_call.kwargs.get("tools", [])
 
         tool_names = [t.__name__ for t in tools]
-        assert "ask_human" in tool_names
+        assert "ask_user_question" in tool_names
 
-    def test_plan_agent_has_ask_human_tool(self, mock_dspy: MagicMock):
-        """Plan agent should include ask_human tool for clarification."""
+    def test_plan_agent_has_ask_user_question_tool(self, mock_dspy: MagicMock):
+        """Plan agent should include ask_user_question tool for clarification."""
         from π.workflow import RPIWorkflow
 
         RPIWorkflow()
@@ -77,7 +77,7 @@ class TestPiWorkflowInit:
         tools = plan_call.kwargs.get("tools", [])
 
         tool_names = [t.__name__ for t in tools]
-        assert "ask_human" in tool_names
+        assert "ask_user_question" in tool_names
 
 
 class TestPiWorkflowStageExecution:

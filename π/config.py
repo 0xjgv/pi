@@ -61,7 +61,7 @@ STAGE_TIERS: dict[Stage, str] = {
 }
 
 # Maximum ReAct iterations (same for all stages)
-MAX_ITERS = 3
+MAX_ITERS = 5
 
 
 @lru_cache(maxsize=6)
