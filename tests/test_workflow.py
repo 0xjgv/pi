@@ -81,14 +81,14 @@ class TestLogHelpers:
         assert "key" in caplog.text
 
     def test_log_tool_call_truncates_long_input(self, caplog: pytest.LogCaptureFixture):
-        """Should truncate inputs longer than 100 chars."""
+        """Should truncate inputs longer than 500 chars."""
         import logging
 
         from claude_agent_sdk.types import ToolUseBlock
 
         block = MagicMock(spec=ToolUseBlock)
         block.name = "TestTool"
-        block.input = {"data": "x" * 200}
+        block.input = {"data": "x" * 600}  # 600 chars exceeds 500 limit
 
         with caplog.at_level(logging.DEBUG, logger="π.workflow"):
             _log_tool_call(block)

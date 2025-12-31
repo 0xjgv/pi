@@ -63,16 +63,21 @@ class ReviewPlanSignature(dspy.Signature):
 
 
 class IteratePlanSignature(dspy.Signature):
-    """Iterate on the plan based on review feedback."""
+    """Iterate on the plan based on review feedback.
+
+    You MUST call the iterate_plan tool to make changes to the plan document.
+    """
 
     plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
     plan_review_feedback: str = dspy.InputField(
-        desc="Review and feedback on the plan from the review stage"
+        desc="Review feedback to incorporate via iterate_plan tool"
     )
 
-    iteration_summary: str = dspy.OutputField(
-        desc="Summary of changes made to the plan"
+    changes_made: str = dspy.OutputField(
+        desc="Detailed list of changes made to the plan via iterate_plan tool. "
+        "Must describe actual modifications (not 'no changes needed')."
     )
+    iteration_summary: str = dspy.OutputField(desc="Summary of the iteration process")
 
 
 # -----------------------------------------------------------------------------
@@ -166,6 +171,50 @@ class RPIWorkflow(dspy.Module):
             elif "observation" in key:
                 logger.debug("DSPy trajectory [%s]: %s", key, str(value)[:200])
 
+    def _validate_tool_usage(
+        self,
+        result: dspy.Prediction,
+        required_tool: str,
+        stage_name: str,
+    ) -> None:
+        """Validate that a required tool was called in the trajectory.
+
+        Args:
+            result: DSPy prediction with trajectory
+            required_tool: Tool name that must have been called
+            stage_name: Name of the stage for error messages
+
+        Raises:
+            ValueError: If the required tool was not called
+        """
+        if not hasattr(result, "trajectory") or not result.trajectory:
+            logger.warning(
+                "%s: No trajectory found, cannot validate tool usage", stage_name
+            )
+            return
+
+        tool_names = [
+            v
+            for k, v in result.trajectory.items()
+            if k.startswith("tool_name_") and v != "finish"
+        ]
+
+        if required_tool not in tool_names:
+            logger.error(
+                "%s: Required tool '%s' was NOT called. Tools used: %s",
+                stage_name,
+                required_tool,
+                tool_names,
+            )
+            raise ValueError(
+                f"{stage_name} failed: {required_tool} tool was not invoked. "
+                f"Agent shortcut by directly producing output. Tools called: {tool_names}"
+            )
+
+        logger.debug(
+            "%s: Tool usage validated - %s was called", stage_name, required_tool
+        )
+
     def forward(self, objective: str) -> dspy.Prediction:
         """Execute workflow: research → plan → review → iterate.
 
@@ -173,13 +222,15 @@ class RPIWorkflow(dspy.Module):
             objective: The user's original objective/task
 
         Returns:
-            Prediction with research_doc_path, plan_doc_path, and iteration_summary
+            Prediction with research_doc_path, plan_doc_path, changes_made, iteration_summary
         """
         # All stages use high tier (cached LM instance)
         lm = get_lm(Provider.Claude, "high")
 
         with dspy.context(lm=lm):
             # Stage 1: Research
+            logger.info("=== STAGE 1/4: RESEARCH ===")
+            logger.debug("Research input: objective=%s", objective[:200])
             researched = self._research_agent(objective=objective)
             self._log_trajectory(researched)
             # Use validated path from context (not LLM output which may hallucinate)
@@ -189,8 +240,15 @@ class RPIWorkflow(dspy.Module):
                     "Research stage did not produce a document at thoughts/shared/research/.\n"
                     "The agent should write the document and output 'Document saved at: <path>'."
                 )
+            logger.info("Research complete: %s", research_doc_path)
 
             # Stage 2: Plan
+            logger.info("=== STAGE 2/4: PLAN ===")
+            logger.debug(
+                "Plan input: objective=%s, research_doc=%s",
+                objective[:100],
+                research_doc_path,
+            )
             planned = self._plan_agent(
                 objective=objective,
                 research_doc_path=research_doc_path,
@@ -203,20 +261,37 @@ class RPIWorkflow(dspy.Module):
                     "Plan stage did not produce a document at thoughts/shared/plans/.\n"
                     "The agent should write the document and output 'Document saved at: <path>'."
                 )
+            logger.info("Plan complete: %s", plan_doc_path)
 
             # Stage 3: Review
+            logger.info("=== STAGE 3/4: REVIEW ===")
+            logger.debug("Review input: plan_doc=%s", plan_doc_path)
             reviewed = self._review_plan_agent(plan_doc_path=plan_doc_path)
             self._log_trajectory(reviewed)
+            logger.info(
+                "Review complete: feedback=%s", reviewed.plan_review_feedback[:100]
+            )
 
             # Stage 4: Iterate
+            logger.info("=== STAGE 4/4: ITERATE ===")
+            logger.debug(
+                "Iterate input: plan_doc=%s, feedback=%s",
+                plan_doc_path,
+                reviewed.plan_review_feedback[:200],
+            )
             iterated = self._iterate_plan_agent(
                 plan_review_feedback=reviewed.plan_review_feedback,
                 plan_doc_path=plan_doc_path,
             )
             self._log_trajectory(iterated)
+            self._validate_tool_usage(iterated, "iterate_plan", "Iterate stage")
+            logger.info(
+                "Iterate complete: changes_made=%s", iterated.changes_made[:100]
+            )
 
         return dspy.Prediction(
             research_doc_path=research_doc_path,
-            iteration_summary=iterated.iteration_summary,
             plan_doc_path=plan_doc_path,
+            changes_made=iterated.changes_made,
+            iteration_summary=iterated.iteration_summary,
         )

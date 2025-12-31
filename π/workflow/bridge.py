@@ -148,40 +148,39 @@ def timed_phase(phase_name: str) -> Generator[None, None, None]:
     """Context manager that shows spinner during execution and timing after."""
     ctx = _get_ctx()
     start = time.monotonic()
+    logger.info(">>> Phase started: %s", phase_name)
+
     with console.status(f"[bold cyan]{phase_name}...") as status:
         ctx.current_status = status
         try:
             yield
         finally:
             ctx.current_status = None
-    elapsed = time.monotonic() - start
 
+    elapsed = time.monotonic() - start
     if elapsed < 60:
         time_str = f"{elapsed:.0f}s"
     else:
         mins, secs = divmod(int(elapsed), 60)
         time_str = f"{mins}m {secs}s"
 
+    logger.info("<<< Phase complete: %s (%s)", phase_name, time_str)
     console.print(f"[green]✓[/green] {phase_name} ({time_str})")
 
 
 def _log_tool_call(block: ToolUseBlock) -> None:
     """Log tool invocation details."""
-    input_preview = (
-        str(block.input)[:100] + "..."
-        if len(str(block.input)) > 100
-        else str(block.input)
-    )
+    input_str = str(block.input)
+    input_preview = input_str[:500] + "..." if len(input_str) > 500 else input_str
     logger.debug("Tool: %s | Input: %s", block.name, input_preview)
 
 
 def _log_tool_result(block: ToolResultBlock) -> None:
     """Log tool result details."""
     status = "error" if block.is_error else "ok"
+    content_str = str(block.content)
     content_preview = (
-        str(block.content)[:80] + "..."
-        if len(str(block.content)) > 80
-        else str(block.content)
+        content_str[:300] + "..." if len(content_str) > 300 else content_str
     )
     logger.debug("Tool result [%s]: %s", status, content_preview)
 
