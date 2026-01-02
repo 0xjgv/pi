@@ -3,13 +3,48 @@
 from datetime import datetime, timedelta
 
 from π.support import cleanup_old_logs, get_logs_dir
+from π.support.directory import get_project_root
+
+
+class TestGetProjectRoot:
+    """Tests for get_project_root function."""
+
+    def test_cwd_with_git_marker(self, monkeypatch, tmp_path):
+        """Should return CWD when it has .git marker."""
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+        assert get_project_root() == tmp_path
+
+    def test_cwd_with_pyproject_marker(self, monkeypatch, tmp_path):
+        """Should return CWD when it has pyproject.toml marker."""
+        (tmp_path / "pyproject.toml").touch()
+        monkeypatch.chdir(tmp_path)
+        assert get_project_root() == tmp_path
+
+    def test_cwd_with_claude_md_marker(self, monkeypatch, tmp_path):
+        """Should return CWD when it has CLAUDE.md marker."""
+        (tmp_path / "CLAUDE.md").touch()
+        monkeypatch.chdir(tmp_path)
+        assert get_project_root() == tmp_path
+
+    def test_no_markers_no_git_falls_back_to_cwd(self, monkeypatch, tmp_path):
+        """Should return CWD when no markers and not in git repo."""
+        monkeypatch.chdir(tmp_path)
+        # No markers, git rev-parse will fail
+        assert get_project_root() == tmp_path
+
+    def test_explicit_start_path(self, tmp_path):
+        """Should use provided start_path instead of CWD."""
+        (tmp_path / ".git").mkdir()
+        assert get_project_root(tmp_path) == tmp_path
 
 
 class TestGetLogsDir:
     """Tests for get_logs_dir function."""
 
-    def test_defaults_to_cwd(self, monkeypatch, tmp_path):
-        """Should default to current working directory."""
+    def test_defaults_to_project_root(self, monkeypatch, tmp_path):
+        """Should default to detected project root."""
+        (tmp_path / ".git").mkdir()
         monkeypatch.chdir(tmp_path)
         logs_dir = get_logs_dir()
         assert logs_dir == tmp_path / ".π" / "logs"

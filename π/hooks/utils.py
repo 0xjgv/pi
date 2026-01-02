@@ -6,6 +6,7 @@ from pathlib import Path
 from rich.console import Console
 
 from π.hooks.logging import log_event
+from π.support.directory import get_project_root
 
 # Shared console for hook output
 console = Console()
@@ -31,9 +32,9 @@ def compact_path(path: Path | str) -> str:
     except (ValueError, AttributeError):
         pass
 
-    # Try to make it relative to current directory
+    # Try to make it relative to project root
     try:
-        rel_path = path.relative_to(Path.cwd())
+        rel_path = path.relative_to(get_project_root())
         if str(rel_path) != str(path):
             return f"./{rel_path}"
     except ValueError:

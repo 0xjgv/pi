@@ -1,10 +1,51 @@
 """Project directory management for π CLI."""
 
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
 PI_GITIGNORE_ENTRY = ".π/\n"
 DEFAULT_LOG_RETENTION_DAYS = 7
+PROJECT_MARKERS = {
+    ".git",
+    "CLAUDE.md",
+    "pyproject.toml",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+}
+
+
+def get_project_root(start_path: Path | None = None) -> Path:
+    """Detect project root: CWD if has markers, else git root, else CWD.
+
+    Args:
+        start_path: Starting path for detection. Defaults to CWD.
+
+    Returns:
+        Detected project root path.
+    """
+    cwd = start_path or Path.cwd()
+
+    # Check if CWD has project markers
+    if any((cwd / m).exists() for m in PROJECT_MARKERS):
+        return cwd
+
+    # Fallback: git root
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return Path(result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    # Final fallback: CWD
+    return cwd
 
 
 def get_logs_dir(root: Path | None = None) -> Path:
@@ -14,12 +55,12 @@ def get_logs_dir(root: Path | None = None) -> Path:
 
     Args:
         root: Root path where `.π/` should be created.
-            Defaults to current working directory.
+            Defaults to detected project root.
 
     Returns:
         Path to the logs directory.
     """
-    root = root or Path.cwd()
+    root = root or get_project_root()
     logs_dir = root / ".π" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     _ensure_gitignore(root)

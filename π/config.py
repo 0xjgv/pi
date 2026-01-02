@@ -11,6 +11,7 @@ from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
 from π.hooks import check_bash_command, check_file_format
 from π.support import can_use_tool
+from π.support.directory import get_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -126,9 +127,10 @@ AVAILABLE_TOOLS = [
 def get_agent_options(
     *,
     system_prompt: str | None = None,
-    cwd: Path = Path.cwd(),
+    cwd: Path | None = None,
 ) -> ClaudeAgentOptions:
     """Get Claude agent options with hooks and permissions configured."""
+    cwd = cwd or get_project_root()
     return ClaudeAgentOptions(
         hooks={
             "PostToolUse": [

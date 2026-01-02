@@ -23,6 +23,7 @@ from rich.status import Status
 
 from π.config import get_agent_options
 from π.errors import AgentExecutionError
+from π.support.directory import get_project_root
 from π.support.hitl import ConsoleInputProvider, create_ask_user_question_tool
 from π.utils import speak
 
@@ -221,7 +222,7 @@ def _get_agent_options() -> ClaudeAgentOptions:
     ctx = _get_ctx()
     if ctx.agent_options is not None:
         return ctx.agent_options
-    options = get_agent_options(cwd=Path.cwd())
+    options = get_agent_options(cwd=get_project_root())
     ctx.agent_options = options
     return options
 
@@ -249,7 +250,7 @@ def _extract_doc_path(result: str, doc_type: str) -> str | None:
         return None
 
     if match := re.search(pattern, result):
-        path = Path.cwd() / match.group(1)
+        path = get_project_root() / match.group(1)
         if path.exists():
             logger.debug("Extracted and validated doc path: %s", path)
             return str(path)
