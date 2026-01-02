@@ -36,7 +36,7 @@ class TestMain:
         mock_rpi_workflow: MagicMock,  # noqa: ARG002
     ):
         """Should accept objective as positional argument."""
-        main(["test objective"])
+        main(["test-objective"])
         captured = capsys.readouterr()
 
         # Should not show help, should run workflow
@@ -48,7 +48,7 @@ class TestMain:
         mock_rpi_workflow: MagicMock,  # noqa: ARG002
     ):
         """Should run workflow mode with objective."""
-        main(["test objective"])
+        main(["test-objective"])
         captured = capsys.readouterr()
 
         assert "Workflow Mode" in captured.out
@@ -72,7 +72,7 @@ class TestMain:
         mock_rpi_workflow: MagicMock,  # noqa: ARG002
     ):
         """Should display workflow completion message."""
-        main(["test objective"])
+        main(["test-objective"])
         captured = capsys.readouterr()
 
         assert "Workflow Complete" in captured.out

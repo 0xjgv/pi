@@ -42,6 +42,8 @@ class Command(StrEnum):
     REVIEW_PLAN = "review_plan"
     CREATE_PLAN = "create_plan"
     ITERATE_PLAN = "iterate_plan"
+    IMPLEMENT_PLAN = "implement_plan"
+    CREATE_COMMIT = "create_commit"
 
 
 def build_command_map(
@@ -551,4 +553,57 @@ def iterate_plan(
         tool_command=Command.ITERATE_PLAN,
         session_id=session_id,
         query=review_feedback,
+    )
+
+
+@workflow_tool(Command.IMPLEMENT_PLAN, phase_name="Implementing plan", validate_plan=True)
+def implement_plan(
+    *,
+    plan_document_path: Path | str,
+    query: str = "",
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Execute the implementation plan.
+
+    Args:
+        plan_document_path: Path to the plan document to implement.
+        query: Additional context or constraints.
+        session_id: Session ID for resumption (injected by decorator).
+
+    Returns:
+        Tuple of (result text, session ID).
+    """
+    _get_ctx().validate_plan_doc(str(plan_document_path))
+    _get_ctx().doc_paths[Command.IMPLEMENT_PLAN] = str(plan_document_path)
+
+    return _execute_claude_task(
+        path_to_document=Path(plan_document_path),
+        tool_command=Command.IMPLEMENT_PLAN,
+        session_id=session_id,
+        query=query or "Implement this plan",
+    )
+
+
+@workflow_tool(Command.CREATE_COMMIT, phase_name="Creating commit")
+def create_commit(
+    *,
+    files_changed: str,
+    commit_message: str,
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Create a git commit for implementation changes.
+
+    Args:
+        files_changed: List of files to commit.
+        commit_message: Proposed commit message.
+        session_id: Session ID for resumption (injected by decorator).
+
+    Returns:
+        Tuple of (result text with commit hash, session ID).
+    """
+    return _execute_claude_task(
+        path_to_document=None,
+        tool_command=Command.CREATE_COMMIT,
+        session_id=session_id,
+        query=f"Commit files: {files_changed}\nMessage: {commit_message}",
     )

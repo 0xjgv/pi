@@ -14,8 +14,10 @@ import dspy
 from π.config import MAX_ITERS, Provider, get_lm
 from π.workflow.bridge import (
     ask_user_question,
+    create_commit,
     create_plan,
     get_extracted_path,
+    implement_plan,
     iterate_plan,
     research_codebase,
     review_plan,
@@ -80,6 +82,35 @@ class IteratePlanSignature(dspy.Signature):
     iteration_summary: str = dspy.OutputField(desc="Summary of the iteration process")
 
 
+class ImplementSignature(dspy.Signature):
+    """Execute the implementation plan, writing code changes.
+
+    You MUST call the implement_plan tool to execute the plan.
+    """
+
+    plan_doc_path: str = dspy.InputField(desc="Path to the approved plan document")
+
+    files_changed: str = dspy.OutputField(
+        desc="List of files created/modified during implementation"
+    )
+    implementation_summary: str = dspy.OutputField(
+        desc="Summary of what was implemented"
+    )
+
+
+class CommitSignature(dspy.Signature):
+    """Create a git commit for the implementation changes.
+
+    You MUST call the create_commit tool to commit changes.
+    """
+
+    files_changed: str = dspy.InputField(desc="Files modified during implementation")
+    implementation_summary: str = dspy.InputField(desc="Summary of implementation")
+
+    commit_hash: str = dspy.OutputField(desc="Git commit SHA")
+    commit_message: str = dspy.OutputField(desc="The commit message used")
+
+
 # -----------------------------------------------------------------------------
 # Workflow Module
 # -----------------------------------------------------------------------------
@@ -120,14 +151,26 @@ class RPIWorkflow(dspy.Module):
         logger.info("No optimized workflow found, using default")
         return cls(**kwargs)
 
-    def __init__(self):
+    def __init__(self, *, include_implement: bool = False):
+        """Initialize workflow with per-stage ReAct agents.
+
+        Args:
+            include_implement: If True, include implement and commit stages (5 & 6).
+                Defaults to False for backward compatibility.
+        """
         super().__init__()
+        self._include_implement = include_implement
 
         # Build per-stage ReAct agents
         self._research_agent = self._build_research_agent()
         self._plan_agent = self._build_plan_agent()
         self._review_plan_agent = self._build_review_plan_agent()
         self._iterate_plan_agent = self._build_iterate_plan_agent()
+
+        # Optional stages 5 & 6
+        if include_implement:
+            self._implement_agent = self._build_implement_agent()
+            self._commit_agent = self._build_commit_agent()
 
     def _build_research_agent(self) -> dspy.ReAct:
         """Build research stage agent with optional human clarification."""
@@ -158,6 +201,22 @@ class RPIWorkflow(dspy.Module):
         return dspy.ReAct(
             signature=IteratePlanSignature,
             tools=[iterate_plan],
+            max_iters=MAX_ITERS,
+        )
+
+    def _build_implement_agent(self) -> dspy.ReAct:
+        """Build implement stage agent."""
+        return dspy.ReAct(
+            signature=ImplementSignature,
+            tools=[implement_plan],
+            max_iters=MAX_ITERS,
+        )
+
+    def _build_commit_agent(self) -> dspy.ReAct:
+        """Build commit stage agent."""
+        return dspy.ReAct(
+            signature=CommitSignature,
+            tools=[create_commit],
             max_iters=MAX_ITERS,
         )
 
@@ -216,20 +275,22 @@ class RPIWorkflow(dspy.Module):
         )
 
     def forward(self, objective: str) -> dspy.Prediction:
-        """Execute workflow: research → plan → review → iterate.
+        """Execute workflow: research -> plan -> review -> iterate [-> implement -> commit].
 
         Args:
             objective: The user's original objective/task
 
         Returns:
-            Prediction with research_doc_path, plan_doc_path, changes_made, iteration_summary
+            Prediction with research_doc_path, plan_doc_path, changes_made, iteration_summary,
+            and optionally files_changed, implementation_summary, commit_hash, commit_message.
         """
         # All stages use high tier (cached LM instance)
         lm = get_lm(Provider.Claude, "high")
+        total_stages = 6 if self._include_implement else 4
 
         with dspy.context(lm=lm):
             # Stage 1: Research
-            logger.info("=== STAGE 1/4: RESEARCH ===")
+            logger.info("=== STAGE 1/%d: RESEARCH ===", total_stages)
             logger.debug("Research input: objective=%s", objective[:200])
             researched = self._research_agent(objective=objective)
             self._log_trajectory(researched)
@@ -243,7 +304,7 @@ class RPIWorkflow(dspy.Module):
             logger.info("Research complete: %s", research_doc_path)
 
             # Stage 2: Plan
-            logger.info("=== STAGE 2/4: PLAN ===")
+            logger.info("=== STAGE 2/%d: PLAN ===", total_stages)
             logger.debug(
                 "Plan input: objective=%s, research_doc=%s",
                 objective[:100],
@@ -264,7 +325,7 @@ class RPIWorkflow(dspy.Module):
             logger.info("Plan complete: %s", plan_doc_path)
 
             # Stage 3: Review
-            logger.info("=== STAGE 3/4: REVIEW ===")
+            logger.info("=== STAGE 3/%d: REVIEW ===", total_stages)
             logger.debug("Review input: plan_doc=%s", plan_doc_path)
             reviewed = self._review_plan_agent(plan_doc_path=plan_doc_path)
             self._log_trajectory(reviewed)
@@ -273,7 +334,7 @@ class RPIWorkflow(dspy.Module):
             )
 
             # Stage 4: Iterate
-            logger.info("=== STAGE 4/4: ITERATE ===")
+            logger.info("=== STAGE 4/%d: ITERATE ===", total_stages)
             logger.debug(
                 "Iterate input: plan_doc=%s, feedback=%s",
                 plan_doc_path,
@@ -288,6 +349,51 @@ class RPIWorkflow(dspy.Module):
             logger.info(
                 "Iterate complete: changes_made=%s", iterated.changes_made[:100]
             )
+
+            # Optional stages 5 & 6: Implement and Commit
+            if self._include_implement:
+                # Stage 5: Implement
+                logger.info("=== STAGE 5/%d: IMPLEMENT ===", total_stages)
+                logger.debug("Implement input: plan_doc=%s", plan_doc_path)
+                implemented = self._implement_agent(plan_doc_path=plan_doc_path)
+                self._log_trajectory(implemented)
+                self._validate_tool_usage(
+                    implemented, "implement_plan", "Implement stage"
+                )
+                logger.info(
+                    "Implement complete: files_changed=%s",
+                    implemented.files_changed[:100],
+                )
+
+                # Stage 6: Commit
+                logger.info("=== STAGE 6/%d: COMMIT ===", total_stages)
+                logger.debug(
+                    "Commit input: files=%s, summary=%s",
+                    implemented.files_changed[:100],
+                    implemented.implementation_summary[:100],
+                )
+                committed = self._commit_agent(
+                    files_changed=implemented.files_changed,
+                    implementation_summary=implemented.implementation_summary,
+                )
+                self._log_trajectory(committed)
+                self._validate_tool_usage(committed, "create_commit", "Commit stage")
+                logger.info(
+                    "Commit complete: hash=%s, message=%s",
+                    committed.commit_hash,
+                    committed.commit_message[:50],
+                )
+
+                return dspy.Prediction(
+                    research_doc_path=research_doc_path,
+                    plan_doc_path=plan_doc_path,
+                    changes_made=iterated.changes_made,
+                    iteration_summary=iterated.iteration_summary,
+                    files_changed=implemented.files_changed,
+                    implementation_summary=implemented.implementation_summary,
+                    commit_hash=committed.commit_hash,
+                    commit_message=committed.commit_message,
+                )
 
         return dspy.Prediction(
             research_doc_path=research_doc_path,
