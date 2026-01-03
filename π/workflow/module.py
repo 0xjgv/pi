@@ -11,7 +11,7 @@ from pathlib import Path
 
 import dspy
 
-from π.config import MAX_ITERS, Provider, get_lm
+from π.config import MAX_ITERS, Provider, Tier, get_lm
 from π.workflow.bridge import (
     ask_user_question,
     create_plan,
@@ -120,7 +120,7 @@ class RPIWorkflow(dspy.Module):
         logger.info("No optimized workflow found, using default")
         return cls(**kwargs)
 
-    def __init__(self):
+    def __init__(self, lm: dspy.LM | None = None):
         super().__init__()
 
         # Build per-stage ReAct agents
@@ -128,6 +128,7 @@ class RPIWorkflow(dspy.Module):
         self._plan_agent = self._build_plan_agent()
         self._review_plan_agent = self._build_review_plan_agent()
         self._iterate_plan_agent = self._build_iterate_plan_agent()
+        self.lm = lm
 
     def _build_research_agent(self) -> dspy.ReAct:
         """Build research stage agent with optional human clarification."""
@@ -224,8 +225,8 @@ class RPIWorkflow(dspy.Module):
         Returns:
             Prediction with research_doc_path, plan_doc_path, changes_made, iteration_summary
         """
-        # All stages use high tier (cached LM instance)
-        lm = get_lm(Provider.Claude, "high")
+        # All stages use the configured LM instance or default to high tier
+        lm = self.lm or get_lm(Provider.Claude, Tier.HIGH)
 
         with dspy.context(lm=lm):
             # Stage 1: Research

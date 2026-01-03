@@ -19,7 +19,13 @@ logger = logging.getLogger(__name__)
 class Provider(StrEnum):
     Claude = "claude"
     Antigravity = "antigravity"
-    OpenAI = "openai"
+
+
+class Tier(StrEnum):
+    LOW = "low"
+    MED = "med"
+    HIGH = "high"
+    ULTRA = "ultra"
 
 
 class Stage(StrEnum):
@@ -29,24 +35,22 @@ class Stage(StrEnum):
     PLAN = "plan"
     REVIEW_PLAN = "review_plan"
     ITERATE_PLAN = "iterate_plan"
+    IMPLEMENT_PLAN = "implement_plan"
+    COMMIT = "commit"
 
 
 # Provider → Tier → Model mapping
-PROVIDER_MODELS: dict[Provider, dict[str, str]] = {
+PROVIDER_MODELS: dict[Provider, dict[Tier, str]] = {
     Provider.Claude: {
-        "low": "claude-haiku-4-5-20251001",
-        "med": "claude-sonnet-4-5-20250929",
-        "high": "claude-opus-4-5-20251101",
+        Tier.LOW: "claude-haiku-4-5-20251001",
+        Tier.MED: "claude-sonnet-4-5-20250929",
+        Tier.HIGH: "claude-opus-4-5-20251101",
     },
     Provider.Antigravity: {
-        "low": "gemini-3-flash-preview",
-        "med": "gemini-claude-sonnet-4-5-thinking",
-        "high": "gemini-3-pro-preview",
-    },
-    Provider.OpenAI: {
-        "low": "gpt-5.2",
-        "med": "gpt-5.2",
-        "high": "gpt-5.2-codex",
+        Tier.LOW: "gemini-3-flash-preview",
+        Tier.MED: "gemini-claude-sonnet-4-5-thinking",
+        Tier.HIGH: "gemini-3-pro-preview",
+        Tier.ULTRA: "gemini-claude-opus-4-5-thinking",
     },
 }
 
@@ -54,11 +58,13 @@ PROVIDER_MODELS: dict[Provider, dict[str, str]] = {
 DEFAULT_MODELS = PROVIDER_MODELS[Provider.Claude]
 
 # Stage → Model tier mapping (only active stages)
-STAGE_TIERS: dict[Stage, str] = {
-    Stage.RESEARCH_CODEBASE: "high",
-    Stage.PLAN: "high",
-    Stage.REVIEW_PLAN: "high",
-    Stage.ITERATE_PLAN: "high",
+STAGE_TIERS: dict[Stage, Tier] = {
+    Stage.RESEARCH_CODEBASE: Tier.HIGH,
+    Stage.PLAN: Tier.HIGH,
+    Stage.REVIEW_PLAN: Tier.HIGH,
+    Stage.ITERATE_PLAN: Tier.HIGH,
+    Stage.IMPLEMENT_PLAN: Tier.HIGH,
+    Stage.COMMIT: Tier.LOW,
 }
 
 # Maximum ReAct iterations (same for all stages)
@@ -66,7 +72,7 @@ MAX_ITERS = 5
 
 
 @lru_cache(maxsize=6)
-def get_lm(provider: Provider, tier: str) -> dspy.LM:
+def get_lm(provider: Provider, tier: Tier) -> dspy.LM:
     """Get cached LM instance for provider/tier combination.
 
     Args:
