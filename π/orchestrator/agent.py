@@ -11,8 +11,10 @@ import logging
 from pathlib import Path
 
 import dspy
+from rich.console import Console
 
 from π.config import Provider, get_lm
+from π.orchestrator.display import OrchestratorDisplay
 from π.orchestrator.signatures import (
     ComplexityAssessSignature,
     OneThingSignature,
@@ -21,6 +23,7 @@ from π.orchestrator.signatures import (
 from π.orchestrator.state import (
     OrchestratorStatus,
     Task,
+    TaskStage,
     TaskStrategy,
     WorkflowState,
     load_or_create_state,
@@ -54,17 +57,27 @@ class OrchestratorAgent(dspy.Module):
 
     Attributes:
         root: Project root path for state persistence.
-        provider: AI provider for model selection.
+        display: Rich display for progress visualization.
     """
 
-    def __init__(self, root: Path | None = None):
+    def __init__(
+        self,
+        root: Path | None = None,
+        *,
+        console: Console | None = None,
+        enable_display: bool = True,
+    ):
         """Initialize orchestrator agent.
 
         Args:
             root: Project root path for state persistence.
+            console: Rich console for display output.
+            enable_display: Whether to show live progress display.
         """
         super().__init__()
         self.root = root
+        self._enable_display = enable_display
+        self._display = OrchestratorDisplay(console=console) if enable_display else None
 
         # Build DSPy agents for decision-making
         self._orchestrator_agent = self._build_orchestrator_agent()
@@ -85,6 +98,19 @@ class OrchestratorAgent(dspy.Module):
     def _build_one_thing_agent(self) -> dspy.ChainOfThought:
         """Build one-thing decomposition agent."""
         return dspy.ChainOfThought(OneThingSignature)
+
+    def _update_stage(self, task: Task, stage: TaskStage, state: WorkflowState) -> None:
+        """Update task stage and refresh display.
+
+        Args:
+            task: Task to update.
+            stage: New execution stage.
+            state: Current workflow state.
+        """
+        task.stage = stage
+        save_state(state, self.root)
+        if self._display:
+            self._display.update_stage(stage)
 
     def _assess_complexity(self, task: Task, state: WorkflowState) -> int:
         """Assess task complexity using LLM reasoning.
@@ -213,8 +239,20 @@ class OrchestratorAgent(dspy.Module):
         logger.info("Running full workflow for task: %s", task.id)
 
         try:
-            # Run existing 4-stage workflow
+            # Stage 1: Research
+            self._update_stage(task, TaskStage.RESEARCHING, state)
+
+            # Stage 2: Plan
+            self._update_stage(task, TaskStage.PLANNING, state)
+
+            # Run existing 4-stage workflow (research + plan + review + iterate)
             result = self._workflow(objective=task.description)
+
+            # Stage 3: Review (already done in workflow)
+            self._update_stage(task, TaskStage.REVIEWING, state)
+
+            # Stage 4: Iterate (already done in workflow)
+            self._update_stage(task, TaskStage.ITERATING, state)
 
             outputs = {
                 "research": result.research_doc_path,
@@ -226,6 +264,13 @@ class OrchestratorAgent(dspy.Module):
             # Implement + commit stages will be added in Phase 3
             # For now, workflow completes after iterate stage
 
+            if self._display:
+                self._display.log_workflow_result(
+                    strategy="full",
+                    success=True,
+                    outputs=outputs,
+                )
+
             return WorkflowResult(
                 success=True,
                 outputs=outputs,
@@ -233,6 +278,8 @@ class OrchestratorAgent(dspy.Module):
             )
         except Exception as e:
             logger.exception("Full workflow failed for task %s", task.id)
+            if self._display:
+                self._display.log_workflow_result(strategy="full", success=False)
             return WorkflowResult(
                 success=False,
                 outputs={},
@@ -334,6 +381,81 @@ class OrchestratorAgent(dspy.Module):
                 error=f"Validation failed after max retries: {failure_msg}",
             )
 
+    def _run_orchestration_loop(
+        self,
+        state: WorkflowState,
+    ) -> None:
+        """Run the main orchestration loop.
+
+        Args:
+            state: Workflow state to operate on.
+        """
+        while (
+            state.status == OrchestratorStatus.RUNNING
+            and state.config.current_iteration < state.config.max_iterations
+        ):
+            iteration = state.config.current_iteration + 1
+            max_iter = state.config.max_iterations
+
+            logger.info("=== Iteration %d/%d ===", iteration, max_iter)
+            if self._display:
+                self._display.log_iteration(iteration, max_iter)
+                self._display.update_state(state)
+
+            # Check if we have actionable tasks
+            if not state.has_actionable_task():
+                if state.all_complete():
+                    logger.info("All tasks complete!")
+                    state.status = OrchestratorStatus.COMPLETED
+                    save_state(state, self.root)
+                    break
+
+                # Decompose: "What's the ONE thing?"
+                next_task_desc = self._reason_one_thing(state)
+                add_task(state, next_task_desc, root=self.root)
+                if self._display:
+                    self._display.update_state(state)
+
+            # Get next task
+            task = get_next_task(state)
+            if task is None:
+                logger.info("No pending tasks, completing")
+                state.status = OrchestratorStatus.COMPLETED
+                save_state(state, self.root)
+                break
+
+            # Mark in progress and update display
+            mark_in_progress(state, task.id, root=self.root)
+            if self._display:
+                self._display.update_current_task(task)
+                self._display.log_task_start(task)
+
+            # Assess complexity
+            self._update_stage(task, TaskStage.ASSESSING, state)
+            complexity = self._assess_complexity(task, state)
+
+            # Run appropriate workflow
+            result = self._run_workflow(task, complexity, state)
+
+            if result.success:
+                # Mark complete
+                self._update_stage(task, TaskStage.COMPLETE, state)
+                mark_complete(state, task.id, outputs=result.outputs, root=self.root)
+                if self._display:
+                    self._display.log_task_complete(task)
+                    self._display.update_current_task(None)
+            else:
+                # Halt on failure
+                state.halt(reason=result.error or "Workflow failed")
+                save_state(state, self.root)
+                break
+
+            # Increment iteration
+            state.increment_iteration()
+            save_state(state, self.root)
+            if self._display:
+                self._display.update_state(state)
+
     def forward(self, objective: str) -> dspy.Prediction:
         """Execute orchestrator workflow for objective.
 
@@ -361,58 +483,13 @@ class OrchestratorAgent(dspy.Module):
         lm = get_lm(Provider.Claude, "high")
 
         with dspy.context(lm=lm):
-            while (
-                state.status == OrchestratorStatus.RUNNING
-                and state.config.current_iteration < state.config.max_iterations
-            ):
-                logger.info(
-                    "=== Iteration %d/%d ===",
-                    state.config.current_iteration + 1,
-                    state.config.max_iterations,
-                )
-
-                # Check if we have actionable tasks
-                if not state.has_actionable_task():
-                    if state.all_complete():
-                        logger.info("All tasks complete!")
-                        state.status = OrchestratorStatus.COMPLETED
-                        save_state(state, self.root)
-                        break
-
-                    # Decompose: "What's the ONE thing?"
-                    next_task_desc = self._reason_one_thing(state)
-                    add_task(state, next_task_desc, root=self.root)
-
-                # Get next task
-                task = get_next_task(state)
-                if task is None:
-                    logger.info("No pending tasks, completing")
-                    state.status = OrchestratorStatus.COMPLETED
-                    save_state(state, self.root)
-                    break
-
-                # Mark in progress
-                mark_in_progress(state, task.id, root=self.root)
-
-                # Assess complexity
-                complexity = self._assess_complexity(task, state)
-
-                # Run appropriate workflow
-                result = self._run_workflow(task, complexity, state)
-
-                if result.success:
-                    # Validation is integrated into workflow in Phase 5
-                    # For now, mark complete directly
-                    mark_complete(state, task.id, outputs=result.outputs, root=self.root)
-                else:
-                    # Halt on failure
-                    state.halt(reason=result.error or "Workflow failed")
-                    save_state(state, self.root)
-                    break
-
-                # Increment iteration
-                state.increment_iteration()
-                save_state(state, self.root)
+            if self._display and self._enable_display:
+                # Run with live display
+                with self._display.live_display(state):
+                    self._run_orchestration_loop(state)
+            else:
+                # Run without display
+                self._run_orchestration_loop(state)
 
         # Build summary
         completed_count = sum(

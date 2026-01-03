@@ -30,6 +30,21 @@ class TaskStatus(StrEnum):
     BLOCKED = "blocked"
 
 
+class TaskStage(StrEnum):
+    """Granular task execution stage for progress display."""
+
+    PENDING = "pending"
+    ASSESSING = "assessing complexity"
+    RESEARCHING = "researching codebase"
+    PLANNING = "creating plan"
+    REVIEWING = "reviewing plan"
+    ITERATING = "iterating on plan"
+    IMPLEMENTING = "implementing changes"
+    COMMITTING = "creating commit"
+    VALIDATING = "validating changes"
+    COMPLETE = "complete"
+
+
 class OrchestratorStatus(StrEnum):
     """Orchestrator execution status."""
 
@@ -53,6 +68,7 @@ class Task:
         id: Unique task identifier (e.g., "t1", "t2").
         description: Human-readable task description.
         status: Current task status.
+        stage: Current execution stage for progress display.
         parent_id: Optional parent task ID for subtask hierarchy.
         strategy: Execution strategy (full or quick workflow).
         outputs: Artifacts produced by this task.
@@ -65,6 +81,7 @@ class Task:
     id: str
     description: str
     status: TaskStatus = TaskStatus.PENDING
+    stage: TaskStage = TaskStage.PENDING
     parent_id: str | None = None
     strategy: TaskStrategy | None = None
     outputs: dict[str, str] = field(default_factory=dict)
@@ -79,6 +96,7 @@ class Task:
             "id": self.id,
             "description": self.description,
             "status": self.status.value if isinstance(self.status, StrEnum) else self.status,
+            "stage": self.stage.value if isinstance(self.stage, StrEnum) else self.stage,
             "parent_id": self.parent_id,
             "strategy": self.strategy.value if self.strategy else None,
             "outputs": self.outputs,
@@ -95,6 +113,7 @@ class Task:
             id=data["id"],
             description=data["description"],
             status=TaskStatus(data["status"]),
+            stage=TaskStage(data["stage"]) if data.get("stage") else TaskStage.PENDING,
             parent_id=data.get("parent_id"),
             strategy=TaskStrategy(data["strategy"]) if data.get("strategy") else None,
             outputs=data.get("outputs", {}),
