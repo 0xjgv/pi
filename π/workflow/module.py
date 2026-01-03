@@ -14,8 +14,10 @@ import dspy
 from π.config import MAX_ITERS, Provider, Tier, get_lm
 from π.workflow.bridge import (
     ask_user_question,
+    commit_changes,
     create_plan,
     get_extracted_path,
+    implement_plan,
     iterate_plan,
     research_codebase,
     review_plan,
@@ -80,6 +82,36 @@ class IteratePlanSignature(dspy.Signature):
     iteration_summary: str = dspy.OutputField(desc="Summary of the iteration process")
 
 
+class ImplementPlanSignature(dspy.Signature):
+    """Implement the plan by executing all phases.
+
+    You MUST call the implement_plan tool to execute the plan.
+    """
+
+    plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
+    objective: str = dspy.InputField(desc="The original objective for context")
+
+    implementation_status: str = dspy.OutputField(
+        desc="Summary of implementation status: success, partial, or failed"
+    )
+    files_changed: str = dspy.OutputField(
+        desc="List of files created, modified, or deleted during implementation"
+    )
+
+
+class CommitSignature(dspy.Signature):
+    """Commit the changes made during implementation.
+
+    You MUST call the commit_changes tool to create commits.
+    """
+
+    implementation_summary: str = dspy.InputField(
+        desc="Summary of changes made during implementation"
+    )
+
+    commit_result: str = dspy.OutputField(desc="Commit hash(es) or status message")
+
+
 # -----------------------------------------------------------------------------
 # Workflow Module
 # -----------------------------------------------------------------------------
@@ -99,8 +131,8 @@ class RPIWorkflow(dspy.Module):
     def load_optimized(
         cls,
         path: str | Path = DEFAULT_OPTIMIZED_PATH,
-        **kwargs,
-    ) -> "RPIWorkflow":
+        **kwargs: dspy.LM | None,
+    ) -> RPIWorkflow:
         """Load GEPA-optimized workflow if available.
 
         Falls back to unoptimized workflow if no saved state exists.
@@ -120,7 +152,7 @@ class RPIWorkflow(dspy.Module):
         logger.info("No optimized workflow found, using default")
         return cls(**kwargs)
 
-    def __init__(self, lm: dspy.LM | None = None):
+    def __init__(self, lm: dspy.LM | None = None) -> None:
         super().__init__()
 
         # Build per-stage ReAct agents
@@ -128,6 +160,8 @@ class RPIWorkflow(dspy.Module):
         self._plan_agent = self._build_plan_agent()
         self._review_plan_agent = self._build_review_plan_agent()
         self._iterate_plan_agent = self._build_iterate_plan_agent()
+        self._implement_plan_agent = self._build_implement_plan_agent()
+        self._commit_agent = self._build_commit_agent()
         self.lm = lm
 
     def _build_research_agent(self) -> dspy.ReAct:
@@ -159,6 +193,22 @@ class RPIWorkflow(dspy.Module):
         return dspy.ReAct(
             signature=IteratePlanSignature,
             tools=[iterate_plan],
+            max_iters=MAX_ITERS,
+        )
+
+    def _build_implement_plan_agent(self) -> dspy.ReAct:
+        """Build implement plan stage agent."""
+        return dspy.ReAct(
+            signature=ImplementPlanSignature,
+            tools=[implement_plan, ask_user_question],
+            max_iters=MAX_ITERS,
+        )
+
+    def _build_commit_agent(self) -> dspy.ReAct:
+        """Build commit stage agent."""
+        return dspy.ReAct(
+            signature=CommitSignature,
+            tools=[commit_changes],
             max_iters=MAX_ITERS,
         )
 
@@ -209,7 +259,8 @@ class RPIWorkflow(dspy.Module):
             )
             raise ValueError(
                 f"{stage_name} failed: {required_tool} tool was not invoked. "
-                f"Agent shortcut by directly producing output. Tools called: {tool_names}"
+                f"Agent shortcut by directly producing output. "
+                f"Tools called: {tool_names}"
             )
 
         logger.debug(
@@ -217,20 +268,20 @@ class RPIWorkflow(dspy.Module):
         )
 
     def forward(self, objective: str) -> dspy.Prediction:
-        """Execute workflow: research → plan → review → iterate.
+        """Execute workflow: research → plan → review → iterate → implement → commit.
 
         Args:
             objective: The user's original objective/task
 
         Returns:
-            Prediction with research_doc_path, plan_doc_path, changes_made, iteration_summary
+            Prediction with all stage outputs including implementation results
         """
         # All stages use the configured LM instance or default to high tier
         lm = self.lm or get_lm(Provider.Claude, Tier.HIGH)
 
         with dspy.context(lm=lm):
             # Stage 1: Research
-            logger.info("=== STAGE 1/4: RESEARCH ===")
+            logger.info("=== STAGE 1/6: RESEARCH ===")
             logger.debug("Research input: objective=%s", objective[:200])
             researched = self._research_agent(objective=objective)
             self._log_trajectory(researched)
@@ -238,13 +289,14 @@ class RPIWorkflow(dspy.Module):
             research_doc_path = get_extracted_path("research")
             if not research_doc_path:
                 raise ValueError(
-                    "Research stage did not produce a document at thoughts/shared/research/.\n"
-                    "The agent should write the document and output 'Document saved at: <path>'."
+                    "Research stage did not produce a document at "
+                    "thoughts/shared/research/.\n"
+                    "Agent should output 'Document saved at: <path>'."
                 )
             logger.info("Research complete: %s", research_doc_path)
 
             # Stage 2: Plan
-            logger.info("=== STAGE 2/4: PLAN ===")
+            logger.info("=== STAGE 2/6: PLAN ===")
             logger.debug(
                 "Plan input: objective=%s, research_doc=%s",
                 objective[:100],
@@ -259,13 +311,14 @@ class RPIWorkflow(dspy.Module):
             plan_doc_path = get_extracted_path("plan")
             if not plan_doc_path:
                 raise ValueError(
-                    "Plan stage did not produce a document at thoughts/shared/plans/.\n"
-                    "The agent should write the document and output 'Document saved at: <path>'."
+                    "Plan stage did not produce a document at "
+                    "thoughts/shared/plans/.\n"
+                    "Agent should output 'Document saved at: <path>'."
                 )
             logger.info("Plan complete: %s", plan_doc_path)
 
             # Stage 3: Review
-            logger.info("=== STAGE 3/4: REVIEW ===")
+            logger.info("=== STAGE 3/6: REVIEW ===")
             logger.debug("Review input: plan_doc=%s", plan_doc_path)
             reviewed = self._review_plan_agent(plan_doc_path=plan_doc_path)
             self._log_trajectory(reviewed)
@@ -274,7 +327,7 @@ class RPIWorkflow(dspy.Module):
             )
 
             # Stage 4: Iterate
-            logger.info("=== STAGE 4/4: ITERATE ===")
+            logger.info("=== STAGE 4/6: ITERATE ===")
             logger.debug(
                 "Iterate input: plan_doc=%s, feedback=%s",
                 plan_doc_path,
@@ -290,9 +343,39 @@ class RPIWorkflow(dspy.Module):
                 "Iterate complete: changes_made=%s", iterated.changes_made[:100]
             )
 
+            # Stage 5: Implement
+            logger.info("=== STAGE 5/6: IMPLEMENT ===")
+            logger.debug("Implement input: plan_doc=%s", plan_doc_path)
+            implemented = self._implement_plan_agent(
+                plan_doc_path=plan_doc_path,
+                objective=objective,
+            )
+            self._log_trajectory(implemented)
+            self._validate_tool_usage(implemented, "implement_plan", "Implement stage")
+            logger.info(
+                "Implement complete: status=%s", implemented.implementation_status[:100]
+            )
+
+        # Stage 6: Commit (uses LOW tier for simpler task)
+        logger.info("=== STAGE 6/6: COMMIT ===")
+        logger.debug(
+            "Commit input: summary=%s", implemented.implementation_status[:200]
+        )
+        commit_lm = get_lm(Provider.Claude, Tier.LOW)
+        with dspy.context(lm=commit_lm):
+            committed = self._commit_agent(
+                implementation_summary=implemented.implementation_status,
+            )
+        self._log_trajectory(committed)
+        self._validate_tool_usage(committed, "commit_changes", "Commit stage")
+        logger.info("Commit complete: result=%s", committed.commit_result[:100])
+
         return dspy.Prediction(
             research_doc_path=research_doc_path,
             plan_doc_path=plan_doc_path,
             changes_made=iterated.changes_made,
             iteration_summary=iterated.iteration_summary,
+            implementation_status=implemented.implementation_status,
+            files_changed=implemented.files_changed,
+            commit_result=committed.commit_result,
         )

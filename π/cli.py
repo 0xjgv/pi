@@ -53,6 +53,9 @@ def run_workflow_mode(objective: str) -> None:
     print("\n=== Workflow Complete ===")
     print(f"Research Doc: {result.research_doc_path}")
     print(f"Plan Doc: {result.plan_doc_path}")
+    print(f"Implementation: {result.implementation_status}")
+    print(f"Files Changed: {result.files_changed}")
+    print(f"Commit: {result.commit_result}")
 
 
 @prevent_sleep
