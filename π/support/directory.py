@@ -99,6 +99,25 @@ def cleanup_old_logs(
     return deleted
 
 
+def get_state_dir(root: Path | None = None) -> Path:
+    """Get state directory, creating .π/state/ if needed.
+
+    Also adds `.π/` to the root .gitignore if not already present.
+
+    Args:
+        root: Root path where `.π/` should be created.
+            Defaults to detected project root.
+
+    Returns:
+        Path to the state directory.
+    """
+    root = root or get_project_root()
+    state_dir = root / ".π" / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_gitignore(root)
+    return state_dir
+
+
 def _ensure_gitignore(root: Path) -> None:
     """Add .π/ to root .gitignore if not already present."""
     gitignore = root / ".gitignore"
