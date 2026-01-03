@@ -14,7 +14,7 @@ import dspy
 from π.config import MAX_ITERS, Provider, get_lm
 from π.workflow.bridge import (
     ask_user_question,
-    create_commit,
+    commit,
     create_plan,
     get_extracted_path,
     implement_plan,
@@ -101,7 +101,7 @@ class ImplementSignature(dspy.Signature):
 class CommitSignature(dspy.Signature):
     """Create a git commit for the implementation changes.
 
-    You MUST call the create_commit tool to commit changes.
+    You MUST call the commit tool to commit changes.
     """
 
     files_changed: str = dspy.InputField(desc="Files modified during implementation")
@@ -216,7 +216,7 @@ class RPIWorkflow(dspy.Module):
         """Build commit stage agent."""
         return dspy.ReAct(
             signature=CommitSignature,
-            tools=[create_commit],
+            tools=[commit],
             max_iters=MAX_ITERS,
         )
 
@@ -377,7 +377,7 @@ class RPIWorkflow(dspy.Module):
                     implementation_summary=implemented.implementation_summary,
                 )
                 self._log_trajectory(committed)
-                self._validate_tool_usage(committed, "create_commit", "Commit stage")
+                self._validate_tool_usage(committed, "commit", "Commit stage")
                 logger.info(
                     "Commit complete: hash=%s, message=%s",
                     committed.commit_hash,

@@ -43,7 +43,7 @@ class Command(StrEnum):
     CREATE_PLAN = "create_plan"
     ITERATE_PLAN = "iterate_plan"
     IMPLEMENT_PLAN = "implement_plan"
-    CREATE_COMMIT = "create_commit"
+    COMMIT = "commit"
 
 
 def build_command_map(
@@ -584,8 +584,8 @@ def implement_plan(
     )
 
 
-@workflow_tool(Command.CREATE_COMMIT, phase_name="Creating commit")
-def create_commit(
+@workflow_tool(Command.COMMIT, phase_name="Creating commit")
+def commit(
     *,
     files_changed: str,
     commit_message: str,
@@ -603,7 +603,7 @@ def create_commit(
     """
     return _execute_claude_task(
         path_to_document=None,
-        tool_command=Command.CREATE_COMMIT,
+        tool_command=Command.COMMIT,
         session_id=session_id,
         query=f"Commit files: {files_changed}\nMessage: {commit_message}",
     )
