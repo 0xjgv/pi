@@ -1,215 +1,75 @@
 ---
-description: Execute implementation plan, writing code changes
+description: Implement technical plans from thoughts/shared/plans with verification
 model: opus
 ---
 # Implement Plan
 
-You are tasked with executing an implementation plan by writing code changes. You should follow the plan precisely while adapting to any unexpected issues discovered during implementation.
+You are tasked with implementing an approved technical plan from `thoughts/shared/plans/`. These plans contain phases with specific changes and success criteria.
 
-## Purpose and Scope
+## Getting Started
 
-**What this command does**:
+When given a plan path:
 
-- Executes the implementation steps outlined in an approved plan
-- Writes code changes, creates new files, modifies existing files
-- Runs tests and validation as specified in the plan
-- Reports on implementation progress and any deviations from plan
+- Read the plan completely and check for any existing checkmarks (- [x])
+- Read the original ticket and all files mentioned in the plan
+- **Read files fully** - never use limit/offset parameters, you need complete context
+- Think deeply about how the pieces fit together
+- Create a todo list to track your progress
+- Start implementing if you understand what needs to be done
 
-**What this command does NOT do**:
+If no plan path provided, ask for one.
 
-- Create new plans (use `2_create_plan.md` for that)
-- Review or modify plans (use `3_review_plan.md` or `4_iterate_plan.md`)
-- Make architectural decisions not in the plan
-- Skip validation steps
+## Implementation Philosophy
 
-**When to use this command**:
+Plans are carefully designed, but reality can be messy. Your job is to:
 
-- After a plan has been created and reviewed
-- When ready to write code based on an approved plan
-- As part of the orchestrator's execution pipeline
+- Follow the plan's intent while adapting to what you find
+- Implement each phase fully before moving to the next
+- Verify your work makes sense in the broader codebase context
+- Update checkboxes in the plan as you complete sections
 
-## Quick Reference
+When things don't match the plan exactly, think about why and communicate clearly. The plan is your guide, but your judgment matters too.
 
-**Typical invocation**:
+If you encounter a mismatch:
 
-```bash
-/5_implement_plan thoughts/shared/plans/2025-10-XX-feature-name.md
-```
+- STOP and think deeply about why the plan can't be followed
+- Present the issue clearly:
 
-**Workflow**: Read Plan -> Execute Phases -> Run Validation -> Report Results
+  ```markdown
+  Issue in Phase [N]:
+  Expected: [what the plan says]
+  Found: [actual situation]
+  Why this matters: [explanation]
 
-## Initial Response
+  How should I proceed?
+  ```
 
-When this command is invoked:
+## Verification Approach
 
-1. **Parse the input to identify**:
-   - Plan file path (e.g., `thoughts/shared/plans/2025-10-16-feature.md`)
-   - Any additional context or constraints
+After implementing a phase:
 
-2. **Handle different input scenarios**:
+- Run the success criteria checks (usually `make check test` covers everything)
+- Fix any issues before proceeding
+- Update your progress in both the plan and your todos
+- Check off completed items in the plan file itself using Edit
+- **Go over your work and think about how you can verify it. Verify it before proceeding to the next phase.**
 
-   **If NO plan file provided**:
+## If You Get Stuck
 
-   ```markdown
-   I'll help you implement an existing plan.
+When something isn't working as expected:
 
-   Which plan would you like to implement? Please provide the path to the plan file (e.g., `thoughts/shared/plans/2025-10-16-feature.md`).
+- First, make sure you've read and understood all the relevant code
+- Consider if the codebase has evolved since the plan was written
+- Present the mismatch clearly and ask for guidance
 
-   Tip: You can list recent plans with `ls -lt thoughts/shared/plans/ | head`
-   ```
+Use sub-tasks sparingly - mainly for targeted debugging or exploring unfamiliar territory.
 
-   Wait for user input.
+## Resuming Work
 
-   **If plan file provided**:
-   - Proceed immediately to Step 1
+If the plan has existing checkmarks:
 
-## Process Steps
+- Trust that completed work is done
+- Pick up from the first unchecked item
+- Verify previous work only if something seems off
 
-### Step 1: Read and Validate Plan
-
-1. **Read the plan file COMPLETELY**:
-   - Use the Read tool WITHOUT limit/offset parameters
-   - Understand all phases and their steps
-   - Note the success criteria (automated and manual)
-   - Identify any prerequisites or dependencies
-
-2. **Validate plan is ready for implementation**:
-   - Check that the plan has been reviewed (look for review/iteration notes)
-   - Verify all phases have clear, actionable steps
-   - Ensure file paths and references are specific
-
-3. **Create implementation todo list**:
-   - Use TodoWrite to track each phase and major step
-   - This provides visibility into progress
-
-### Step 2: Execute Implementation Phases
-
-For each phase in the plan:
-
-1. **Announce the phase**:
-   ```markdown
-   ## Phase N: [Phase Name]
-   Starting implementation of [brief description]...
-   ```
-
-2. **Execute each step in order**:
-   - Read relevant files before modifying
-   - Use Edit tool for surgical changes to existing files
-   - Use Write tool for new files
-   - Follow existing code patterns and conventions
-
-3. **Handle implementation challenges**:
-   - If a step is unclear, check the plan's context section
-   - If code patterns differ from plan assumptions, adapt while preserving intent
-   - Document any deviations in your progress report
-
-4. **Mark phase complete** in todo list when done
-
-### Step 3: Run Validation
-
-1. **Execute automated verification**:
-   - Run all commands specified in plan's "Automated Verification" section
-   - Typically: `make check`, `make test`, type checking, linting
-
-2. **Report validation results**:
-   ```markdown
-   ### Validation Results
-
-   **Automated Checks**:
-   - `make check`: [PASS/FAIL] [details if failed]
-   - `make test`: [PASS/FAIL] [details if failed]
-
-   **Files Changed**:
-   - [list of files created/modified]
-   ```
-
-3. **If validation fails**:
-   - Analyze the failure
-   - Make targeted fixes
-   - Re-run validation
-   - Document what was fixed
-
-### Step 4: Report Implementation Results
-
-Present a summary:
-
-```markdown
-## Implementation Complete
-
-**Plan**: `thoughts/shared/plans/[filename].md`
-
-### Summary
-[Brief description of what was implemented]
-
-### Files Changed
-- `path/to/file1.py` - [description of changes]
-- `path/to/file2.py` - [description of changes]
-- `path/to/new_file.py` - [new file description]
-
-### Validation Status
-- Type checking: PASS
-- Linting: PASS
-- Tests: PASS (N tests)
-
-### Deviations from Plan
-- [Any adaptations made during implementation]
-- [Reasons for deviations]
-
-### Ready for Commit
-The implementation is complete and validated. Ready for commit with message:
-"[Suggested commit message based on changes]"
-```
-
-## Important Guidelines
-
-1. **Follow the Plan**:
-   - Execute steps in order unless dependencies require reordering
-   - Don't add features not in the plan
-   - Don't skip steps without documenting why
-
-2. **Be Precise**:
-   - Read files before editing
-   - Make surgical changes
-   - Preserve existing code style
-
-3. **Validate Continuously**:
-   - Run tests after significant changes
-   - Fix issues immediately
-   - Don't accumulate broken state
-
-4. **Document Deviations**:
-   - If plan assumptions were wrong, note what was different
-   - If adaptations were needed, explain why
-   - This feedback improves future plans
-
-5. **Track Progress**:
-   - Update TodoWrite as you complete phases
-   - Provide progress updates for long implementations
-   - Mark completion clearly
-
-## Error Handling
-
-**If tests fail after changes**:
-1. Analyze the failure carefully
-2. Check if it's related to your changes or pre-existing
-3. Fix issues related to your implementation
-4. If pre-existing, document and continue
-
-**If plan step is impossible**:
-1. Explain why the step can't be completed as written
-2. Propose an alternative approach
-3. Get confirmation before proceeding differently
-4. Document the deviation
-
-**If unexpected complexity is discovered**:
-1. Complete what you can safely
-2. Report the complexity discovered
-3. Suggest plan updates if needed
-4. Don't attempt risky changes without guidance
-
-## Related Commands
-
-- **`2_create_plan.md`**: Create new implementation plans
-- **`3_review_plan.md`**: Review plans before implementation
-- **`4_iterate_plan.md`**: Update plans based on feedback
-- **`6_create_commit.md`**: Commit implementation changes
+Remember: You're implementing a solution, not just checking boxes. Keep the end goal in mind and maintain forward momentum.

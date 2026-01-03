@@ -11,5 +11,7 @@
         ]
       }
     ]
-  }
+  },
+  "alwaysThinkingEnabled": true,
+  "includeCoAuthoredBy": false
 }
