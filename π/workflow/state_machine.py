@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Self
@@ -90,7 +90,7 @@ class Task:
     parent_id: str | None = None  # For subtask hierarchy
     result: TaskResult | None = None
     created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
     started_at: str | None = None
     completed_at: str | None = None
@@ -225,7 +225,7 @@ class TaskStateMachine:
         *,
         machine_id: str,
         state_dir: Path | None = None,
-    ):
+    ) -> None:
         """Initialize state machine.
 
         Args:
@@ -236,7 +236,7 @@ class TaskStateMachine:
         self._state_dir.mkdir(parents=True, exist_ok=True)
         self._state_file = self._state_dir / f"{machine_id}.json"
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         self._data = StateMachineData(
             id=machine_id,
             objective="",
@@ -288,7 +288,7 @@ class TaskStateMachine:
         Returns:
             Loaded TaskStateMachine instance
         """
-        with open(path) as f:
+        with path.open() as f:
             data = json.load(f)
 
         machine = cls(machine_id=data["id"], state_dir=path.parent)
@@ -298,8 +298,8 @@ class TaskStateMachine:
 
     def save(self) -> None:
         """Persist current state to disk."""
-        self._data.updated_at = datetime.now(timezone.utc).isoformat()
-        with open(self._state_file, "w") as f:
+        self._data.updated_at = datetime.now(UTC).isoformat()
+        with self._state_file.open("w") as f:
             json.dump(self._data.to_dict(), f, indent=2)
         logger.debug("Saved state machine to %s", self._state_file)
 
@@ -314,7 +314,7 @@ class TaskStateMachine:
         """
         checkpoint = Checkpoint(
             id=f"cp-{len(self._data.checkpoints) + 1}",
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             state=self._data.state,
             current_task_id=self._data.current_task_id,
             completed_task_ids=[
@@ -562,7 +562,7 @@ class TaskStateMachine:
                 raise ValueError("No actionable tasks available")
 
         task.status = TaskStatus.IN_PROGRESS
-        task.started_at = datetime.now(timezone.utc).isoformat()
+        task.started_at = datetime.now(UTC).isoformat()
         self._data.current_task_id = task.id
         self._log_event("task_started", {"task_id": task.id})
         self.save()
@@ -589,7 +589,7 @@ class TaskStateMachine:
 
         task.status = TaskStatus.COMPLETED if result.success else TaskStatus.FAILED
         task.result = result
-        task.completed_at = datetime.now(timezone.utc).isoformat()
+        task.completed_at = datetime.now(UTC).isoformat()
 
         self._log_event(
             "task_completed",
@@ -650,7 +650,7 @@ class TaskStateMachine:
         else:
             # Mark as failed
             task.status = TaskStatus.FAILED
-            task.completed_at = datetime.now(timezone.utc).isoformat()
+            task.completed_at = datetime.now(UTC).isoformat()
             task.result = TaskResult(success=False, output="", error=error)
             self._log_event("task_failed", {"task_id": task.id, "error": error})
 
@@ -695,7 +695,7 @@ class TaskStateMachine:
             raise ValueError(f"Task not found: {task_id}")
 
         task.status = TaskStatus.SKIPPED
-        task.completed_at = datetime.now(timezone.utc).isoformat()
+        task.completed_at = datetime.now(UTC).isoformat()
         task.result = TaskResult(success=True, output=f"Skipped: {reason}")
         self._log_event("task_skipped", {"task_id": task_id, "reason": reason})
         self.save()
@@ -806,7 +806,7 @@ class TaskStateMachine:
         """Log an event to execution history."""
         event = {
             "type": event_type,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             **data,
         }
         self._data.execution_history.append(event)

@@ -14,19 +14,25 @@ Example:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import dspy
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
 
 from π.config import Provider, get_lm
 from π.workflow.bridge import (
     ask_user_question,
+    commit_changes,
     create_plan,
     get_extracted_path,
+    implement_plan,
     iterate_plan,
     research_codebase,
     review_plan,
@@ -132,7 +138,7 @@ class TaskExecutor:
         machine: TaskStateMachine,
         *,
         config: ExecutorConfig | None = None,
-    ):
+    ) -> None:
         """Initialize executor.
 
         Args:
@@ -154,7 +160,7 @@ class TaskExecutor:
         *,
         state_dir: Path | None = None,
         config: ExecutorConfig | None = None,
-    ) -> "TaskExecutor":
+    ) -> TaskExecutor:
         """Create a new executor with a fresh or loaded state machine.
 
         Args:
@@ -175,7 +181,7 @@ class TaskExecutor:
         *,
         state_dir: Path | None = None,
         config: ExecutorConfig | None = None,
-    ) -> "TaskExecutor":
+    ) -> TaskExecutor:
         """Resume an existing executor from saved state.
 
         Args:
@@ -215,6 +221,8 @@ class TaskExecutor:
                 create_plan,
                 review_plan,
                 iterate_plan,
+                implement_plan,
+                commit_changes,
                 ask_user_question,
             ],
             max_iters=10,
@@ -264,8 +272,6 @@ class TaskExecutor:
             )
 
         # Parse tasks from JSON output
-        import json
-
         try:
             tasks_data = json.loads(result.tasks)
         except json.JSONDecodeError as e:
@@ -471,7 +477,8 @@ class TaskExecutor:
         lines = [
             f"Objective: {self.machine.objective[:80]}...",
             f"State: {progress['state']}",
-            f"Progress: {progress['percent_complete']:.0f}% ({progress['completed']}/{progress['total_tasks']} tasks)",
+            f"Progress: {progress['percent_complete']:.0f}% "
+            f"({progress['completed']}/{progress['total_tasks']} tasks)",
             "",
             "Task Status:",
             f"  - Completed: {progress['completed']}",

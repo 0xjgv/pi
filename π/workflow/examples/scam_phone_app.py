@@ -345,7 +345,7 @@ def run_interactive() -> None:
 
         cmd = input("\n> ").strip().lower()
 
-        if cmd == "n" or cmd == "next":
+        if cmd in {"n", "next"}:
             executor = TaskExecutor(machine)
             task = executor.execute_next_task()
             if task:
@@ -358,15 +358,15 @@ def run_interactive() -> None:
             machine.skip_task(task_id, reason="User skipped")
             console.print(f"[yellow]Skipped: {task_id}[/yellow]")
 
-        elif cmd == "p" or cmd == "pause":
+        elif cmd in {"p", "pause"}:
             machine.pause(reason="User paused")
             console.print("[yellow]Execution paused[/yellow]")
 
-        elif cmd == "c" or cmd == "checkpoint":
+        elif cmd in {"c", "checkpoint"}:
             cp = machine.checkpoint(notes="Manual checkpoint")
             console.print(f"[green]Checkpoint created: {cp.id}[/green]")
 
-        elif cmd == "q" or cmd == "quit":
+        elif cmd in {"q", "quit"}:
             machine.save()
             console.print("[green]State saved. Goodbye![/green]")
             break
