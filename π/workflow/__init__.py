@@ -1,14 +1,14 @@
 """Core workflow execution module."""
 
+from π.state import get_current_status
 from π.workflow.bridge import (
     COMMAND_MAP,
     Command,
     ExecutionContext,
     ask_user_question,
     build_command_map,
-    commit,
+    commit_changes,
     create_plan,
-    get_current_status,
     get_extracted_path,
     implement_plan,
     iterate_plan,
@@ -24,7 +24,7 @@ __all__ = [
     "RPIWorkflow",
     "ask_user_question",
     "build_command_map",
-    "commit",
+    "commit_changes",
     "create_plan",
     "get_current_status",
     "get_extracted_path",

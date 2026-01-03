@@ -33,7 +33,7 @@ class TestLanguageChecker:
 class TestLanguageCheckerDecorator:
     """Tests for language_checker decorator."""
 
-    def test_registers_single_extension(self, clean_registry: None):  # noqa: ARG002
+    def test_registers_single_extension(self, clean_registry: None):
         """Should register function for single extension."""
 
         @language_checker([".test"])
@@ -43,7 +43,7 @@ class TestLanguageCheckerDecorator:
         assert ".test" in _registry
         assert _registry[".test"].func is test_checker
 
-    def test_registers_multiple_extensions(self, clean_registry: None):  # noqa: ARG002
+    def test_registers_multiple_extensions(self, clean_registry: None):
         """Should register function for multiple extensions."""
 
         @language_checker([".a", ".b", ".c"])
@@ -55,7 +55,7 @@ class TestLanguageCheckerDecorator:
         assert ".c" in _registry
         assert _registry[".a"].func is multi_checker
 
-    def test_normalizes_extensions_to_lowercase(self, clean_registry: None):  # noqa: ARG002
+    def test_normalizes_extensions_to_lowercase(self, clean_registry: None):
         """Should normalize extensions to lowercase."""
 
         @language_checker([".PY", ".Py", ".pY"])
@@ -66,7 +66,7 @@ class TestLanguageCheckerDecorator:
         # All should map to same checker
         assert _registry[".py"].func is py_checker
 
-    def test_default_scope_is_file(self, clean_registry: None):  # noqa: ARG002
+    def test_default_scope_is_file(self, clean_registry: None):
         """Default scope should be 'file'."""
 
         @language_checker([".xyz"])
@@ -75,7 +75,7 @@ class TestLanguageCheckerDecorator:
 
         assert _registry[".xyz"].scope == "file"
 
-    def test_custom_scope_and_markers(self, clean_registry: None):  # noqa: ARG002
+    def test_custom_scope_and_markers(self, clean_registry: None):
         """Should store custom scope and project markers."""
 
         @language_checker([".rs"], scope="project", project_markers=["Cargo.toml"])
@@ -85,7 +85,7 @@ class TestLanguageCheckerDecorator:
         assert _registry[".rs"].scope == "project"
         assert _registry[".rs"].project_markers == ["Cargo.toml"]
 
-    def test_returns_original_function(self, clean_registry: None):  # noqa: ARG002
+    def test_returns_original_function(self, clean_registry: None):
         """Decorator should return the original function unchanged."""
 
         @language_checker([".fn"])
@@ -99,7 +99,7 @@ class TestLanguageCheckerDecorator:
 class TestGetChecker:
     """Tests for get_checker function."""
 
-    def test_returns_checker_for_registered_extension(self, clean_registry: None):  # noqa: ARG002
+    def test_returns_checker_for_registered_extension(self, clean_registry: None):
         """Should return checker for registered extension."""
 
         @language_checker([".reg"])
@@ -111,13 +111,13 @@ class TestGetChecker:
         assert result is not None
         assert result.func is registered_checker
 
-    def test_returns_none_for_unregistered_extension(self, clean_registry: None):  # noqa: ARG002
+    def test_returns_none_for_unregistered_extension(self, clean_registry: None):
         """Should return None for unregistered extension."""
         result = get_checker(".unknown")
 
         assert result is None
 
-    def test_normalizes_query_to_lowercase(self, clean_registry: None):  # noqa: ARG002
+    def test_normalizes_query_to_lowercase(self, clean_registry: None):
         """Should find checker regardless of query case."""
 
         @language_checker([".mix"])

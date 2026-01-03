@@ -15,7 +15,7 @@ class TestFullWorkflowIntegration:
     """Integration tests for complete CLI workflows."""
 
     @pytest.fixture
-    def mock_claude_responses(self) -> Generator[AsyncMock, None, None]:
+    def mock_claude_responses(self) -> Generator[AsyncMock]:
         """Set up complete mock for Claude SDK."""
         with patch("π.workflow.bridge.ClaudeSDKClient") as mock_client_class:
             # Create async mock client
@@ -42,7 +42,7 @@ class TestFullWorkflowIntegration:
             yield mock_client
 
     @pytest.fixture
-    def mock_rpi_workflow(self) -> Generator[MagicMock, None, None]:
+    def mock_rpi_workflow(self) -> Generator[MagicMock]:
         """Mock RPIWorkflow for integration tests."""
         with patch("π.cli.RPIWorkflow") as mock:
             mock_instance = MagicMock()
@@ -56,8 +56,8 @@ class TestFullWorkflowIntegration:
     def test_cli_initializes_and_runs(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,  # noqa: ARG002
-        mock_claude_responses: AsyncMock,  # noqa: ARG002
+        mock_rpi_workflow: MagicMock,
+        mock_claude_responses: AsyncMock,
     ):
         """CLI should initialize workflow and run successfully."""
         main(["test objective"])
@@ -68,8 +68,8 @@ class TestFullWorkflowIntegration:
     def test_agent_options_flow_to_workflow(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,  # noqa: ARG002
-        mock_claude_responses: AsyncMock,  # noqa: ARG002
+        mock_rpi_workflow: MagicMock,
+        mock_claude_responses: AsyncMock,
     ):
         """Agent options should be correctly configured."""
         with patch("π.workflow.bridge._get_agent_options") as mock_opts:
@@ -128,7 +128,7 @@ class TestHookIntegration:
         from π.hooks import check_bash_command
 
         dangerous_input = cast(
-            HookInput,
+            "HookInput",
             {
                 "tool_name": "Bash",
                 "tool_input": {"command": "rm -rf /"},
@@ -148,7 +148,7 @@ class TestHookIntegration:
         from π.hooks import check_bash_command
 
         safe_input = cast(
-            HookInput,
+            "HookInput",
             {
                 "tool_name": "Bash",
                 "tool_input": {"command": "ls -la"},

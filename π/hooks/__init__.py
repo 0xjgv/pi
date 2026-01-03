@@ -31,7 +31,7 @@ from π.hooks.safety import check_bash_command
 from π.hooks.utils import compact_path, console
 
 # Re-export public API
-__all__ = ["check_file_format", "check_bash_command"]
+__all__ = ["check_bash_command", "check_file_format"]
 
 
 async def check_file_format(
@@ -79,7 +79,7 @@ async def check_file_format(
         # If checks failed (exit code 2), block the operation
         if exit_code == 2:
             return cast(
-                HookJSONOutput,
+                "HookJSONOutput",
                 {
                     "decision": "block",
                     "reason": f"Code quality checks failed for {path.name}",

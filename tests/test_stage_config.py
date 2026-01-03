@@ -7,15 +7,17 @@ class TestStage:
     """Tests for Stage enum."""
 
     def test_has_all_workflow_stages(self):
-        """Should define all four workflow stages."""
+        """Should define all workflow stages."""
         assert Stage.RESEARCH_CODEBASE == "research_codebase"
         assert Stage.PLAN == "plan"
         assert Stage.REVIEW_PLAN == "review_plan"
         assert Stage.ITERATE_PLAN == "iterate_plan"
+        assert Stage.IMPLEMENT_PLAN == "implement_plan"
+        assert Stage.COMMIT == "commit"
 
     def test_stage_count(self):
-        """Should have exactly 4 stages."""
-        assert len(Stage) == 4
+        """Should have exactly 6 stages."""
+        assert len(Stage) == 6
 
     def test_stages_are_strings(self):
         """Stage values should be strings for serialization."""

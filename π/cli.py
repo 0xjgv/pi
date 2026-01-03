@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from rich.console import Console
 
-from π.config import STAGE_TIERS, Provider
+from π.config import STAGE_TIERS, Provider, Tier, get_lm
 from π.orchestrator import (
     OrchestratorAgent,
     OrchestratorStatus,
@@ -92,12 +92,18 @@ def run_workflow_mode(objective: str) -> None:
     print(f"[Workflow Mode] Using {Provider.Claude} with per-stage models")
     print(f">  Stages: {_format_stages()}")
 
-    workflow = RPIWorkflow()
+    # Default LM
+    lm = get_lm(Provider.Claude, Tier.HIGH)
+
+    workflow = RPIWorkflow(lm=lm)
     result = workflow(objective=objective)
 
     print("\n=== Workflow Complete ===")
     print(f"Research Doc: {result.research_doc_path}")
     print(f"Plan Doc: {result.plan_doc_path}")
+    print(f"Implementation: {result.implementation_status}")
+    print(f"Files Changed: {result.files_changed}")
+    print(f"Commit: {result.commit_result}")
 
 
 def run_orchestrator_mode(objective: str) -> None:

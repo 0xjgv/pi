@@ -1,6 +1,7 @@
 """Human-in-the-loop (HITL) providers for π workflow."""
 
 import logging
+from collections.abc import Callable
 from typing import Protocol
 
 from rich.console import Console
@@ -42,7 +43,7 @@ class ConsoleInputProvider:
         *,
         allow_empty: bool = False,
         max_retries: int = 3,
-    ):
+    ) -> None:
         """Initialize with optional custom console and validation settings.
 
         Args:
@@ -91,7 +92,9 @@ class ConsoleInputProvider:
         return response
 
 
-def create_ask_user_question_tool(provider: HumanInputProvider):
+def create_ask_user_question_tool(
+    provider: HumanInputProvider,
+) -> Callable[[str], str]:
     """Create a DSPy-compatible ask_user_question tool.
 
     Factory function that wraps a HumanInputProvider into a callable

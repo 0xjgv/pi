@@ -105,7 +105,7 @@ def run_check_command(
         )
 
         result = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout
+            cmd, check=False, cwd=cwd, capture_output=True, text=True, timeout=timeout
         )
 
         if result.returncode != 0:

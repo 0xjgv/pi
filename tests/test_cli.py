@@ -12,7 +12,7 @@ class TestMain:
     """Tests for main CLI command."""
 
     @pytest.fixture
-    def mock_rpi_workflow(self) -> Generator[MagicMock, None, None]:
+    def mock_rpi_workflow(self) -> Generator[MagicMock]:
         """Mock RPIWorkflow."""
         with patch("π.cli.RPIWorkflow") as mock:
             mock_instance = MagicMock()
@@ -33,7 +33,7 @@ class TestMain:
     def test_accepts_objective_argument(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,  # noqa: ARG002
+        mock_rpi_workflow: MagicMock,
     ):
         """Should accept objective as positional argument."""
         main(["test-objective"])
@@ -45,7 +45,7 @@ class TestMain:
     def test_runs_workflow_mode(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,  # noqa: ARG002
+        mock_rpi_workflow: MagicMock,
     ):
         """Should run workflow mode with objective."""
         main(["test-objective"])
@@ -69,7 +69,7 @@ class TestMain:
     def test_displays_workflow_completion(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,  # noqa: ARG002
+        mock_rpi_workflow: MagicMock,
     ):
         """Should display workflow completion message."""
         main(["test-objective"])

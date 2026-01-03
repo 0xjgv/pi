@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ============================================================================
 # Path Fixtures
 # ============================================================================
@@ -47,7 +46,7 @@ def typescript_project(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def mock_claude_client() -> Generator[MagicMock, None, None]:
+def mock_claude_client() -> Generator[MagicMock]:
     """Mock ClaudeSDKClient for workflow tests."""
     with patch("π.workflow.bridge.ClaudeSDKClient") as mock_class:
         mock_client = AsyncMock()
@@ -92,7 +91,7 @@ def mock_hook_input() -> dict[str, Any]:
 
 
 @pytest.fixture
-def mock_dspy() -> Generator[MagicMock, None, None]:
+def mock_dspy() -> Generator[MagicMock]:
     """Mock dspy module for CLI tests."""
     with patch("π.cli.dspy") as mock:
         mock_react = MagicMock()
@@ -107,7 +106,7 @@ def mock_dspy() -> Generator[MagicMock, None, None]:
 
 
 @pytest.fixture
-def mock_subprocess_success() -> Generator[MagicMock, None, None]:
+def mock_subprocess_success() -> Generator[MagicMock]:
     """Mock subprocess.run with successful exit."""
     with patch("subprocess.run") as mock:
         mock.return_value = MagicMock(
@@ -119,7 +118,7 @@ def mock_subprocess_success() -> Generator[MagicMock, None, None]:
 
 
 @pytest.fixture
-def mock_subprocess_failure() -> Generator[MagicMock, None, None]:
+def mock_subprocess_failure() -> Generator[MagicMock]:
     """Mock subprocess.run with failure exit."""
     with patch("subprocess.run") as mock:
         mock.return_value = MagicMock(
@@ -169,7 +168,7 @@ def log_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def clean_registry() -> Generator[None, None, None]:
+def clean_registry() -> Generator[None]:
     """Isolate registry state between tests."""
     from π.hooks import registry
 
@@ -186,7 +185,7 @@ def clean_registry() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
+def event_loop() -> Generator[asyncio.AbstractEventLoop]:
     """Create event loop for async tests."""
     loop = asyncio.new_event_loop()
     yield loop
@@ -218,7 +217,7 @@ def cleanup_logging_handlers():
 
 
 @pytest.fixture
-def mock_console() -> Generator[MagicMock, None, None]:
+def mock_console() -> Generator[MagicMock]:
     """Mock Rich Console for HITL tests."""
     with patch("π.support.permissions.console") as mock:
         mock.input.return_value = "test response"
@@ -226,9 +225,9 @@ def mock_console() -> Generator[MagicMock, None, None]:
 
 
 @pytest.fixture
-def mock_spinner() -> Generator[MagicMock, None, None]:
+def mock_spinner() -> Generator[MagicMock]:
     """Mock spinner status for permissions tests."""
-    with patch("π.workflow.get_current_status") as mock_get:
+    with patch("π.support.permissions.get_current_status") as mock_get:
         mock_status = MagicMock()
         mock_get.return_value = mock_status
         yield mock_status

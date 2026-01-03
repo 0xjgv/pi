@@ -96,7 +96,7 @@ class TestCheckBashCommand:
     async def test_blocks_dangerous_command(self):
         """Should block rm -rf /."""
         input_data = cast(
-            HookInput,
+            "HookInput",
             {
                 "tool_name": "Bash",
                 "tool_input": {"command": "rm -rf /"},
@@ -111,7 +111,7 @@ class TestCheckBashCommand:
     async def test_allows_safe_command(self):
         """Should allow ls command."""
         input_data = cast(
-            HookInput,
+            "HookInput",
             {
                 "tool_name": "Bash",
                 "tool_input": {"command": "ls -la"},
@@ -126,7 +126,7 @@ class TestCheckBashCommand:
     async def test_ignores_non_bash_tools(self):
         """Should ignore non-Bash tools."""
         input_data = cast(
-            HookInput,
+            "HookInput",
             {
                 "tool_name": "Read",
                 "tool_input": {"file_path": "/etc/passwd"},

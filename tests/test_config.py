@@ -42,7 +42,7 @@ class TestGetLm:
         yield
         get_lm.cache_clear()
 
-    def test_returns_cached_lm(self, configured_env: None):  # noqa: ARG002
+    def test_returns_cached_lm(self, configured_env: None):
         """Should return cached LM instances."""
         with patch("π.config.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
@@ -53,7 +53,7 @@ class TestGetLm:
             assert lm1 is lm2
             mock_dspy.LM.assert_called_once()
 
-    def test_different_tiers_return_different_lms(self, configured_env: None):  # noqa: ARG002
+    def test_different_tiers_return_different_lms(self, configured_env: None):
         """Different tiers should return different LM instances."""
         with patch("π.config.dspy") as mock_dspy:
             mock_dspy.LM.side_effect = [MagicMock(), MagicMock()]
@@ -64,7 +64,7 @@ class TestGetLm:
             assert lm_low is not lm_high
             assert mock_dspy.LM.call_count == 2
 
-    def test_uses_env_vars_for_api(self, configured_env: None):  # noqa: ARG002
+    def test_uses_env_vars_for_api(self, configured_env: None):
         """Should use CLIPROXY_API_BASE and CLIPROXY_API_KEY from env."""
         with patch("π.config.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
@@ -75,7 +75,7 @@ class TestGetLm:
             assert call_kwargs.kwargs["api_base"] == "http://test:8317"
             assert call_kwargs.kwargs["api_key"] == "test-key"
 
-    def test_defaults_to_localhost(self, clean_env: None):  # noqa: ARG002
+    def test_defaults_to_localhost(self, clean_env: None):
         """Should default to localhost:8317 when no env var set."""
         with patch("π.config.dspy") as mock_dspy:
             mock_dspy.LM.return_value = MagicMock()
