@@ -91,10 +91,12 @@ async def check_bash_command(
             },
         )
         return cast(
-            HookJSONOutput,
+            "HookJSONOutput",
             {
                 "hookSpecificOutput": {
-                    "permissionDecisionReason": "Command blocked: Potentially dangerous operation",
+                    "permissionDecisionReason": (
+                        "Command blocked: Potentially dangerous operation"
+                    ),
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                 }

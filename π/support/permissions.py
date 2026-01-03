@@ -12,6 +12,7 @@ from claude_agent_sdk.types import (
 )
 from rich.console import Console
 
+from π.state import get_current_status
 from π.utils import speak
 
 logger = logging.getLogger(__name__)
@@ -52,9 +53,6 @@ async def can_use_tool(
             question = "Agent needs input:"
 
         # Suspend spinner during user input so prompt is visible
-        # Late import to avoid circular dependency (workflow -> agent -> permissions)
-        from π.workflow import get_current_status
-
         status = get_current_status()
         if status:
             status.stop()

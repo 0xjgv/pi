@@ -56,3 +56,48 @@ package = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort (import sorting)
+    "UP",   # pyupgrade (modern Python syntax)
+    "B",    # flake8-bugbear (common bugs)
+    "SIM",  # flake8-simplify (simple > complex)
+    "RUF",  # ruff-specific rules
+    "C4",   # flake8-comprehensions
+    "PTH",  # flake8-use-pathlib
+    "TCH",  # type-checking imports
+    "ARG",  # unused arguments
+    "PL",   # pylint subset
+    "ANN",  # type annotations (enforced)
+]
+ignore = [
+    "ANN401",   # dynamically-typed-expressions (Any)
+    "PLR0913",  # too-many-arguments (conflicts with keyword-only pattern)
+    "PLR2004",  # magic-value-comparison (too noisy)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "ANN",      # type annotations relaxed in tests
+    "ARG",      # unused arguments common in fixtures
+    "PLR2004",  # magic values fine in tests
+    "PLC0415",  # late imports fine in tests
+    "SIM105",   # contextlib.suppress suggestion
+]
+"π/support/permissions.py" = [
+    "ARG001",   # context param required by SDK callback signature
+]
+"π/workflow/bridge.py" = [
+    "PLR0912",  # complex but working async handler
+    "PLR0915",  # complex but working async handler
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["π"]

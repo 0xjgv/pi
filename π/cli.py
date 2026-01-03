@@ -5,7 +5,7 @@ from importlib.metadata import version as get_version
 
 from dotenv import load_dotenv
 
-from π.config import STAGE_TIERS, Provider
+from π.config import STAGE_TIERS, Provider, Tier, get_lm
 from π.support import cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import (
@@ -44,12 +44,18 @@ def run_workflow_mode(objective: str) -> None:
     print(f"[Workflow Mode] Using {Provider.Claude} with per-stage models")
     print(f">  Stages: {_format_stages()}")
 
-    workflow = RPIWorkflow()
+    # Default LM
+    lm = get_lm(Provider.Claude, Tier.HIGH)
+
+    workflow = RPIWorkflow(lm=lm)
     result = workflow(objective=objective)
 
     print("\n=== Workflow Complete ===")
     print(f"Research Doc: {result.research_doc_path}")
     print(f"Plan Doc: {result.plan_doc_path}")
+    print(f"Implementation: {result.implementation_status}")
+    print(f"Files Changed: {result.files_changed}")
+    print(f"Commit: {result.commit_result}")
 
 
 @prevent_sleep

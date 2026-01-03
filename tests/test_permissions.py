@@ -3,8 +3,8 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from claude_agent_sdk.types import PermissionResultAllow
+
 from π.support.permissions import can_use_tool
 
 
@@ -30,7 +30,7 @@ class TestCanUseTool:
             patch("π.support.permissions.asyncio.to_thread") as mock_thread,
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
-            patch("π.workflow.get_current_status", return_value=None),
+            patch("π.support.permissions.get_current_status", return_value=None),
         ):
             mock_thread.return_value = "user response"
 
@@ -53,7 +53,7 @@ class TestCanUseTool:
             patch("π.support.permissions.asyncio.to_thread", return_value="answer"),
             patch("π.support.permissions.console") as mock_console,
             patch("π.support.permissions.speak"),
-            patch("π.workflow.get_current_status", return_value=None),
+            patch("π.support.permissions.get_current_status", return_value=None),
         ):
             await can_use_tool(
                 tool_name="AskUserQuestion",
@@ -72,7 +72,7 @@ class TestCanUseTool:
             patch("π.support.permissions.asyncio.to_thread", return_value="answer"),
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak") as mock_speak,
-            patch("π.workflow.get_current_status", return_value=None),
+            patch("π.support.permissions.get_current_status", return_value=None),
         ):
             await can_use_tool(
                 tool_name="AskUserQuestion",
@@ -91,7 +91,7 @@ class TestCanUseTool:
             patch("π.support.permissions.asyncio.to_thread", return_value="answer"),
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
-            patch("π.workflow.get_current_status", return_value=mock_status),
+            patch("π.support.permissions.get_current_status", return_value=mock_status),
         ):
             await can_use_tool(
                 tool_name="AskUserQuestion",
@@ -109,7 +109,7 @@ class TestCanUseTool:
             patch("π.support.permissions.asyncio.to_thread", return_value="answer"),
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
-            patch("π.workflow.get_current_status", return_value=None),
+            patch("π.support.permissions.get_current_status", return_value=None),
         ):
             # Should not raise
             result = await can_use_tool(
@@ -127,7 +127,7 @@ class TestCanUseTool:
             patch("π.support.permissions.asyncio.to_thread", return_value="answer"),
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
-            patch("π.workflow.get_current_status", return_value=None),
+            patch("π.support.permissions.get_current_status", return_value=None),
         ):
             result = await can_use_tool(
                 tool_name="AskUserQuestion",
@@ -166,7 +166,7 @@ class TestCanUseToolValidation:
             patch("π.support.permissions.wait_for") as mock_wait,
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
-            patch("π.workflow.get_current_status", return_value=None),
+            patch("π.support.permissions.get_current_status", return_value=None),
         ):
             mock_wait.return_value = "   "  # Whitespace only
 
@@ -185,7 +185,7 @@ class TestCanUseToolValidation:
             patch("π.support.permissions.wait_for") as mock_wait,
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
-            patch("π.workflow.get_current_status", return_value=None),
+            patch("π.support.permissions.get_current_status", return_value=None),
         ):
             # Use builtin TimeoutError (not deprecated asyncio.TimeoutError)
             mock_wait.side_effect = TimeoutError()
@@ -205,7 +205,7 @@ class TestCanUseToolValidation:
             patch("π.support.permissions.wait_for") as mock_wait,
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
-            patch("π.workflow.get_current_status", return_value=None),
+            patch("π.support.permissions.get_current_status", return_value=None),
         ):
             mock_wait.return_value = "answer"
 

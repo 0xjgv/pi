@@ -178,7 +178,7 @@ class TestWorkflowFunctions:
     """Tests for workflow functions (research, plan, implement, clarify)."""
 
     @pytest.fixture
-    def mock_execute_task(self) -> Generator[MagicMock, None, None]:
+    def mock_execute_task(self) -> Generator[MagicMock]:
         """Mock _execute_claude_task."""
         with patch("π.workflow.bridge._execute_claude_task") as mock:
             mock.return_value = ("Result text", "session-123")
@@ -186,7 +186,7 @@ class TestWorkflowFunctions:
 
     def test_research_codebase_returns_result(
         self,
-        mock_execute_task: MagicMock,  # noqa: ARG002
+        mock_execute_task: MagicMock,
     ):
         """Should return result with session ID."""
         result = research_codebase(

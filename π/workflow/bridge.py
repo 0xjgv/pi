@@ -19,10 +19,10 @@ from claude_agent_sdk.types import (
     ToolUseBlock,
 )
 from rich.console import Console
-from rich.status import Status
 
 from π.config import get_agent_options
 from π.errors import AgentExecutionError
+from π.state import set_current_status
 from π.support.directory import get_project_root
 from π.support.hitl import ConsoleInputProvider, create_ask_user_question_tool
 from π.utils import speak
@@ -42,6 +42,8 @@ class Command(StrEnum):
     REVIEW_PLAN = "review_plan"
     CREATE_PLAN = "create_plan"
     ITERATE_PLAN = "iterate_plan"
+    IMPLEMENT_PLAN = "implement_plan"
+    COMMIT = "commit"
 
 
 def build_command_map(
@@ -77,7 +79,6 @@ class ExecutionContext:
     session_ids: dict[Command, str] = field(default_factory=dict)
     doc_paths: dict[Command, str] = field(default_factory=dict)
     extracted_paths: dict[str, str] = field(default_factory=dict)  # doc_type -> path
-    current_status: Status | None = None
 
     def validate_plan_doc(self, plan_path: str) -> None:
         """Validate that plan_path is not the research document.
@@ -91,9 +92,9 @@ class ExecutionContext:
         research_doc = self.doc_paths.get(Command.CREATE_PLAN, "")
         if research_doc and plan_path == research_doc:
             raise ValueError(
-                f"implement_plan requires the PLAN document, not the research document.\n"
-                f"Received: {plan_path}\n"
-                f"Hint: Use the plan document returned by create_plan."
+                "implement_plan requires the PLAN document, "
+                f"not the research document.\nReceived: {plan_path}\n"
+                "Hint: Use the plan document returned by create_plan."
             )
 
     def log_session_state(self) -> None:
@@ -120,11 +121,6 @@ def _get_ctx() -> ExecutionContext:
     return ctx
 
 
-def get_current_status() -> Status | None:
-    """Get the current spinner status (if any) for suspension during user input."""
-    return _get_ctx().current_status
-
-
 def get_extracted_path(doc_type: str) -> str | None:
     """Get the last extracted and validated path for a document type.
 
@@ -145,18 +141,17 @@ console = Console()
 
 
 @contextmanager
-def timed_phase(phase_name: str) -> Generator[None, None, None]:
+def timed_phase(phase_name: str) -> Generator[None]:
     """Context manager that shows spinner during execution and timing after."""
-    ctx = _get_ctx()
     start = time.monotonic()
     logger.info(">>> Phase started: %s", phase_name)
 
     with console.status(f"[bold cyan]{phase_name}...") as status:
-        ctx.current_status = status
+        set_current_status(status)
         try:
             yield
         finally:
-            ctx.current_status = None
+            set_current_status(None)
 
     elapsed = time.monotonic() - start
     if elapsed < 60:
@@ -346,7 +341,7 @@ def _execute_claude_task(
                             if isinstance(block, TextBlock):
                                 block_text += block.text
                             elif isinstance(block, ToolUseBlock):
-                                # can_use_tool callback handles AskUserQuestion tool use.
+                                # can_use_tool handles AskUserQuestion
                                 _log_tool_call(block)
                             elif isinstance(block, ToolResultBlock):
                                 _log_tool_result(block)
@@ -551,4 +546,56 @@ def iterate_plan(
         tool_command=Command.ITERATE_PLAN,
         session_id=session_id,
         query=review_feedback,
+    )
+
+
+@workflow_tool(
+    Command.IMPLEMENT_PLAN, phase_name="Implementing plan", validate_plan=True
+)
+def implement_plan(
+    *,
+    plan_document_path: Path | str,
+    query: str = "implement the plan",
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Implement the plan by executing all phases.
+
+    Args:
+        plan_document_path: Required path to the plan document.
+        query: Implementation instructions or continuation context.
+        session_id: Session ID for resumption (injected by decorator).
+
+    Returns:
+        Tuple of (result text, session ID).
+    """
+    _get_ctx().doc_paths[Command.IMPLEMENT_PLAN] = str(plan_document_path)
+
+    return _execute_claude_task(
+        path_to_document=Path(plan_document_path),
+        tool_command=Command.IMPLEMENT_PLAN,
+        session_id=session_id,
+        query=query,
+    )
+
+
+@workflow_tool(Command.COMMIT, phase_name="Committing changes")
+def commit_changes(
+    *,
+    query: str = "commit the changes",
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Commit the changes made during implementation.
+
+    Args:
+        query: Commit context or specific instructions.
+        session_id: Session ID for resumption (injected by decorator).
+
+    Returns:
+        Tuple of (result text, session ID).
+    """
+    return _execute_claude_task(
+        path_to_document=None,
+        tool_command=Command.COMMIT,
+        session_id=session_id,
+        query=query,
     )

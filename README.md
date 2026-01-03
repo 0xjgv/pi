@@ -120,11 +120,6 @@ echo "Analyze the test coverage" | π
 ├── workflow/                   # Core workflow execution
 │   ├── bridge.py               # Sync-async bridge
 │   └── module.py               # DSPy workflow module
-├── optimization/               # GEPA optimization
-│   ├── metrics.py              # Plan quality metrics
-│   ├── question_metrics.py     # Question quality evaluation
-│   ├── optimizer.py            # GEPA utilities
-│   └── training.py             # Training data loading
 ├── support/                    # Supporting infrastructure
 │   ├── directory.py            # Log management
 │   ├── permissions.py          # Tool permissions
