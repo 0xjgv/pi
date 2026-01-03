@@ -1,5 +1,6 @@
 """Core workflow execution module."""
 
+from π.state import get_current_status
 from π.workflow.bridge import (
     COMMAND_MAP,
     Command,
@@ -8,7 +9,6 @@ from π.workflow.bridge import (
     build_command_map,
     commit_changes,
     create_plan,
-    get_current_status,
     get_extracted_path,
     implement_plan,
     iterate_plan,

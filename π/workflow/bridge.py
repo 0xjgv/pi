@@ -19,10 +19,10 @@ from claude_agent_sdk.types import (
     ToolUseBlock,
 )
 from rich.console import Console
-from rich.status import Status
 
 from π.config import get_agent_options
 from π.errors import AgentExecutionError
+from π.state import set_current_status
 from π.support.directory import get_project_root
 from π.support.hitl import ConsoleInputProvider, create_ask_user_question_tool
 from π.utils import speak
@@ -79,7 +79,6 @@ class ExecutionContext:
     session_ids: dict[Command, str] = field(default_factory=dict)
     doc_paths: dict[Command, str] = field(default_factory=dict)
     extracted_paths: dict[str, str] = field(default_factory=dict)  # doc_type -> path
-    current_status: Status | None = None
 
     def validate_plan_doc(self, plan_path: str) -> None:
         """Validate that plan_path is not the research document.
@@ -122,11 +121,6 @@ def _get_ctx() -> ExecutionContext:
     return ctx
 
 
-def get_current_status() -> Status | None:
-    """Get the current spinner status (if any) for suspension during user input."""
-    return _get_ctx().current_status
-
-
 def get_extracted_path(doc_type: str) -> str | None:
     """Get the last extracted and validated path for a document type.
 
@@ -149,16 +143,15 @@ console = Console()
 @contextmanager
 def timed_phase(phase_name: str) -> Generator[None]:
     """Context manager that shows spinner during execution and timing after."""
-    ctx = _get_ctx()
     start = time.monotonic()
     logger.info(">>> Phase started: %s", phase_name)
 
     with console.status(f"[bold cyan]{phase_name}...") as status:
-        ctx.current_status = status
+        set_current_status(status)
         try:
             yield
         finally:
-            ctx.current_status = None
+            set_current_status(None)
 
     elapsed = time.monotonic() - start
     if elapsed < 60:
