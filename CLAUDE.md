@@ -2,7 +2,7 @@
 
 CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan → review → iterate workflows.
 
-## Stack
+## Stack (pyproject.toml)
 
 - Python 3.13+ with uv, hatchling
 - claude-agent-sdk, dspy, click, rich
@@ -35,7 +35,7 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan 
 
 ## Conventions
 
-- **Type hints**: `str | None`, `dict[str, T]`
+- **Type hints**: `str | None`, `dict[str, T]` (Read the `tool.ruff` section of the `pyproject.toml` file for more details)
 - **Docstrings**: Google-style
 - **Functions**: `*,` for keyword-only args
 - **Async**: Nested `async def` with `run_until_complete()` wrapper
