@@ -857,7 +857,10 @@ class StateMachine:
             return 50
 
     def _run_quick_workflow(self, task: Task) -> TaskResult:
-        """Run quick workflow (skip research/plan).
+        """Run quick workflow for simple changes (skip research/plan/review/iterate).
+
+        Used for trivial changes like typo fixes, simple additions, etc.
+        Goes directly to implement → commit.
 
         Args:
             task: Task to execute.
@@ -866,32 +869,57 @@ class StateMachine:
             Task result.
         """
         logger.info("Running quick workflow for: %s", task.id)
-        task.stage = TaskStage.IMPLEMENTING
-        self._save()
 
-        # Import here to avoid circular dependency
-        from π.workflow.bridge import commit_changes, implement_plan
+        from π.workflow.bridge import commit_changes
 
         try:
-            # Direct implementation with task description as plan
-            impl_result = implement_plan(task.description)
+            # For quick workflow, we use Claude SDK directly for simple implementation
+            # The task description serves as the "plan"
+            task.stage = TaskStage.IMPLEMENTING
+            self._save()
+
+            # Use DSPy ReAct for simple implementation
+            impl_result = self._quick_implement(task.description)
 
             task.stage = TaskStage.COMMITTING
             self._save()
 
-            commit_result = commit_changes(task.description)
-            task.commit_sha = commit_result.get("sha")
+            _, _ = commit_changes(query=task.description)
 
             return TaskResult(
                 success=True,
                 output=impl_result,
-                artifacts=[task.commit_sha] if task.commit_sha else [],
+                artifacts=[],
             )
         except Exception as e:
+            logger.exception("Quick workflow failed for task: %s", task.id)
             return TaskResult(success=False, error=str(e))
+
+    def _quick_implement(self, task_description: str) -> str:
+        """Implement a simple task directly without full workflow.
+
+        Args:
+            task_description: What to implement.
+
+        Returns:
+            Implementation result description.
+        """
+        # For quick tasks, we use a simple ReAct agent with basic tools
+        from π.config import Command
+        from π.workflow.bridge import _execute_claude_task
+
+        result, _ = _execute_claude_task(
+            path_to_document=None,
+            tool_command=Command.IMPLEMENT_PLAN,
+            session_id=None,
+            query=f"Quick implementation: {task_description}",
+        )
+        return result
 
     def _run_full_workflow(self, task: Task) -> TaskResult:
         """Run full 6-stage workflow.
+
+        Stages: research → plan → review → iterate → implement → commit.
 
         Args:
             task: Task to execute.
@@ -904,7 +932,6 @@ class StateMachine:
         from π.workflow.bridge import (
             commit_changes,
             create_plan,
-            get_extracted_path,
             implement_plan,
             iterate_plan,
             research_codebase,
@@ -915,47 +942,86 @@ class StateMachine:
             # Stage 1: Research
             task.stage = TaskStage.RESEARCHING
             self._save()
-            research_codebase(task.description)
-            task.research_path = get_extracted_path("research")
+            _, _ = research_codebase(query=task.description)
+            # Extract research path from result or use default location
+            task.research_path = self._get_latest_doc_path("research")
 
-            # Stage 2: Plan
+            # Stage 2: Plan (requires research document)
             task.stage = TaskStage.PLANNING
             self._save()
-            create_plan(task.description)
-            task.plan_path = get_extracted_path("plan")
+            if not task.research_path:
+                raise ValueError("Research document not found")
+            _, _ = create_plan(
+                research_document_path=task.research_path,
+                query=task.description,
+            )
+            task.plan_path = self._get_latest_doc_path("plan")
 
             # Stage 3: Review
             task.stage = TaskStage.REVIEWING
             self._save()
-            review_result = review_plan(task.plan_path or "")
+            if not task.plan_path:
+                raise ValueError("Plan document not found")
+            review_result, _ = review_plan(
+                plan_document_path=task.plan_path,
+                query="Review this plan for completeness and correctness",
+            )
 
-            # Stage 4: Iterate (if review suggests changes)
-            if "suggest" in review_result.lower() or "improve" in review_result.lower():
-                task.stage = TaskStage.ITERATING
-                self._save()
-                iterate_plan(task.plan_path or "", review_result)
+            # Stage 4: Iterate (always iterate based on review feedback)
+            task.stage = TaskStage.ITERATING
+            self._save()
+            _, _ = iterate_plan(
+                plan_document_path=task.plan_path,
+                review_feedback=review_result,
+            )
 
             # Stage 5: Implement
             task.stage = TaskStage.IMPLEMENTING
             self._save()
-            impl_result = implement_plan(task.plan_path or "")
+            impl_result, _ = implement_plan(
+                plan_document_path=task.plan_path,
+                query="Implement the plan",
+            )
 
             # Stage 6: Commit
             task.stage = TaskStage.COMMITTING
             self._save()
-            commit_result = commit_changes(task.description)
-            task.commit_sha = commit_result.get("sha")
+            _, _ = commit_changes(query=task.description)
 
             return TaskResult(
                 success=True,
                 output=impl_result,
                 artifacts=[
-                    p for p in [task.research_path, task.plan_path, task.commit_sha]
+                    p for p in [task.research_path, task.plan_path]
                     if p
                 ],
             )
         except Exception as e:
+            logger.exception("Full workflow failed for task: %s", task.id)
             return TaskResult(success=False, error=str(e))
+
+    def _get_latest_doc_path(self, doc_type: str) -> str | None:
+        """Get the most recent document path for a given type.
+
+        Args:
+            doc_type: Either 'research' or 'plan'.
+
+        Returns:
+            Path to the document or None.
+        """
+        from π.support.directory import get_project_root
+
+        root = self._root or get_project_root()
+        doc_dir = root / "thoughts" / "shared" / f"{doc_type}"
+
+        if not doc_dir.exists():
+            return None
+
+        # Get most recent file
+        files = sorted(
+            doc_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
+        return str(files[0]) if files else None
 
     def _generate_next_task(self) -> None:
         """Generate next task using AI when no explicit tasks remain."""
