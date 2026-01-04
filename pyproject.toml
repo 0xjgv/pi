@@ -98,6 +98,13 @@ ignore = [
     "PLR0912",  # complex but working async handler
     "PLR0915",  # complex but working async handler
 ]
+"π/machine/machine.py" = [
+    "PLC0415",  # late imports to avoid circular deps
+    "PLR0915",  # complex but clear execution logic
+]
+"π/machine/state.py" = [
+    "PLR0912",  # many branches in to_dict for clean YAML output
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["π"]
