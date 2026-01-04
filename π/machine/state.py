@@ -460,8 +460,7 @@ class WorkflowState:
     def has_pending_work(self) -> bool:
         """Check if there's pending or in-progress work."""
         return any(
-            t.status in (TaskStatus.PENDING, TaskStatus.IN_PROGRESS)
-            for t in self.tasks
+            t.status in (TaskStatus.PENDING, TaskStatus.IN_PROGRESS) for t in self.tasks
         )
 
     def is_complete(self) -> bool:

@@ -679,8 +679,7 @@ class StateMachine:
                 else:
                     # No actionable tasks - might need decomposition or blocked
                     blocked = [
-                        t for t in self._state.tasks
-                        if t.status == TaskStatus.BLOCKED
+                        t for t in self._state.tasks if t.status == TaskStatus.BLOCKED
                     ]
                     if blocked:
                         self.pause(reason=f"{len(blocked)} tasks blocked")
@@ -832,12 +831,10 @@ class StateMachine:
         logger.info("Assessing complexity for: %s", task.id)
 
         completed = "\n".join(
-            f"- {t.description[:60]}"
-            for t in self._state.get_completed_tasks()
+            f"- {t.description[:60]}" for t in self._state.get_completed_tasks()
         )
         context = (
-            f"Objective: {self._state.objective}\n"
-            f"Completed:\n{completed or 'None'}"
+            f"Objective: {self._state.objective}\nCompleted:\n{completed or 'None'}"
         )
 
         agent = self._get_complexity_agent()
@@ -991,10 +988,7 @@ class StateMachine:
             return TaskResult(
                 success=True,
                 output=impl_result,
-                artifacts=[
-                    p for p in [task.research_path, task.plan_path]
-                    if p
-                ],
+                artifacts=[p for p in [task.research_path, task.plan_path] if p],
             )
         except Exception as e:
             logger.exception("Full workflow failed for task: %s", task.id)
@@ -1032,8 +1026,7 @@ class StateMachine:
             for t in self._state.get_completed_tasks()
         )
         pending = "\n".join(
-            f"- [{t.id}] {t.description[:60]}"
-            for t in self._state.get_pending_tasks()
+            f"- [{t.id}] {t.description[:60]}" for t in self._state.get_pending_tasks()
         )
 
         agent = self._get_next_task_agent()
