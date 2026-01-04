@@ -11,6 +11,7 @@ from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import (
     RPIWorkflow,
 )
+from π.workflow.loop import LoopStatus, ObjectiveLoop, TaskStatus
 
 logger = logging.getLogger(__name__)  # Use module's own logger
 VERSION = get_version("pi-rpi")
@@ -23,6 +24,16 @@ def _create_parser() -> argparse.ArgumentParser:
         description="Autonomous Research → Plan → Review → Implement workflow.",
     )
     parser.add_argument("objective", nargs="?", help="The objective for the agent")
+    parser.add_argument(
+        "--loop",
+        action="store_true",
+        help="Use iterative loop mode for complex objectives",
+    )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Start fresh, ignore existing loop state",
+    )
     return parser
 
 
@@ -58,6 +69,29 @@ def run_workflow_mode(objective: str) -> None:
     print(f"Commit: {result.commit_result}")
 
 
+def run_loop_mode(objective: str, *, resume: bool = True) -> None:
+    """Execute objective using iterative ObjectiveLoop."""
+    print("[Loop Mode] Iterating toward objective")
+    print(">  Max iterations: 50")
+    print(f">  Resume: {resume}")
+
+    lm = get_lm(Provider.Claude, Tier.HIGH)
+    loop = ObjectiveLoop(lm=lm)
+
+    state = loop(objective=objective, resume=resume)
+
+    print("\n=== Loop Complete ===")
+    print(f"Status: {state.status}")
+    print(f"Iterations: {state.iteration}")
+    print(f"Completed Tasks: {len(state.completed_task_ids)}/{len(state.tasks)}")
+
+    if state.status == LoopStatus.COMPLETED:
+        print("\nCompleted tasks:")
+        for task in state.tasks:
+            if task.status == TaskStatus.COMPLETED:
+                print(f"  - {task.description}")
+
+
 @prevent_sleep
 def main(argv: list[str] | None = None) -> None:
     """Run the π agent with the given OBJECTIVE."""
@@ -88,7 +122,10 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"Logging to: {log_path}")
 
-    run_workflow_mode(objective)
+    if args.loop:
+        run_loop_mode(objective, resume=not args.no_resume)
+    else:
+        run_workflow_mode(objective)
 
     speak("π complete")
 
