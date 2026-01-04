@@ -175,20 +175,20 @@ def validate_implementation(project_root: Path | None = None) -> ValidationResul
 class StateMachine:
     """Autonomous state machine for codebase ownership.
 
-    Executes objectives through research → plan → review → iterate →
-    implement → commit workflow with support for:
+    The agent operates independently to accomplish objectives through:
+    research → plan → review → iterate → implement → commit
 
-    - Human intervention via YAML state file editing
-    - Checkpoints for recovery
-    - Task dependencies and priorities
-    - Complexity-based workflow routing
-    - Validation with automatic retry
+    Key behaviors:
+    - Automatically decomposes objectives into tasks
+    - Routes tasks to quick/full workflow based on complexity
+    - Validates changes and retries on failure
+    - Persists state for crash recovery and session resumption
+    - Can be corrected by editing the YAML state file
 
     Example:
         >>> machine = StateMachine.load_or_create("feature-auth")
         >>> machine.set_objective("Implement JWT authentication")
-        >>> machine.add_task("research-auth", "Research existing auth patterns")
-        >>> machine.run()
+        >>> machine.run()  # Fully autonomous execution
     """
 
     def __init__(
@@ -626,16 +626,28 @@ class StateMachine:
         max_tasks: int | None = None,
         on_task_complete: Callable[[Task], None] | None = None,
     ) -> dict[str, Any]:
-        """Run the state machine until complete or paused.
+        """Run autonomously until objective is complete.
+
+        The agent will:
+        1. Decompose the objective into tasks (if none exist)
+        2. Execute tasks in priority/dependency order
+        3. Validate changes and retry on failure
+        4. Generate new tasks as needed to complete objective
 
         Args:
-            max_tasks: Maximum tasks to execute (None = unlimited).
-            on_task_complete: Callback after each task.
+            max_tasks: Safety limit on tasks (None = unlimited).
+            on_task_complete: Optional callback after each task.
 
         Returns:
-            Execution summary.
+            Execution summary with status and progress.
         """
         self.start()
+
+        # Auto-decompose if no tasks exist
+        if not self._state.tasks:
+            logger.info("No tasks found, decomposing objective...")
+            self.decompose_objective()
+
         tasks_run = 0
 
         while self._state.status == MachineStatus.RUNNING:

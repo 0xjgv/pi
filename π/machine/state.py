@@ -136,14 +136,9 @@ class TaskResult:
 class Task:
     """A single task in the workflow.
 
-    Human-editable fields:
-    - id: Unique identifier (use meaningful names like 'impl-auth')
-    - description: What needs to be done
-    - status: Change to 'skipped' to skip, 'pending' to retry
-    - priority: Reorder execution
-    - depends_on: Task IDs that must complete first
-    - notes: Add context for the AI or yourself
-    - blocked_reason: Why task is blocked (set status to 'blocked')
+    The agent creates and manages tasks autonomously. Tasks are created
+    through objective decomposition and executed through the full workflow:
+    research → plan → review → iterate → implement → commit.
     """
 
     id: str
@@ -153,7 +148,7 @@ class Task:
     priority: TaskPriority = TaskPriority.NORMAL
     strategy: WorkflowStrategy | None = None
     depends_on: list[str] = field(default_factory=list)
-    notes: str = ""  # Human notes for context
+    notes: str = ""  # Agent reasoning/context
     blocked_reason: str = ""
 
     # Execution tracking
@@ -336,16 +331,13 @@ class MachineConfig:
 
 @dataclass
 class WorkflowState:
-    """Complete state of a workflow execution.
+    """Complete state of an autonomous workflow execution.
 
-    This is the root object serialized to YAML. The file is designed
-    to be human-editable for intervention and correction.
-
-    To intervene:
-    1. Set status to 'paused' to stop execution
-    2. Edit tasks: change status, priority, dependencies
-    3. Add notes to provide context
-    4. Set status back to 'running' to resume
+    The agent operates independently, making all decisions about task
+    decomposition, ordering, and execution. State is persisted to allow:
+    - Recovery from crashes/interruptions
+    - Resuming long-running objectives across sessions
+    - Human correction when the agent makes mistakes
     """
 
     # Identity
@@ -504,19 +496,14 @@ class WorkflowState:
 
 
 YAML_HEADER = """\
-# π State Machine - Human Editable
+# π State Machine
 #
-# This file tracks the state of an autonomous workflow. You can edit it to:
-# - Add/remove/modify tasks
-# - Change task priorities and dependencies
-# - Add notes to guide the AI
-# - Pause/resume execution by changing status
-# - Skip tasks by setting status to 'skipped'
-# - Retry failed tasks by setting status to 'pending'
-#
-# Status values: idle, running, paused, completed, failed
-# Task status: pending, in_progress, completed, failed, blocked, skipped
-# Priority: critical, high, normal, low, deferred
+# Autonomous workflow state. The agent makes all decisions independently.
+# Edit this file ONLY to correct agent mistakes:
+# - Set status: paused to halt a runaway agent
+# - Set task status: skipped to bypass a stuck task
+# - Set task status: pending to retry a failed task
+# - Remove tasks the agent shouldn't have created
 #
 """
 
