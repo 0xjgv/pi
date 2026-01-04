@@ -1,0 +1,185 @@
+"""Tests for ObjectiveLoop."""
+
+from pathlib import Path
+
+from π.workflow.loop import (
+    LoopState,
+    LoopStatus,
+    Task,
+    TaskStatus,
+    _objective_hash,
+    _task_from_dict,
+    _task_to_dict,
+    load_state,
+    save_state,
+)
+
+
+class TestTaskSerialization:
+    """Tests for task serialization."""
+
+    def test_task_to_dict(self) -> None:
+        task = Task(
+            id="task_001",
+            description="Test task",
+            dependencies=["task_000"],
+            priority=2,
+            status=TaskStatus.COMPLETED,
+            result="Success",
+            commit_hash="abc123",
+        )
+        result = _task_to_dict(task)
+        assert result["id"] == "task_001"
+        assert result["status"] == "completed"
+        assert result["commit_hash"] == "abc123"
+
+    def test_task_from_dict(self) -> None:
+        data = {
+            "id": "task_002",
+            "description": "Another task",
+            "dependencies": [],
+            "priority": 1,
+            "status": "pending",
+        }
+        task = _task_from_dict(data)
+        assert task.id == "task_002"
+        assert task.status == TaskStatus.PENDING
+
+    def test_task_roundtrip(self) -> None:
+        """Test serialization and deserialization preserve all fields."""
+        original = Task(
+            id="task_003",
+            description="Roundtrip task",
+            dependencies=["dep1", "dep2"],
+            priority=3,
+            status=TaskStatus.IN_PROGRESS,
+            result="partial",
+            error="some error",
+            plan_doc_path="/path/to/plan.md",
+            research_doc_path="/path/to/research.md",
+            commit_hash="def456",
+        )
+        data = _task_to_dict(original)
+        restored = _task_from_dict(data)
+
+        assert restored.id == original.id
+        assert restored.description == original.description
+        assert restored.dependencies == original.dependencies
+        assert restored.priority == original.priority
+        assert restored.status == original.status
+        assert restored.result == original.result
+        assert restored.error == original.error
+        assert restored.plan_doc_path == original.plan_doc_path
+        assert restored.research_doc_path == original.research_doc_path
+        assert restored.commit_hash == original.commit_hash
+
+
+class TestStatePersistence:
+    """Tests for state save/load."""
+
+    def test_save_load_roundtrip(self, tmp_path: Path) -> None:
+        state = LoopState(
+            objective="Test objective",
+            tasks=[
+                Task(id="t1", description="Task 1", status=TaskStatus.COMPLETED),
+                Task(id="t2", description="Task 2", status=TaskStatus.PENDING),
+            ],
+            completed_task_ids={"t1"},
+            iteration=3,
+        )
+
+        path = tmp_path / "state.json"
+        save_state(state, path)
+
+        loaded = load_state(path)
+        assert loaded.objective == state.objective
+        assert loaded.iteration == 3
+        assert len(loaded.tasks) == 2
+        assert "t1" in loaded.completed_task_ids
+
+    def test_atomic_write(self, tmp_path: Path) -> None:
+        """Verify atomic write doesn't leave temp files."""
+        state = LoopState(objective="Test")
+        path = tmp_path / "state.json"
+
+        save_state(state, path)
+
+        assert path.exists()
+        assert not path.with_suffix(".tmp").exists()
+
+    def test_state_status_preserved(self, tmp_path: Path) -> None:
+        """Verify loop status is preserved."""
+        state = LoopState(
+            objective="Test",
+            status=LoopStatus.FAILED,
+            iteration=10,
+            max_iterations=50,
+        )
+        path = tmp_path / "state.json"
+
+        save_state(state, path)
+        loaded = load_state(path)
+
+        assert loaded.status == LoopStatus.FAILED
+        assert loaded.max_iterations == 50
+
+
+class TestObjectiveHash:
+    """Tests for objective hashing."""
+
+    def test_hash_stability(self) -> None:
+        """Same objective produces same hash."""
+        h1 = _objective_hash("build a calculator")
+        h2 = _objective_hash("build a calculator")
+        assert h1 == h2
+
+    def test_hash_uniqueness(self) -> None:
+        """Different objectives produce different hashes."""
+        h1 = _objective_hash("build a calculator")
+        h2 = _objective_hash("build a todo app")
+        assert h1 != h2
+
+    def test_hash_length(self) -> None:
+        """Hash is 12 characters."""
+        h = _objective_hash("any objective")
+        assert len(h) == 12
+
+
+class TestLoopState:
+    """Tests for LoopState dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default values are set correctly."""
+        state = LoopState(objective="test")
+        assert state.tasks == []
+        assert state.completed_task_ids == set()
+        assert state.iteration == 0
+        assert state.max_iterations == 50
+        assert state.status == LoopStatus.RUNNING
+
+    def test_mutable_defaults_isolation(self) -> None:
+        """Test that mutable defaults are not shared between instances."""
+        state1 = LoopState(objective="test1")
+        state2 = LoopState(objective="test2")
+
+        state1.tasks.append(Task(id="t1", description="Task 1"))
+        state1.completed_task_ids.add("t1")
+
+        assert len(state2.tasks) == 0
+        assert len(state2.completed_task_ids) == 0
+
+
+class TestTask:
+    """Tests for Task dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default values are set correctly."""
+        task = Task(id="t1", description="Test task")
+        assert task.dependencies == []
+        assert task.priority == 1
+        assert task.status == TaskStatus.PENDING
+        assert task.result is None
+        assert task.error is None
+        assert task.plan_doc_path is None
+        assert task.research_doc_path is None
+        assert task.commit_hash is None
