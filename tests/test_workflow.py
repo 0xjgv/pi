@@ -198,8 +198,8 @@ class TestWorkflowFunctions:
             research_document_path=Path("/path/to/research.md"),
         )
 
-        # With markers, result should contain [IN_PROGRESS] or [COMPLETE]
-        assert "[IN_PROGRESS]" in result or "[COMPLETE]" in result
+        # With markers, result should contain [NEEDS_INPUT] or [TASK_COMPLETE]
+        assert "[NEEDS_INPUT]" in result or "[TASK_COMPLETE]" in result
         assert "session-123" in result
 
     def test_research_codebase_passes_query(self, mock_execute_task: MagicMock):

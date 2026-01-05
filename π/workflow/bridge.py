@@ -181,6 +181,33 @@ def _extract_doc_path(result: str, doc_type: str) -> str | None:
     return None
 
 
+# Signals indicating the agent completed its task without creating a new document
+_COMPLETION_SIGNALS = (
+    "complete picture",
+    "summary of findings",
+    "research complete",
+    "investigation complete",
+    "analysis complete",
+)
+
+
+def _result_indicates_completion(result: str) -> bool:
+    """Detect if result text signals completion without a new document.
+
+    When DSPy ReAct calls a tool for follow-up research, the agent may complete
+    its investigation without creating a new doc. This heuristic detects such
+    cases to avoid falsely signaling that clarification is needed.
+
+    Args:
+        result: The agent's result text
+
+    Returns:
+        True if result contains completion signals
+    """
+    result_lower = result.lower()
+    return any(signal in result_lower for signal in _COMPLETION_SIGNALS)
+
+
 def _format_tool_result(
     *,
     result: str,
@@ -188,7 +215,7 @@ def _format_tool_result(
     doc_path: str | None,
     tool_name: str,
 ) -> str:
-    """Format tool result with completion markers.
+    """Format tool result with completion markers for DSPy ReAct.
 
     Args:
         result: Raw result from Claude agent
@@ -197,13 +224,21 @@ def _format_tool_result(
         tool_name: Name of the tool for continuation hint
 
     Returns:
-        Formatted result with [COMPLETE] or [IN_PROGRESS] marker
+        Formatted result with [TASK_COMPLETE] or [NEEDS_INPUT] marker
     """
-    if doc_path:
-        return f"[COMPLETE] Document saved at: {doc_path}\n{result}"
+    # Check for completion: doc saved OR result text indicates completion
+    is_complete = doc_path or _result_indicates_completion(result)
+
+    if is_complete:
+        doc_info = f"Document saved: {doc_path}\n" if doc_path else ""
+        return (
+            f"[TASK_COMPLETE] {doc_info}"
+            f"Research finished. Proceed to produce output fields.\n\n"
+            f"{result}"
+        )
     return (
-        f"[IN_PROGRESS] Continue with session\n"
-        f"Session ID: {session_id} (call {tool_name} again to continue)\n"
+        f"[NEEDS_INPUT] Agent needs clarification to continue.\n"
+        f"Call {tool_name} with your response to resume session: {session_id}\n\n"
         f"{result}"
     )
 
@@ -295,6 +330,8 @@ def _execute_claude_task(
 
     if session_id:
         logger.debug("Resuming session: %s", session_id)
+        # When resuming, send only the follow-up query. The session_id passed to
+        # ClaudeSDKClient.query() provides the conversation context from prior turns.
         command = query
 
     logger.debug("Tool call: %s", command)
@@ -315,7 +352,16 @@ def workflow_tool(
     doc_type: str | None = None,
     validate_plan: bool = False,
 ) -> Callable[[Callable[..., tuple[str, str]]], Callable[..., str]]:
-    """Decorator that handles session management, timing, logging, and error handling.
+    """Decorator for workflow tools with session management, timing, and error handling.
+
+    Session Preservation for Clarifications:
+        When a Claude agent returns without completing (no doc_path extracted and
+        result doesn't indicate completion), the session_id is stored in
+        ExecutionContext.session_ids[command]. DSPy ReAct can then call the tool
+        again to resume the conversation with preserved context.
+
+        Flow: DSPy calls tool → Claude asks question → [NEEDS_INPUT] returned
+              → DSPy calls tool with answer → Claude resumes with context
 
     Args:
         command: The workflow command for session tracking.
