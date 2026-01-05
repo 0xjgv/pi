@@ -15,8 +15,9 @@ import dspy
 from pydantic import BaseModel, Field
 
 from π.config import MAX_ITERS, Provider, Tier, get_lm
-from π.workflow.bridge import _get_ctx, research_codebase
+from π.workflow.context import _get_ctx
 from π.workflow.module import RPIWorkflow
+from π.workflow.tools import research_codebase
 
 logger = logging.getLogger(__name__)
 

@@ -1,14 +1,18 @@
+"""Sync→async bridge for Claude Agent SDK integration.
+
+This module provides the core execution bridge that allows synchronous DSPy
+tools to invoke the async Claude Agent SDK.
+"""
+
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
 import time
-from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from contextvars import ContextVar
-from dataclasses import dataclass, field
-from enum import StrEnum
 from functools import wraps
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import (
@@ -24,116 +28,20 @@ from π.config import get_agent_options
 from π.errors import AgentExecutionError
 from π.state import set_current_status
 from π.support.directory import get_project_root
-from π.support.hitl import ConsoleInputProvider, create_ask_user_question_tool
 from π.utils import speak
+from π.workflow.context import (
+    COMMAND_MAP,
+    Command,
+    _ctx,
+    _get_ctx,
+)
 
-# Project root for command discovery
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator
+    from pathlib import Path
 
-# DSPy-compatible ask_user_question tool for workflow stages
-ask_user_question = create_ask_user_question_tool(ConsoleInputProvider())
-
-
-class Command(StrEnum):
-    """Workflow stage commands."""
-
-    CLARIFY = "clarify"
-    RESEARCH_CODEBASE = "research_codebase"
-    REVIEW_PLAN = "review_plan"
-    CREATE_PLAN = "create_plan"
-    ITERATE_PLAN = "iterate_plan"
-    IMPLEMENT_PLAN = "implement_plan"
-    COMMIT = "commit"
-
-
-def build_command_map(
-    *,
-    command_dir: Path = PROJECT_ROOT / ".claude/commands",
-) -> dict[Command, str]:
-    """Build a command map from the command directory."""
-    command_map: dict[Command, str] = {}
-    if not command_dir.exists():
-        return command_map
-
-    for f in sorted(command_dir.glob("[0-9]_*.md")):
-        try:
-            # e.g., '1_research_codebase' -> 'RESEARCH_CODEBASE'
-            command_name = f.stem.split("_", 1)[1].upper()
-            if command_enum_member := getattr(Command, command_name, None):
-                command_map[command_enum_member] = f"/{f.stem}"
-        except (IndexError, AttributeError):
-            logging.warning("Skipping malformed command file: %s", f.name)
-
-    return command_map
-
-
-COMMAND_MAP = build_command_map()
-
-
-@dataclass
-class ExecutionContext:
-    """All execution state in one place."""
-
-    agent_options: ClaudeAgentOptions | None = None
-    event_loop: asyncio.AbstractEventLoop | None = None
-    session_ids: dict[Command, str] = field(default_factory=dict)
-    doc_paths: dict[Command, str] = field(default_factory=dict)
-    extracted_paths: dict[str, str] = field(default_factory=dict)  # doc_type -> path
-
-    def validate_plan_doc(self, plan_path: str) -> None:
-        """Validate that plan_path is not the research document.
-
-        This method prevents a common agent mistake: passing the research
-        document instead of the plan document to implement_plan.
-
-        Raises:
-            ValueError: If plan_path matches the research document.
-        """
-        research_doc = self.doc_paths.get(Command.CREATE_PLAN, "")
-        if research_doc and plan_path == research_doc:
-            raise ValueError(
-                "implement_plan requires the PLAN document, "
-                f"not the research document.\nReceived: {plan_path}\n"
-                "Hint: Use the plan document returned by create_plan."
-            )
-
-    def log_session_state(self) -> None:
-        """Log all session IDs and document paths for debugging."""
-        logger.debug("ExecutionContext state:")
-        logger.debug("Session IDs:")
-        for command, session_id in self.session_ids.items():
-            logger.debug("  %s: %s", command.value, session_id or "(not set)")
-        logger.debug("Document paths:")
-        for command, doc_path in self.doc_paths.items():
-            logger.debug("  %s: %s", command.value, doc_path or "(not set)")
-
-
-# Single context variable for all execution state
-_ctx: ContextVar[ExecutionContext | None] = ContextVar("ctx", default=None)
-
-
-def _get_ctx() -> ExecutionContext:
-    """Get or create the execution context."""
-    ctx = _ctx.get()
-    if ctx is None:
-        ctx = ExecutionContext()
-        _ctx.set(ctx)
-    return ctx
-
-
-def get_extracted_path(doc_type: str) -> str | None:
-    """Get the last extracted and validated path for a document type.
-
-    Use this instead of LLM-generated output fields to avoid hallucinated paths.
-
-    Args:
-        doc_type: Type of document ("research" or "plan")
-
-    Returns:
-        Validated absolute path if available, None otherwise
-    """
-    return _get_ctx().extracted_paths.get(doc_type)
-
+# Re-export _ctx for backwards compatibility (tests import it from bridge.py)
+__all__ = ["_ctx"]
 
 # Logger and Console for the workflow
 logger = logging.getLogger(__name__)
@@ -199,6 +107,26 @@ def _log_result_metrics(message: ResultMessage) -> None:
             message.usage.get("cache_read_input_tokens", 0),
             message.usage.get("cache_creation_input_tokens", 0),
         )
+
+
+def _process_assistant_message(message: AssistantMessage) -> str:
+    """Process assistant message content blocks and return accumulated text.
+
+    Args:
+        message: AssistantMessage containing content blocks
+
+    Returns:
+        Accumulated text from TextBlock content
+    """
+    block_text = ""
+    for block in message.content:
+        if isinstance(block, TextBlock):
+            block_text += block.text
+        elif isinstance(block, ToolUseBlock):
+            _log_tool_call(block)
+        elif isinstance(block, ToolResultBlock):
+            _log_tool_result(block)
+    return block_text
 
 
 def _get_event_loop() -> asyncio.AbstractEventLoop:
@@ -280,6 +208,59 @@ def _format_tool_result(
     )
 
 
+async def _run_claude_session(
+    command: str,
+    session_id: str | None,
+) -> tuple[str, str]:
+    """Execute a Claude agent session asynchronously.
+
+    This is the core async logic extracted from _execute_claude_task to
+    reduce function complexity.
+
+    Args:
+        command: The command string to execute
+        session_id: Optional session ID for resumption
+
+    Returns:
+        Tuple of (result content, new session ID)
+
+    Raises:
+        AgentExecutionError: If agent execution fails
+    """
+    last_text_content = ""
+    result_content = ""
+    new_session_id = ""
+
+    async with ClaudeSDKClient(options=_get_agent_options()) as client:
+        try:
+            logger.debug(
+                "%s session", "Using existing" if session_id else "Starting new"
+            )
+            await client.query(command, session_id=session_id)
+
+            async for message in client.receive_response():
+                if isinstance(message, ResultMessage):
+                    if message.result:
+                        new_session_id = message.session_id
+                        result_content = message.result
+                    _log_result_metrics(message)
+                    console.print(
+                        f"\n[bold cyan]Result:[/bold cyan] {result_content}\n"
+                    )
+                    break
+                elif isinstance(message, AssistantMessage):
+                    block_text = _process_assistant_message(message)
+                    if block_text:
+                        last_text_content = block_text
+        except Exception as e:
+            raise AgentExecutionError(f"Agent execution failed: {e}") from e
+
+    return (
+        result_content if result_content else last_text_content,
+        new_session_id,
+    )
+
+
 def _execute_claude_task(
     *,
     path_to_document: Path | str | None = None,
@@ -287,6 +268,23 @@ def _execute_claude_task(
     tool_command: Command,
     query: str,
 ) -> tuple[str, str]:
+    """Execute a Claude agent task synchronously.
+
+    This is the main sync→async bridge that wraps _run_claude_session.
+
+    Args:
+        path_to_document: Optional path to document for command
+        session_id: Optional session ID for resumption
+        tool_command: The Command enum value
+        query: The query/instruction for the agent
+
+    Returns:
+        Tuple of (result content, session ID)
+
+    Raises:
+        ValueError: If tool_command is not in COMMAND_MAP
+        AgentExecutionError: If agent execution fails
+    """
     command = COMMAND_MAP.get(tool_command)
     if not command:
         raise ValueError(f"Invalid tool command: {tool_command}")
@@ -301,68 +299,13 @@ def _execute_claude_task(
 
     logger.debug("Tool call: %s", command)
 
-    async def _run_async(sid: str | None) -> tuple[str, str]:
-        last_text_content = ""
-        result_content = ""
-        last_message = None
-        new_session_id = ""
-
-        async with ClaudeSDKClient(options=_get_agent_options()) as client:
-            try:
-                if sid:
-                    logger.debug("Using session ID: %s", sid)
-                    await client.query(command, session_id=sid)
-                else:
-                    logger.debug("Starting new session")
-                    await client.query(command)
-
-                last_class_name = None
-                async for message in client.receive_response():
-                    current_class_name = message.__class__.__name__
-                    last_message = message
-
-                    if last_class_name != current_class_name:
-                        logger.debug("Agent message type: %s", current_class_name)
-                        last_class_name = current_class_name
-
-                    if isinstance(message, ResultMessage):
-                        if message.result:
-                            new_session_id = message.session_id
-                            result_content = message.result
-                        _log_result_metrics(message)
-                        # Log ResultMessage to console before returning
-                        console.print(
-                            f"\n[bold cyan]Result:[/bold cyan] {result_content}\n"
-                        )
-                        break
-                    elif isinstance(message, AssistantMessage):
-                        block_text = ""
-                        for block in message.content:
-                            if isinstance(block, TextBlock):
-                                block_text += block.text
-                            elif isinstance(block, ToolUseBlock):
-                                # can_use_tool handles AskUserQuestion
-                                _log_tool_call(block)
-                            elif isinstance(block, ToolResultBlock):
-                                _log_tool_result(block)
-                        if block_text:
-                            last_text_content = block_text
-            except Exception as e:
-                raise AgentExecutionError(f"Agent execution failed: {e}") from e
-
-        if last_message:
-            logger.debug("Last message type: %s", last_message.__class__.__name__)
-
-        return (
-            result_content if result_content else last_text_content,
-            new_session_id,
-        )
-
     # For debugging purposes
     _get_ctx().log_session_state()
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
-    return _get_event_loop().run_until_complete(_run_async(session_id))
+    return _get_event_loop().run_until_complete(
+        _run_claude_session(command, session_id)
+    )
 
 
 def workflow_tool(
@@ -436,168 +379,3 @@ def workflow_tool(
         return wrapper
 
     return decorator
-
-
-@workflow_tool(
-    Command.RESEARCH_CODEBASE, phase_name="Researching codebase", doc_type="research"
-)
-def research_codebase(
-    *,
-    research_document_path: Path | str | None = None,
-    query: str,
-    session_id: str | None = None,
-) -> tuple[str, str]:
-    """Research the codebase and return the results.
-
-    Args:
-        research_document_path: Optional path to the research document.
-        query: The query to research the codebase (goal, question, etc.).
-        session_id: Session ID for resumption (injected by decorator).
-
-    Returns:
-        Tuple of (result text, session ID).
-    """
-    return _execute_claude_task(
-        path_to_document=Path(research_document_path)
-        if research_document_path
-        else None,
-        tool_command=Command.RESEARCH_CODEBASE,
-        session_id=session_id,
-        query=query,
-    )
-
-
-@workflow_tool(Command.CREATE_PLAN, phase_name="Creating plan", doc_type="plan")
-def create_plan(
-    *,
-    research_document_path: Path | str,
-    query: str,
-    session_id: str | None = None,
-) -> tuple[str, str]:
-    """Create a plan for the codebase.
-
-    Args:
-        research_document_path: Required path to the research document.
-        query: The query to create a plan for the codebase (goal, question, etc.).
-        session_id: Session ID for resumption (injected by decorator).
-
-    Returns:
-        Tuple of (result text, session ID).
-    """
-    # Store doc path for validation in later stages
-    _get_ctx().doc_paths[Command.CREATE_PLAN] = str(research_document_path)
-
-    return _execute_claude_task(
-        path_to_document=Path(research_document_path),
-        tool_command=Command.CREATE_PLAN,
-        session_id=session_id,
-        query=query,
-    )
-
-
-@workflow_tool(Command.REVIEW_PLAN, phase_name="Reviewing plan", validate_plan=True)
-def review_plan(
-    *,
-    plan_document_path: Path | str,
-    query: str,
-    session_id: str | None = None,
-) -> tuple[str, str]:
-    """Review the plan for the codebase.
-
-    Args:
-        plan_document_path: Required path to the plan document.
-        query: The query to review the plan (review, question, doubts, feedback, etc.).
-        session_id: Session ID for resumption (injected by decorator).
-
-    Returns:
-        Tuple of (result text, session ID).
-    """
-    # Store doc path for reference
-    _get_ctx().doc_paths[Command.REVIEW_PLAN] = str(plan_document_path)
-
-    return _execute_claude_task(
-        path_to_document=Path(plan_document_path),
-        tool_command=Command.REVIEW_PLAN,
-        session_id=session_id,
-        query=query,
-    )
-
-
-@workflow_tool(Command.ITERATE_PLAN, phase_name="Iterating plan", validate_plan=True)
-def iterate_plan(
-    *,
-    plan_document_path: Path | str,
-    review_feedback: str,
-    session_id: str | None = None,
-) -> tuple[str, str]:
-    """Iterate the plan for the codebase.
-
-    Args:
-        plan_document_path: Required path to the plan document.
-        review_feedback: The review feedback to iterate the plan.
-        session_id: Session ID for resumption (injected by decorator).
-
-    Returns:
-        Tuple of (result text, session ID).
-    """
-    # Store doc path for reference
-    _get_ctx().doc_paths[Command.ITERATE_PLAN] = str(plan_document_path)
-
-    return _execute_claude_task(
-        path_to_document=Path(plan_document_path),
-        tool_command=Command.ITERATE_PLAN,
-        session_id=session_id,
-        query=review_feedback,
-    )
-
-
-@workflow_tool(
-    Command.IMPLEMENT_PLAN, phase_name="Implementing plan", validate_plan=True
-)
-def implement_plan(
-    *,
-    plan_document_path: Path | str,
-    query: str = "implement the plan",
-    session_id: str | None = None,
-) -> tuple[str, str]:
-    """Implement the plan by executing all phases.
-
-    Args:
-        plan_document_path: Required path to the plan document.
-        query: Implementation instructions or continuation context.
-        session_id: Session ID for resumption (injected by decorator).
-
-    Returns:
-        Tuple of (result text, session ID).
-    """
-    _get_ctx().doc_paths[Command.IMPLEMENT_PLAN] = str(plan_document_path)
-
-    return _execute_claude_task(
-        path_to_document=Path(plan_document_path),
-        tool_command=Command.IMPLEMENT_PLAN,
-        session_id=session_id,
-        query=query,
-    )
-
-
-@workflow_tool(Command.COMMIT, phase_name="Committing changes")
-def commit_changes(
-    *,
-    query: str = "commit the changes",
-    session_id: str | None = None,
-) -> tuple[str, str]:
-    """Commit the changes made during implementation.
-
-    Args:
-        query: Commit context or specific instructions.
-        session_id: Session ID for resumption (injected by decorator).
-
-    Returns:
-        Tuple of (result text, session ID).
-    """
-    return _execute_claude_task(
-        path_to_document=None,
-        tool_command=Command.COMMIT,
-        session_id=session_id,
-        query=query,
-    )

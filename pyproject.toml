@@ -98,10 +98,6 @@ ignore = [
 "π/support/permissions.py" = [
     "ARG001",   # context param required by SDK callback signature
 ]
-"π/workflow/bridge.py" = [
-    "PLR0912",  # complex but working async handler
-    "PLR0915",  # complex but working async handler
-]
 
 [tool.ruff.lint.isort]
 known-first-party = ["π"]

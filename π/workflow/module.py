@@ -11,11 +11,11 @@ import logging
 import dspy
 
 from π.config import MAX_ITERS, Provider, Tier, get_lm
-from π.workflow.bridge import (
+from π.workflow.context import get_extracted_path
+from π.workflow.tools import (
     ask_user_question,
     commit_changes,
     create_plan,
-    get_extracted_path,
     implement_plan,
     iterate_plan,
     research_codebase,

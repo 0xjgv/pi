@@ -482,7 +482,7 @@ def mock_workflow_stages():
     Note on @workflow_tool decorated functions:
     The workflow functions (research_codebase, create_plan, etc.) are decorated
     with @workflow_tool which uses @functools.wraps(func). When we patch at
-    π.workflow.bridge.research_codebase, we're patching the DECORATED function
+    π.workflow.tools.research_codebase, we're patching the DECORATED function
     (the wrapper), not the inner function. This is correct behavior because:
 
     1. @wraps preserves the function identity at the module level
@@ -494,12 +494,12 @@ def mock_workflow_stages():
     (e.g., mock _execute_claude_task instead).
     """
     stages = {
-        "research": "π.workflow.bridge.research_codebase",
-        "plan": "π.workflow.bridge.create_plan",
-        "review": "π.workflow.bridge.review_plan",
-        "iterate": "π.workflow.bridge.iterate_plan",
-        "implement": "π.workflow.bridge.implement_plan",
-        "commit": "π.workflow.bridge.commit_changes",
+        "research": "π.workflow.tools.research_codebase",
+        "plan": "π.workflow.tools.create_plan",
+        "review": "π.workflow.tools.review_plan",
+        "iterate": "π.workflow.tools.iterate_plan",
+        "implement": "π.workflow.tools.implement_plan",
+        "commit": "π.workflow.tools.commit_changes",
     }
 
     mocks = {}
