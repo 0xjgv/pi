@@ -10,6 +10,7 @@ from π.workflow.context import (
 )
 from π.workflow.loop import LoopState, LoopStatus, ObjectiveLoop, Task, TaskStatus
 from π.workflow.module import RPIWorkflow
+from π.workflow.orchestrator import StagedWorkflow
 from π.workflow.tools import (
     ask_user_question,
     commit_changes,
@@ -28,6 +29,7 @@ __all__ = [
     "LoopStatus",
     "ObjectiveLoop",
     "RPIWorkflow",
+    "StagedWorkflow",
     "Task",
     "TaskStatus",
     "ask_user_question",
