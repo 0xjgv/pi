@@ -5,12 +5,10 @@ from importlib.metadata import version as get_version
 
 from dotenv import load_dotenv
 
-from π.config import STAGE_TIERS, Provider, Tier, get_lm
+from π.config import Provider, Tier, get_lm
 from π.support import cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
-from π.workflow import (
-    RPIWorkflow,
-)
+from π.workflow import StagedWorkflow
 from π.workflow.loop import LoopStatus, ObjectiveLoop, TaskStatus
 
 logger = logging.getLogger(__name__)  # Use module's own logger
@@ -41,32 +39,31 @@ def _create_parser() -> argparse.ArgumentParser:
 load_dotenv()
 
 
-def _format_stages() -> str:
-    """Format STAGE_TIERS as 'Name(tier) → Name(tier) → ...'"""
-    parts = [
-        f"{stage.value.replace('_', ' ').title()} ({tier})"
-        for stage, tier in STAGE_TIERS.items()
-    ]
-    return " → ".join(parts)
-
-
 def run_workflow_mode(objective: str) -> None:
-    """Execute objective using RPIWorkflow pipeline."""
-    print(f"[Workflow Mode] Using {Provider.Claude} with per-stage models")
-    print(f">  Stages: {_format_stages()}")
+    """Execute objective using StagedWorkflow pipeline."""
+    print(f"[Workflow Mode] Using {Provider.Claude} with staged pipeline")
+    print(">  Stages: Research → Design → Execute")
 
-    # Default LM
-    lm = get_lm(Provider.Claude, Tier.HIGH)
-
-    workflow = RPIWorkflow(lm=lm)
+    workflow = StagedWorkflow()
     result = workflow(objective=objective)
 
     print("\n=== Workflow Complete ===")
-    print(f"Research Doc: {result.research_doc_path}")
-    print(f"Plan Doc: {result.plan_doc_path}")
-    print(f"Implementation: {result.implementation_status}")
-    print(f"Files Changed: {result.files_changed}")
-    print(f"Commit: {result.commit_result}")
+    print(f"Status: {result.status}")
+
+    if hasattr(result, "reason") and result.reason:
+        print(f"Reason: {result.reason}")
+
+    if hasattr(result, "research_doc_path"):
+        print(f"Research Doc: {result.research_doc_path}")
+
+    if hasattr(result, "plan_doc_path"):
+        print(f"Plan Doc: {result.plan_doc_path}")
+
+    if hasattr(result, "files_changed") and result.files_changed:
+        print(f"Files Changed: {result.files_changed}")
+
+    if hasattr(result, "commit_hash") and result.commit_hash:
+        print(f"Commit: {result.commit_hash}")
 
 
 def run_loop_mode(objective: str, *, resume: bool = True) -> None:
