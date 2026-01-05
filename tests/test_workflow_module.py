@@ -122,7 +122,6 @@ class TestPiWorkflowStageExecution:
             patch("π.workflow.module.commit_changes") as mock_commit,
             patch("π.workflow.module.get_lm") as mock_get_lm,
             patch("π.workflow.module.get_extracted_path") as mock_get_extracted_path,
-            patch("π.workflow.module.Path") as mock_path,
         ):
             # Setup ReAct mock to return predictions
             mock_react_instance = MagicMock()
@@ -131,9 +130,6 @@ class TestPiWorkflowStageExecution:
             # Must return False to not suppress exceptions
             mock_dspy.context.return_value.__exit__ = MagicMock(return_value=False)
             mock_dspy.Prediction = MagicMock
-
-            # Mock Path to always report files exist
-            mock_path.return_value.exists.return_value = True
 
             # Mock get_extracted_path to return valid paths
             mock_get_extracted_path.side_effect = lambda doc_type: {
@@ -334,7 +330,6 @@ class TestPiWorkflowModelSelection:
             patch("π.workflow.module.iterate_plan"),
             patch("π.workflow.module.implement_plan"),
             patch("π.workflow.module.commit_changes"),
-            patch("π.workflow.module.Path") as mock_path,
         ):
             stage_idx = [0]
 
@@ -365,9 +360,6 @@ class TestPiWorkflowModelSelection:
             mock_dspy.ReAct.return_value = mock_react
             mock_dspy.context.return_value.__enter__ = MagicMock()
             mock_dspy.context.return_value.__exit__ = MagicMock(return_value=False)
-
-            # Mock Path to always report files exist
-            mock_path.return_value.exists.return_value = True
 
             # Mock get_extracted_path to return valid paths
             mock_get_extracted_path.side_effect = lambda doc_type: {
@@ -417,15 +409,11 @@ class TestPiWorkflowPrediction:
             patch("π.workflow.module.iterate_plan"),
             patch("π.workflow.module.implement_plan"),
             patch("π.workflow.module.commit_changes"),
-            patch("π.workflow.module.Path") as mock_path,
         ):
             mock_react = MagicMock()
             mock_dspy.ReAct.return_value = mock_react
             mock_dspy.context.return_value.__enter__ = MagicMock()
             mock_dspy.context.return_value.__exit__ = MagicMock(return_value=False)
-
-            # Mock Path to always report files exist
-            mock_path.return_value.exists.return_value = True
 
             # Mock get_extracted_path to return valid paths
             mock_get_extracted_path.side_effect = lambda doc_type: {

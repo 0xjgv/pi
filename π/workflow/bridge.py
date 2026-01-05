@@ -399,6 +399,8 @@ def workflow_tool(
 
             try:
                 with timed_phase(phase_name):
+                    # Pop session_id from kwargs if caller passed it (we inject our own)
+                    kwargs.pop("session_id", None)
                     result, last_session_id = func(session_id=session_id, **kwargs)
                     logger.debug(
                         "%s result - session_id=%s, result=%s",

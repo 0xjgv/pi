@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import dspy
+from pydantic import BaseModel, Field
 
 from π.config import MAX_ITERS, Provider, Tier, get_lm
-from π.workflow.bridge import research_codebase
+from π.workflow.bridge import _get_ctx, research_codebase
 from π.workflow.module import RPIWorkflow
 
 logger = logging.getLogger(__name__)
@@ -39,13 +40,12 @@ class TaskStatus(StrEnum):
     FAILED = "failed"
 
 
-@dataclass
-class Task:
+class Task(BaseModel):
     """A discrete task extracted from the objective."""
 
     id: str
     description: str
-    dependencies: list[str] = field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
     priority: int = 1
     status: TaskStatus = TaskStatus.PENDING
     result: str | None = None
@@ -79,8 +79,8 @@ class DecomposeSignature(dspy.Signature):
     codebase_context: str = dspy.InputField(desc="Current state of the codebase")
     completed_tasks: str = dspy.InputField(desc="Previously completed tasks (JSON)")
 
-    tasks: str = dspy.OutputField(
-        desc="JSON array of task objects with: id, description, dependencies, priority"
+    tasks: list[Task] = dspy.OutputField(
+        desc="List of task objects with id, description, dependencies, priority"
     )
     reasoning: str = dspy.OutputField(desc="Explanation of decomposition strategy")
 
@@ -129,34 +129,15 @@ def _state_path(objective: str, checkpoint_dir: Path = LOOP_STATE_DIR) -> Path:
 
 def _task_to_dict(task: Task) -> dict[str, Any]:
     """Serialize Task for JSON storage."""
-    return {
-        "id": task.id,
-        "description": task.description,
-        "dependencies": task.dependencies,
-        "priority": task.priority,
-        "status": task.status.value,
-        "result": task.result,
-        "error": task.error,
-        "plan_doc_path": task.plan_doc_path,
-        "research_doc_path": task.research_doc_path,
-        "commit_hash": task.commit_hash,
-    }
+    data = task.model_dump()
+    # Ensure enum is serialized as string value
+    data["status"] = task.status.value
+    return data
 
 
 def _task_from_dict(data: dict[str, Any]) -> Task:
     """Deserialize Task from JSON."""
-    return Task(
-        id=data["id"],
-        description=data["description"],
-        dependencies=data.get("dependencies", []),
-        priority=data.get("priority", 1),
-        status=TaskStatus(data["status"]),
-        result=data.get("result"),
-        error=data.get("error"),
-        plan_doc_path=data.get("plan_doc_path"),
-        research_doc_path=data.get("research_doc_path"),
-        commit_hash=data.get("commit_hash"),
-    )
+    return Task.model_validate(data)
 
 
 def save_state(state: LoopState, path: Path) -> None:
@@ -225,6 +206,9 @@ class ObjectiveLoop(dspy.Module):
         self.max_iterations = max_iterations
         self.checkpoint_dir = checkpoint_dir
 
+        # Configure JSONAdapter for typed outputs
+        dspy.configure(adapter=dspy.JSONAdapter())
+
         # Sub-modules
         self._workflow = RPIWorkflow(lm=self.lm)
         self._decomposer = dspy.ReAct(
@@ -239,16 +223,23 @@ class ObjectiveLoop(dspy.Module):
         """Execute the orchestration loop until objective is complete."""
         state_path = _state_path(objective, self.checkpoint_dir)
 
-        # Resume or start fresh
-        if resume and state_path.exists():
-            state = load_state(state_path)
-            logger.info("Resumed from iteration %d", state.iteration)
-        else:
-            state = LoopState(objective=objective, max_iterations=self.max_iterations)
-            state = self._decompose(state)
-            save_state(state, state_path)
-
         with dspy.context(lm=self.lm):
+            # Resume or start fresh
+            if resume and state_path.exists():
+                state = load_state(state_path)
+                logger.info("Resumed from iteration %d", state.iteration)
+            else:
+                state = LoopState(
+                    objective=objective, max_iterations=self.max_iterations
+                )
+                state = self._decompose(state)
+                save_state(state, state_path)
+
+                # Early exit if decomposition failed
+                if state.status == LoopStatus.FAILED:
+                    logger.error("Initial decomposition failed, exiting")
+                    return state
+
             while self._should_continue(state):
                 state.iteration += 1
                 logger.info("=== LOOP ITERATION %d ===", state.iteration)
@@ -299,7 +290,13 @@ class ObjectiveLoop(dspy.Module):
             completed_tasks=completed_summary,
         )
 
-        new_tasks = self._parse_tasks(decomposed.tasks)
+        # Direct access - typed as list[Task] via JSONAdapter
+        new_tasks = decomposed.tasks
+
+        if not new_tasks:
+            logger.error("Decomposition returned no tasks")
+            state.status = LoopStatus.FAILED
+            return state
 
         if incremental:
             existing_ids = {t.id for t in state.tasks}
@@ -307,7 +304,7 @@ class ObjectiveLoop(dspy.Module):
                 if task.id not in existing_ids:
                     state.tasks.append(task)
         else:
-            state.tasks = new_tasks
+            state.tasks = list(new_tasks)
 
         logger.info("Decomposed into %d tasks", len(state.tasks))
         return state
@@ -345,6 +342,9 @@ class ObjectiveLoop(dspy.Module):
 
     def _execute_task(self, task: Task, state: LoopState) -> dspy.Prediction:
         """Execute RPIWorkflow on a single task."""
+        # Clear session context for fresh task isolation
+        _get_ctx().session_ids.clear()
+
         # Build context for resumption
         resume_context = ""
         if task.status == TaskStatus.IN_PROGRESS and task.error:
@@ -476,20 +476,3 @@ Focus on completing this specific task while keeping the overall objective in mi
         """Format completed tasks for context."""
         completed = [t for t in state.tasks if t.status == TaskStatus.COMPLETED]
         return json.dumps([_task_to_dict(t) for t in completed])
-
-    def _parse_tasks(self, tasks_json: str) -> list[Task]:
-        """Parse tasks from JSON output."""
-        try:
-            tasks_data = json.loads(tasks_json)
-            return [
-                Task(
-                    id=t["id"],
-                    description=t["description"],
-                    dependencies=t.get("dependencies", []),
-                    priority=t.get("priority", 1),
-                )
-                for t in tasks_data
-            ]
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error("Failed to parse tasks: %s", e)
-            return []

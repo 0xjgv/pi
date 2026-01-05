@@ -7,7 +7,6 @@ sequential stage execution with per-stage model selection.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import dspy
 
@@ -24,9 +23,6 @@ from π.workflow.bridge import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Default path for optimized workflow
-DEFAULT_OPTIMIZED_PATH = Path("π/optimized_workflow.json")
 
 # -----------------------------------------------------------------------------
 # Stage Signatures
@@ -126,31 +122,6 @@ class RPIWorkflow(dspy.Module):
     Attributes:
         provider: AI provider for model selection
     """
-
-    @classmethod
-    def load_optimized(
-        cls,
-        path: str | Path = DEFAULT_OPTIMIZED_PATH,
-        **kwargs: dspy.LM | None,
-    ) -> RPIWorkflow:
-        """Load GEPA-optimized workflow if available.
-
-        Falls back to unoptimized workflow if no saved state exists.
-
-        Args:
-            path: Path to optimized workflow JSON
-            **kwargs: Additional arguments passed to __init__ if fallback
-
-        Returns:
-            RPIWorkflow instance (optimized if available, default otherwise)
-        """
-        path = Path(path)
-        if path.exists():
-            logger.info("Loading optimized workflow from %s", path)
-            # dspy.Module.load() loads from JSON
-            return cls.load(path=str(path))  # type: ignore[call-arg]
-        logger.info("No optimized workflow found, using default")
-        return cls(**kwargs)
 
     def __init__(self, lm: dspy.LM | None = None) -> None:
         super().__init__()
