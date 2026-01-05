@@ -6,6 +6,16 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Explicitly set empty API variables to ensure tests don't accidentally call APIs.
+  # Note: The π/config.py uses getenv() which treats empty string as falsy for api_key.
+  # Setting empty strings is safe because:
+  # 1. dspy.LM is mocked before it's instantiated, so api_key is never validated
+  # 2. clean_env fixture uses monkeypatch.delenv() which removes vars entirely
+  # 3. Tests check for mock injection, not env var presence
+  CLIPROXY_API_BASE: ""
+  CLIPROXY_API_KEY: ""
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -33,11 +43,20 @@ jobs:
       - name: Run format check
         run: uv run ruff format --check .
 
-      - name: Run tests
+      - name: Run tests (no API)
         run: uv run pytest tests/ -v --tb=short
+        env:
+          CLIPROXY_API_BASE: ""
+          CLIPROXY_API_KEY: ""
 
       - name: Run tests with coverage
         run: uv run pytest tests/ -v --cov=π --cov-report=xml --cov-report=term-missing
+        env:
+          CLIPROXY_API_BASE: ""
+          CLIPROXY_API_KEY: ""
+
+      - name: Verify no API calls marker
+        run: uv run pytest -m no_api tests/ -v --tb=short
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

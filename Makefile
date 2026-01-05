@@ -55,6 +55,15 @@ test: ## Run tests with pytest
 test-cov: ## Run tests with coverage
 	@$(SILENT_HELPER) && run_silent "Running tests with coverage" "uv run pytest tests/ -v --cov=π --cov-report=term-missing"
 
+.PHONY: test-no-api
+test-no-api: ## Run tests without API access
+	@$(SILENT_HELPER) && print_main_header "Running Tests (No API)" && \
+		CLIPROXY_API_BASE="" CLIPROXY_API_KEY="" run_silent "Running tests" "uv run pytest -x -v tests/"
+
+.PHONY: test-markers
+test-markers: ## Run only tests marked as no_api
+	@$(SILENT_HELPER) && run_silent "Running no_api marked tests" "uv run pytest -m no_api tests/ -v"
+
 ##@ Development
 
 .PHONY: check
