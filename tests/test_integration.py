@@ -42,13 +42,16 @@ class TestFullWorkflowIntegration:
             yield mock_client
 
     @pytest.fixture
-    def mock_rpi_workflow(self) -> Generator[MagicMock]:
-        """Mock RPIWorkflow for integration tests."""
-        with patch("π.cli.RPIWorkflow") as mock:
+    def mock_staged_workflow(self) -> Generator[MagicMock]:
+        """Mock StagedWorkflow for integration tests."""
+        with patch("π.cli.StagedWorkflow") as mock:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
+                status="success",
                 research_doc_path="/research.md",
                 plan_doc_path="/plan.md",
+                files_changed=["test.py"],
+                commit_hash="abc1234",
             )
             mock.return_value = mock_instance
             yield mock
@@ -56,7 +59,7 @@ class TestFullWorkflowIntegration:
     def test_cli_initializes_and_runs(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,
+        mock_staged_workflow: MagicMock,
         mock_claude_responses: AsyncMock,
     ):
         """CLI should initialize workflow and run successfully."""
@@ -68,7 +71,7 @@ class TestFullWorkflowIntegration:
     def test_agent_options_flow_to_workflow(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,
+        mock_staged_workflow: MagicMock,
         mock_claude_responses: AsyncMock,
     ):
         """Agent options should be correctly configured."""
@@ -87,10 +90,10 @@ class TestFullWorkflowIntegration:
 
     def test_error_handling_propagates(
         self,
-        mock_rpi_workflow: MagicMock,
+        mock_staged_workflow: MagicMock,
     ):
         """Errors should be handled gracefully."""
-        mock_rpi_workflow.return_value.side_effect = Exception("Workflow error")
+        mock_staged_workflow.return_value.side_effect = Exception("Workflow error")
 
         with pytest.raises(Exception, match="Workflow error"):
             main(["test"])
@@ -226,9 +229,10 @@ class TestLogCleanupIntegration:
         monkeypatch.chdir(tmp_path)
 
         # Mock the workflow execution to avoid actual agent run
-        with patch("π.cli.RPIWorkflow") as mock_workflow:
+        with patch("π.cli.StagedWorkflow") as mock_workflow:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
+                status="success",
                 research_doc_path="/research.md",
                 plan_doc_path="/plan.md",
             )
@@ -284,9 +288,10 @@ class TestLogCleanupIntegration:
         monkeypatch.chdir(tmp_path)
 
         # Mock the workflow execution
-        with patch("π.cli.RPIWorkflow") as mock_workflow:
+        with patch("π.cli.StagedWorkflow") as mock_workflow:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
+                status="success",
                 research_doc_path="/research.md",
                 plan_doc_path="/plan.md",
             )

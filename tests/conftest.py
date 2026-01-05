@@ -520,18 +520,21 @@ def mock_workflow_stages():
 
 @pytest.fixture
 def mock_rpi_workflow_full():
-    """Mock RPIWorkflow with complete stage simulation.
+    """Mock StagedWorkflow with complete stage simulation.
 
     Simulates a full workflow execution with all stages returning success.
-    Note: Must patch at π.cli.RPIWorkflow since that's where the CLI imports it.
+    Note: Must patch at π.cli.StagedWorkflow since that's where the CLI imports it.
     """
-    with patch("π.cli.RPIWorkflow") as mock_class:
+    with patch("π.cli.StagedWorkflow") as mock_class:
         mock_instance = MagicMock()
 
         # Configure return value
         mock_result = MagicMock()
+        mock_result.status = "success"
         mock_result.research_doc_path = "/tmp/research.md"
         mock_result.plan_doc_path = "/tmp/plan.md"
+        mock_result.files_changed = ["test.py"]
+        mock_result.commit_hash = "abc1234"
         mock_instance.return_value = mock_result
 
         mock_class.return_value = mock_instance

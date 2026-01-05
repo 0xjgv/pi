@@ -12,13 +12,16 @@ class TestMain:
     """Tests for main CLI command."""
 
     @pytest.fixture
-    def mock_rpi_workflow(self) -> Generator[MagicMock]:
-        """Mock RPIWorkflow."""
-        with patch("π.cli.RPIWorkflow") as mock:
+    def mock_staged_workflow(self) -> Generator[MagicMock]:
+        """Mock StagedWorkflow."""
+        with patch("π.cli.StagedWorkflow") as mock:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
+                status="success",
                 research_doc_path="/research.md",
                 plan_doc_path="/plan.md",
+                files_changed=["test.py"],
+                commit_hash="abc1234",
             )
             mock.return_value = mock_instance
             yield mock
@@ -33,7 +36,7 @@ class TestMain:
     def test_accepts_objective_argument(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,
+        mock_staged_workflow: MagicMock,
     ):
         """Should accept objective as positional argument."""
         main(["test objective"])
@@ -45,7 +48,7 @@ class TestMain:
     def test_runs_workflow_mode(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,
+        mock_staged_workflow: MagicMock,
     ):
         """Should run workflow mode with objective."""
         main(["test objective"])
@@ -56,25 +59,24 @@ class TestMain:
     def test_uses_claude_provider(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,
+        mock_staged_workflow: MagicMock,
     ):
         """Should use Claude provider."""
         main(["test"])
         captured = capsys.readouterr()
 
-        mock_rpi_workflow.assert_called_once()
+        mock_staged_workflow.assert_called_once()
         # Claude provider is displayed in output
         assert "claude" in captured.out.lower()
 
     def test_displays_workflow_completion(
         self,
         capsys: pytest.CaptureFixture[str],
-        mock_rpi_workflow: MagicMock,
+        mock_staged_workflow: MagicMock,
     ):
         """Should display workflow completion message."""
         main(["test objective"])
         captured = capsys.readouterr()
 
         assert "Workflow Complete" in captured.out
-        assert "Research Doc" in captured.out
-        assert "Plan Doc" in captured.out
+        assert "Status: success" in captured.out
