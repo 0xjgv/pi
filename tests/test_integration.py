@@ -14,6 +14,14 @@ from π.cli import main
 class TestFullWorkflowIntegration:
     """Integration tests for complete CLI workflows."""
 
+    @pytest.fixture(autouse=True)
+    def isolate_logging(self, tmp_path: Path) -> Generator[None]:
+        """Redirect logging to temporary directory."""
+        mock_logs_dir = tmp_path / ".π" / "logs"
+        mock_logs_dir.mkdir(parents=True)
+        with patch("π.cli.get_logs_dir", return_value=mock_logs_dir):
+            yield
+
     @pytest.fixture
     def mock_claude_responses(self) -> Generator[AsyncMock]:
         """Set up complete mock for Claude SDK."""
@@ -306,6 +314,14 @@ class TestLogCleanupIntegration:
 
 class TestWorkflowIntegrationNoAPI:
     """Integration tests verifying no API calls are made."""
+
+    @pytest.fixture(autouse=True)
+    def isolate_logging(self, tmp_path: Path) -> Generator[None]:
+        """Redirect logging to temporary directory."""
+        mock_logs_dir = tmp_path / ".π" / "logs"
+        mock_logs_dir.mkdir(parents=True)
+        with patch("π.cli.get_logs_dir", return_value=mock_logs_dir):
+            yield
 
     @pytest.fixture(autouse=True)
     def setup_mocks(

@@ -1,6 +1,7 @@
 """Tests for π.cli module."""
 
 from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +11,14 @@ from π.cli import main
 
 class TestMain:
     """Tests for main CLI command."""
+
+    @pytest.fixture(autouse=True)
+    def isolate_logging(self, tmp_path: Path) -> Generator[None]:
+        """Redirect logging to temporary directory to avoid polluting real logs."""
+        mock_logs_dir = tmp_path / ".π" / "logs"
+        mock_logs_dir.mkdir(parents=True)
+        with patch("π.cli.get_logs_dir", return_value=mock_logs_dir):
+            yield
 
     @pytest.fixture
     def mock_staged_workflow(self) -> Generator[MagicMock]:
