@@ -103,8 +103,8 @@ def stage_design(
 
     with dspy.context(lm=lm):
         result = agent(
-            objective=objective,
             research_doc_path=research_doc.path,
+            objective=objective,
         )
 
     plan_doc = PlanDocPath(path=result.plan_doc_path)
