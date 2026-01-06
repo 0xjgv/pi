@@ -332,7 +332,21 @@ def execute_claude_task(
         logger.debug("Resuming session: %s", session_id)
         # When resuming, send only the follow-up query. The session_id passed to
         # ClaudeSDKClient.query() provides the conversation context from prior turns.
-        command = query
+        #
+        # For planning commands, prefix with explicit instruction to prevent the agent
+        # from jumping straight to implementation when given user feedback.
+        planning_commands = {
+            Command.CREATE_PLAN,
+            Command.REVIEW_PLAN,
+            Command.ITERATE_PLAN,
+        }
+        if tool_command in planning_commands:
+            command = (
+                f"Based on this feedback, continue with your planning task "
+                f"(write or update the plan document, do NOT implement): {query}"
+            )
+        else:
+            command = query
 
     logger.debug("Tool call: %s", command)
 
