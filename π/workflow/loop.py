@@ -61,6 +61,7 @@ class LoopState:
     """Persistent state for the orchestration loop."""
 
     objective: str
+    clarified_objective: str | None = None
     tasks: list[Task] = field(default_factory=list)
     completed_task_ids: set[str] = field(default_factory=set)
     iteration: int = 0
@@ -84,6 +85,11 @@ class DecomposeSignature(dspy.Signature):
         desc="List of task objects with id, description, dependencies, priority"
     )
     reasoning: str = dspy.OutputField(desc="Explanation of decomposition strategy")
+    clarified_objective: str = dspy.OutputField(
+        desc="The objective as understood after any user clarifications. "
+        "If clarification was requested, reflect the clarified intent. "
+        "If no clarification needed, return the original objective."
+    )
 
 
 class PrioritizerSignature(dspy.Signature):
@@ -145,6 +151,7 @@ def save_state(state: LoopState, path: Path) -> None:
     """Persist loop state to disk with atomic write."""
     data = {
         "objective": state.objective,
+        "clarified_objective": state.clarified_objective,
         "iteration": state.iteration,
         "max_iterations": state.max_iterations,
         "status": state.status.value,
@@ -168,6 +175,7 @@ def load_state(path: Path) -> LoopState:
 
     return LoopState(
         objective=data["objective"],
+        clarified_objective=data.get("clarified_objective"),
         tasks=tasks,
         completed_task_ids=set(data["completed_task_ids"]),
         iteration=data["iteration"],
@@ -291,6 +299,14 @@ class ObjectiveLoop(dspy.Module):
             completed_tasks=completed_summary,
         )
 
+        # Extract clarified objective (fallback to original)
+        clarified = getattr(decomposed, "clarified_objective", None) or state.objective
+        state.clarified_objective = clarified
+
+        if clarified != state.objective:
+            truncated = clarified[:60] + "..." if len(clarified) > 60 else clarified
+            logger.info("Objective clarified: %s", truncated)
+
         # Direct access - typed as list[Task] via JSONAdapter
         new_tasks = decomposed.tasks
 
@@ -354,8 +370,11 @@ class ObjectiveLoop(dspy.Module):
                 "Check git status for any partial work and continue from there."
             )
 
+        # Use clarified objective if available
+        effective_objective = state.clarified_objective or state.objective
+
         task_objective = f"""
-Overall objective: {state.objective}
+Overall objective: {effective_objective}
 
 Current task: {task.description}
 
