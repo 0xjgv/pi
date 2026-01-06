@@ -32,6 +32,13 @@ def _create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Start fresh, ignore existing loop state",
     )
+    parser.add_argument(
+        "--iterations",
+        "-n",
+        type=int,
+        default=50,
+        help="Maximum iterations for loop mode (default: 50)",
+    )
     return parser
 
 
@@ -64,14 +71,16 @@ def run_workflow_mode(objective: str) -> None:
         print(f"Commit: {result.commit_hash}")
 
 
-def run_loop_mode(objective: str, *, resume: bool = True) -> None:
+def run_loop_mode(
+    objective: str, *, resume: bool = True, max_iterations: int = 50
+) -> None:
     """Execute objective using iterative ObjectiveLoop."""
     print("[Loop Mode] Iterating toward objective")
-    print(">  Max iterations: 50")
+    print(f">  Max iterations: {max_iterations}")
     print(f">  Resume: {resume}")
 
     lm = get_lm(Provider.Claude, Tier.HIGH)
-    loop = ObjectiveLoop(lm=lm)
+    loop = ObjectiveLoop(lm=lm, max_iterations=max_iterations)
 
     state = loop(objective=objective, resume=resume)
 
@@ -118,7 +127,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Logging to: {log_path}")
 
     if args.loop:
-        run_loop_mode(objective, resume=not args.no_resume)
+        run_loop_mode(
+            objective, resume=not args.no_resume, max_iterations=args.iterations
+        )
     else:
         run_workflow_mode(objective)
 
