@@ -19,8 +19,8 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}")
 class ResearchDocPath(BaseModel):
     """Type-safe research document path with validation."""
 
-    path: str
     doc_type: Literal["research"] = "research"
+    path: str
 
     @field_validator("path")
     @classmethod
@@ -54,8 +54,8 @@ class ResearchDocPath(BaseModel):
 class PlanDocPath(BaseModel):
     """Type-safe plan document path with validation."""
 
-    path: str
     doc_type: Literal["plan"] = "plan"
+    path: str
 
     @field_validator("path")
     @classmethod
@@ -90,22 +90,22 @@ class ResearchResult(BaseModel):
     """Output from research stage."""
 
     research_doc: ResearchDocPath
-    summary: str
     needs_implementation: bool
+    summary: str
     reason: str | None = None
 
 
 class DesignResult(BaseModel):
     """Output from design stage (plan + review + iterate)."""
 
+    estimated_changes: int = Field(default=0)
     plan_doc: PlanDocPath
     summary: str
-    estimated_changes: int = Field(default=0)
 
 
 class ExecuteResult(BaseModel):
     """Output from execute stage (implement + commit)."""
 
-    status: Literal["success", "partial", "failed"]
     files_changed: list[str] = Field(default_factory=list)
+    status: Literal["success", "partial", "failed"]
     commit_hash: str | None = None

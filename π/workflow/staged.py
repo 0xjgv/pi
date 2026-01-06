@@ -55,19 +55,24 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
 
     research_doc = ResearchDocPath(path=result.research_doc_path)
 
+    reason = (
+        "Agent determined no implementation needed"
+        if not result.needs_implementation
+        else None
+    )
+
     logger.info(
-        "Research complete: needs_implementation=%s, doc=%s",
+        "Research complete: needs_implementation=%s, doc=%s reason=%s",
         result.needs_implementation,
         research_doc.path,
+        reason,
     )
 
     return ResearchResult(
         needs_implementation=result.needs_implementation,
         summary=result.research_summary,
         research_doc=research_doc,
-        reason=None
-        if result.needs_implementation
-        else "Agent determined no implementation needed",
+        reason=reason,
     )
 
 
@@ -107,8 +112,8 @@ def stage_design(
     logger.info("Design complete: plan=%s", plan_doc.path)
 
     return DesignResult(
-        plan_doc=plan_doc,
         summary=result.plan_summary,
+        plan_doc=plan_doc,
     )
 
 
@@ -149,7 +154,7 @@ def stage_execute(
     logger.info("Execute complete: status=%s, commit=%s", result.status, commit_hash)
 
     return ExecuteResult(
-        status=result.status,
         files_changed=files_changed,
         commit_hash=commit_hash,
+        status=result.status,
     )
