@@ -6,7 +6,7 @@ from importlib.metadata import version as get_version
 from dotenv import load_dotenv
 
 from π.config import Provider, Tier, get_lm
-from π.support import cleanup_old_logs, get_logs_dir
+from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import StagedWorkflow
 from π.workflow.loop import LoopStatus, ObjectiveLoop, TaskStatus
@@ -122,6 +122,7 @@ def main(argv: list[str] | None = None) -> None:
 
     logs_dir = get_logs_dir()
     cleanup_old_logs(logs_dir)  # Clean old logs first
+    archive_old_documents()  # Archive old research/plan documents
     log_path = setup_logging(logs_dir)
 
     print(f"Logging to: {log_path}")

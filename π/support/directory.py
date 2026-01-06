@@ -6,6 +6,8 @@ from pathlib import Path
 
 PI_GITIGNORE_ENTRY = ".π/\n"
 DEFAULT_LOG_RETENTION_DAYS = 7
+DEFAULT_DOCUMENT_RETENTION_DAYS = 5
+ARCHIVED_BASE_DIR = "thoughts/shared/archived"
 PROJECT_MARKERS = {
     ".git",
     "CLAUDE.md",
@@ -97,6 +99,51 @@ def cleanup_old_logs(
             continue  # Skip files with unexpected format
 
     return deleted
+
+
+def archive_old_documents(
+    *,
+    root: Path | None = None,
+    retention_days: int = DEFAULT_DOCUMENT_RETENTION_DAYS,
+) -> dict[str, int]:
+    """Archive research and plan documents older than retention_days.
+
+    Moves files from thoughts/shared/{research,plans}/ to
+    thoughts/shared/archived/{research,plans}/.
+
+    Args:
+        root: Project root path. Defaults to detected project root.
+        retention_days: Number of days to retain documents before archiving.
+
+    Returns:
+        Dict with counts of archived files: {"research": N, "plans": M}
+    """
+    root = root or get_project_root()
+    cutoff = (datetime.now() - timedelta(days=retention_days)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    archived = {"research": 0, "plans": 0}
+
+    for doc_type in ("research", "plans"):
+        source_dir = root / "thoughts" / "shared" / doc_type
+        archive_dir = root / ARCHIVED_BASE_DIR / doc_type
+
+        if not source_dir.exists():
+            continue
+
+        for doc_file in source_dir.glob("*.md"):
+            try:
+                # Parse date from filename: YYYY-MM-DD-description.md
+                date_str = doc_file.stem[:10]
+                file_date = datetime.strptime(date_str, "%Y-%m-%d")
+                if file_date < cutoff:
+                    archive_dir.mkdir(parents=True, exist_ok=True)
+                    doc_file.rename(archive_dir / doc_file.name)
+                    archived[doc_type] += 1
+            except (ValueError, OSError):
+                continue  # Skip files with unexpected format
+
+    return archived
 
 
 def _ensure_gitignore(root: Path) -> None:
