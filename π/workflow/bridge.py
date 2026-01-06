@@ -296,7 +296,7 @@ async def _run_claude_session(
     )
 
 
-def _execute_claude_task(
+def execute_claude_task(
     *,
     path_to_document: Path | str | None = None,
     session_id: str | None = None,

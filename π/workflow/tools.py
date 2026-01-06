@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from π.support.hitl import ConsoleInputProvider, create_ask_user_question_tool
-from π.workflow.bridge import _execute_claude_task, workflow_tool
+from π.workflow.bridge import execute_claude_task, workflow_tool
 from π.workflow.context import Command, _get_ctx
 
 # DSPy-compatible ask_user_question tool for workflow stages
@@ -35,11 +35,10 @@ def research_codebase(
     Returns:
         Tuple of (result text, session ID).
     """
-    return _execute_claude_task(
-        path_to_document=Path(research_document_path)
-        if research_document_path
-        else None,
+    path_to_document = Path(research_document_path) if research_document_path else None
+    return execute_claude_task(
         tool_command=Command.RESEARCH_CODEBASE,
+        path_to_document=path_to_document,
         session_id=session_id,
         query=query,
     )
@@ -49,14 +48,14 @@ def research_codebase(
 def create_plan(
     *,
     research_document_path: Path | str,
-    query: str,
     session_id: str | None = None,
+    query: str,
 ) -> tuple[str, str]:
     """Create a plan for the codebase.
 
     Args:
-        research_document_path: Required path to the research document.
         query: The query to create a plan for the codebase (goal, question, etc.).
+        research_document_path: Required path to the research document.
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
@@ -65,7 +64,7 @@ def create_plan(
     # Store doc path for validation in later stages
     _get_ctx().doc_paths[Command.CREATE_PLAN] = str(research_document_path)
 
-    return _execute_claude_task(
+    return execute_claude_task(
         path_to_document=Path(research_document_path),
         tool_command=Command.CREATE_PLAN,
         session_id=session_id,
@@ -77,15 +76,15 @@ def create_plan(
 def review_plan(
     *,
     plan_document_path: Path | str,
-    query: str,
     session_id: str | None = None,
+    query: str,
 ) -> tuple[str, str]:
     """Review the plan for the codebase.
 
     Args:
-        plan_document_path: Required path to the plan document.
         query: The query to review the plan (review, question, doubts, feedback, etc.).
         session_id: Session ID for resumption (injected by decorator).
+        plan_document_path: Required path to the plan document.
 
     Returns:
         Tuple of (result text, session ID).
@@ -93,7 +92,7 @@ def review_plan(
     # Store doc path for reference
     _get_ctx().doc_paths[Command.REVIEW_PLAN] = str(plan_document_path)
 
-    return _execute_claude_task(
+    return execute_claude_task(
         path_to_document=Path(plan_document_path),
         tool_command=Command.REVIEW_PLAN,
         session_id=session_id,
@@ -105,14 +104,14 @@ def review_plan(
 def iterate_plan(
     *,
     plan_document_path: Path | str,
-    review_feedback: str,
     session_id: str | None = None,
+    review_feedback: str,
 ) -> tuple[str, str]:
     """Iterate the plan for the codebase.
 
     Args:
-        plan_document_path: Required path to the plan document.
         review_feedback: The review feedback to iterate the plan.
+        plan_document_path: Required path to the plan document.
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
@@ -121,7 +120,7 @@ def iterate_plan(
     # Store doc path for reference
     _get_ctx().doc_paths[Command.ITERATE_PLAN] = str(plan_document_path)
 
-    return _execute_claude_task(
+    return execute_claude_task(
         path_to_document=Path(plan_document_path),
         tool_command=Command.ITERATE_PLAN,
         session_id=session_id,
@@ -135,8 +134,8 @@ def iterate_plan(
 def implement_plan(
     *,
     plan_document_path: Path | str,
-    query: str = "implement the plan",
     session_id: str | None = None,
+    query: str,
 ) -> tuple[str, str]:
     """Implement the plan by executing all phases.
 
@@ -150,7 +149,7 @@ def implement_plan(
     """
     _get_ctx().doc_paths[Command.IMPLEMENT_PLAN] = str(plan_document_path)
 
-    return _execute_claude_task(
+    return execute_claude_task(
         path_to_document=Path(plan_document_path),
         tool_command=Command.IMPLEMENT_PLAN,
         session_id=session_id,
@@ -161,21 +160,21 @@ def implement_plan(
 @workflow_tool(Command.COMMIT, phase_name="Committing changes")
 def commit_changes(
     *,
-    query: str = "commit the changes",
     session_id: str | None = None,
+    query: str,
 ) -> tuple[str, str]:
     """Commit the changes made during implementation.
 
     Args:
-        query: Commit context or specific instructions.
+        query: Commit context or additional specific instructions.
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
         Tuple of (result text, session ID).
     """
-    return _execute_claude_task(
-        path_to_document=None,
+    return execute_claude_task(
         tool_command=Command.COMMIT,
+        path_to_document=None,
         session_id=session_id,
         query=query,
     )
