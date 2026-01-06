@@ -271,7 +271,7 @@ async def _run_claude_session(
             logger.debug(
                 "%s session", "Using existing" if session_id else "Starting new"
             )
-            await client.query(command, session_id=session_id)
+            await client.query(command, session_id=session_id or "default")
 
             async for message in client.receive_response():
                 if isinstance(message, ResultMessage):

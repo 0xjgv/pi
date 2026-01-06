@@ -44,7 +44,9 @@ def run_workflow_mode(objective: str) -> None:
     print(f"[Workflow Mode] Using {Provider.Claude} with staged pipeline")
     print(">  Stages: Research → Design → Execute")
 
-    workflow = StagedWorkflow()
+    lm = get_lm(Provider.Claude, Tier.HIGH)
+    workflow = StagedWorkflow(lm=lm)
+
     result = workflow(objective=objective)
 
     print("\n=== Workflow Complete ===")
@@ -52,16 +54,12 @@ def run_workflow_mode(objective: str) -> None:
 
     if hasattr(result, "reason") and result.reason:
         print(f"Reason: {result.reason}")
-
     if hasattr(result, "research_doc_path"):
         print(f"Research Doc: {result.research_doc_path}")
-
     if hasattr(result, "plan_doc_path"):
         print(f"Plan Doc: {result.plan_doc_path}")
-
     if hasattr(result, "files_changed") and result.files_changed:
         print(f"Files Changed: {result.files_changed}")
-
     if hasattr(result, "commit_hash") and result.commit_hash:
         print(f"Commit: {result.commit_hash}")
 
