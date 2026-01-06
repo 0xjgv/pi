@@ -324,6 +324,15 @@ class ObjectiveLoop(dspy.Module):
             state.tasks = list(new_tasks)
 
         logger.info("Decomposed into %d tasks", len(state.tasks))
+
+        # Display task count and list to user
+        task_count = len(state.tasks)
+        prefix = "Re-identified" if incremental else "Identified"
+        print(f"\n{prefix} {task_count} task{'s' if task_count != 1 else ''}:")
+        for i, task in enumerate(state.tasks, 1):
+            status_marker = "✓" if task.status == TaskStatus.COMPLETED else " "
+            print(f"  {status_marker} {i}. {task.description}")
+
         return state
 
     def _select_next_task(self, state: LoopState) -> Task | None:
