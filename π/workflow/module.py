@@ -40,6 +40,9 @@ class ResearchSignature(dspy.Signature):
     research_doc_path: str = dspy.OutputField(
         desc="Path to the detailed research document"
     )
+    needs_implementation: bool = dspy.OutputField(
+        desc="True if implementation needed, False if already done or unnecessary"
+    )
 
 
 class PlanSignature(dspy.Signature):
@@ -50,6 +53,33 @@ class PlanSignature(dspy.Signature):
 
     plan_summary: str = dspy.OutputField(desc="Summary of the implementation plan")
     plan_doc_path: str = dspy.OutputField(desc="Path to the detailed plan document")
+
+
+class DesignSignature(dspy.Signature):
+    """Design stage: create, review, and iterate on an implementation plan.
+
+    Call create_plan, review_plan, and iterate_plan tools to complete this stage.
+    """
+
+    objective: str = dspy.InputField(desc="The clarified objective to design for")
+    research_doc_path: str = dspy.InputField(desc="Path to the research document")
+
+    plan_doc_path: str = dspy.OutputField(desc="Path to the final plan document")
+    plan_summary: str = dspy.OutputField(desc="Summary of the design and iterations")
+
+
+class ExecuteSignature(dspy.Signature):
+    """Execute stage: implement the plan and commit changes.
+
+    Call implement_plan and commit_changes tools to complete this stage.
+    """
+
+    plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
+    objective: str = dspy.InputField(desc="The original objective for context")
+
+    status: str = dspy.OutputField(desc="Status: success, partial, or failed")
+    files_changed: str = dspy.OutputField(desc="Comma-separated list of files changed")
+    commit_hash: str = dspy.OutputField(desc="Git commit hash or 'none' if no commit")
 
 
 class ReviewPlanSignature(dspy.Signature):

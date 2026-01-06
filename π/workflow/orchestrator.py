@@ -6,6 +6,7 @@ import logging
 
 import dspy
 
+from π.config import Provider, Tier, get_lm
 from π.workflow.staged import (
     stage_design,
     stage_execute,
@@ -24,6 +25,15 @@ class StagedWorkflow(dspy.Module):
         3. Execute (implement + commit)
     """
 
+    def __init__(self, lm: dspy.LM | None = None) -> None:
+        """Initialize workflow with optional LM.
+
+        Args:
+            lm: DSPy language model. Defaults to Claude HIGH tier.
+        """
+        super().__init__()
+        self.lm = lm
+
     def forward(self, objective: str) -> dspy.Prediction:
         """Execute staged workflow with early-exit capability.
 
@@ -33,10 +43,13 @@ class StagedWorkflow(dspy.Module):
         Returns:
             dspy.Prediction with status and document paths.
         """
+        # Get LM (from init or default)
+        lm = self.lm or get_lm(Provider.Claude, Tier.HIGH)
+
         # Stage 1: Research (triage gate)
         logger.info("=== STAGE 1/3: RESEARCH ===")
         try:
-            research = stage_research(objective=objective)
+            research = stage_research(objective=objective, lm=lm)
         except ValueError as e:
             logger.error("Research failed: %s", e)
             return dspy.Prediction(
@@ -48,9 +61,9 @@ class StagedWorkflow(dspy.Module):
         if not research.needs_implementation:
             logger.info("Early exit: %s", research.reason)
             return dspy.Prediction(
+                research_doc_path=research.research_doc.path,
                 status="already_complete",
                 reason=research.reason,
-                research_doc_path=research.research_doc.path,
             )
 
         # Stage 2: Design (plan + review + iterate)
@@ -59,6 +72,7 @@ class StagedWorkflow(dspy.Module):
             design = stage_design(
                 research_doc=research.research_doc,
                 objective=objective,
+                lm=lm,
             )
         except ValueError as e:
             logger.error("Design failed: %s", e)
@@ -74,6 +88,7 @@ class StagedWorkflow(dspy.Module):
             execute = stage_execute(
                 plan_doc=design.plan_doc,
                 objective=objective,
+                lm=lm,
             )
         except ValueError as e:
             logger.error("Execute failed: %s", e)
