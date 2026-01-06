@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from π.config import MAX_ITERS, Provider, Tier, get_lm
 from π.workflow.context import _get_ctx
-from π.workflow.module import RPIWorkflow
+from π.workflow.orchestrator import StagedWorkflow
 from π.workflow.tools import research_codebase
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ def save_state(state: LoopState, path: Path) -> None:
 
 def load_state(path: Path) -> LoopState:
     """Load previously saved loop state."""
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
 
     tasks = [_task_from_dict(t) for t in data["tasks"]]
 
@@ -190,9 +190,9 @@ def archive_state(path: Path, checkpoint_dir: Path = LOOP_STATE_DIR) -> None:
 
 
 class ObjectiveLoop(dspy.Module):
-    """Orchestration loop that executes RPIWorkflow to accomplish objectives."""
+    """Orchestration loop that executes StagedWorkflow to accomplish objectives."""
 
-    _workflow: RPIWorkflow
+    _workflow: StagedWorkflow
 
     def __init__(
         self,
@@ -211,7 +211,7 @@ class ObjectiveLoop(dspy.Module):
         dspy.configure(adapter=dspy.JSONAdapter())
 
         # Sub-modules
-        self._workflow = RPIWorkflow(lm=self.lm)
+        self._workflow = StagedWorkflow(lm=self.lm)
         self._decomposer = dspy.ReAct(
             signature=DecomposeSignature,
             tools=[research_codebase],
@@ -255,7 +255,7 @@ class ObjectiveLoop(dspy.Module):
                 task.status = TaskStatus.IN_PROGRESS
                 save_state(state, state_path)
 
-                # 3. Execute RPIWorkflow on task
+                # 3. Execute StagedWorkflow on task
                 try:
                     result = self._execute_task(task, state)
                     state = self._update_state(state, task, result)
@@ -342,7 +342,7 @@ class ObjectiveLoop(dspy.Module):
         return next((t for t in executable if t.id == selected_id), executable[0])
 
     def _execute_task(self, task: Task, state: LoopState) -> dspy.Prediction:
-        """Execute RPIWorkflow on a single task."""
+        """Execute StagedWorkflow on a single task."""
         # Clear session context for fresh task isolation
         _get_ctx().session_ids.clear()
 
@@ -366,9 +366,9 @@ Focus on completing this specific task while keeping the overall objective in mi
 """
         result = self._workflow(objective=task_objective)
 
-        # Store document paths
-        task.plan_doc_path = result.plan_doc_path
-        task.research_doc_path = result.research_doc_path
+        # Store document paths (may not exist for early-exit)
+        task.plan_doc_path = getattr(result, "plan_doc_path", None)
+        task.research_doc_path = getattr(result, "research_doc_path", None)
 
         return result
 
@@ -379,22 +379,26 @@ Focus on completing this specific task while keeping the overall objective in mi
         result: dspy.Prediction,
     ) -> LoopState:
         """Update loop state after task execution."""
-        # Extract results with null-safety
-        impl_status = getattr(result, "implementation_status", None) or ""
-        commit_result = getattr(result, "commit_result", None) or ""
+        # Extract StagedWorkflow results with null-safety
+        status = getattr(result, "status", None) or ""
+        commit_hash = getattr(result, "commit_hash", None)
+        reason = getattr(result, "reason", None)
 
-        # Task completes only if implementation succeeded AND commit was made
-        if "success" in impl_status.lower() and commit_result:
+        # Task completes if status indicates success (with or without commit)
+        if status in ("success", "already_complete"):
             task.status = TaskStatus.COMPLETED
-            task.result = impl_status
-            task.commit_hash = commit_result
+            task.result = reason or status
+            task.commit_hash = commit_hash  # May be None for early-exit
             state.completed_task_ids.add(task.id)
-            commit_preview = commit_result[:20]
-            logger.info("Task %s completed with commit: %s", task.id, commit_preview)
+            if commit_hash:
+                short_hash = commit_hash[:20]
+                logger.info("Task %s completed with commit: %s", task.id, short_hash)
+            else:
+                logger.info("Task %s completed (no commit needed): %s", task.id, reason)
         else:
             # Task stays in_progress for retry on resume
-            task.error = impl_status or "Unknown error - no implementation status"
-            logger.warning("Task %s did not complete successfully", task.id)
+            task.error = reason or f"Task failed with status: {status}"
+            logger.warning("Task %s did not complete: %s", task.id, task.error)
 
         return state
 

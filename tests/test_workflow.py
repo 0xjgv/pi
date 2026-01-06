@@ -179,12 +179,12 @@ class TestWorkflowFunctions:
 
     @pytest.fixture
     def mock_execute_task(self) -> Generator[MagicMock]:
-        """Mock _execute_claude_task.
+        """Mock execute_claude_task.
 
         Patches at tools.py where the function is used, not bridge.py
         where it's defined.
         """
-        with patch("π.workflow.tools._execute_claude_task") as mock:
+        with patch("π.workflow.tools.execute_claude_task") as mock:
             mock.return_value = ("Result text", "session-123")
             yield mock
 

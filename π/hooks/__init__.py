@@ -24,14 +24,14 @@ from typing import cast
 from claude_agent_sdk.types import HookContext, HookInput, HookJSONOutput
 
 # Import checkers to register them in the registry
-from π.hooks import checkers as _checkers  # noqa: F401
+from π.hooks import checkers as _checkers
 from π.hooks.logging import log_event
 from π.hooks.registry import get_checker
 from π.hooks.safety import check_bash_command
 from π.hooks.utils import compact_path, console
 
-# Re-export public API
-__all__ = ["check_bash_command", "check_file_format"]
+# Re-export public API (include _checkers for side-effect registration)
+__all__ = ["_checkers", "check_bash_command", "check_file_format"]
 
 
 async def check_file_format(

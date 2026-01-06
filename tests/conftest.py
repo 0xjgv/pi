@@ -491,7 +491,7 @@ def mock_workflow_stages():
     4. This means session management, timing, and error handling are bypassed
 
     If you need to test the decorator's behavior, mock at a lower level
-    (e.g., mock _execute_claude_task instead).
+    (e.g., mock execute_claude_task instead).
     """
     stages = {
         "research": "π.workflow.tools.research_codebase",

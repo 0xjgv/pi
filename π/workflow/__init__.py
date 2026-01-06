@@ -9,7 +9,6 @@ from π.workflow.context import (
     get_extracted_path,
 )
 from π.workflow.loop import LoopState, LoopStatus, ObjectiveLoop, Task, TaskStatus
-from π.workflow.module import RPIWorkflow
 from π.workflow.orchestrator import StagedWorkflow
 from π.workflow.tools import (
     ask_user_question,
@@ -28,7 +27,6 @@ __all__ = [
     "LoopState",
     "LoopStatus",
     "ObjectiveLoop",
-    "RPIWorkflow",
     "StagedWorkflow",
     "Task",
     "TaskStatus",

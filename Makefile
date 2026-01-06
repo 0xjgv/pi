@@ -28,6 +28,10 @@ format: ## Format code with ruff
 lint: ## Lint code with ruff
 	@$(SILENT_HELPER) && run_silent "Lint check" "uv run ruff check ."
 
+.PHONY: deadcode
+deadcode: ## Scan for dead code with vulture (informational)
+	-@uv run vulture π/ --min-confidence 90 --exclude "**/conftest.py"
+
 .PHONY: quality-check
 quality-check: ## Run quality checks (fix, format, lint)
 	@$(SILENT_HELPER) && print_main_header "Running Quality Checks"
