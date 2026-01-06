@@ -431,7 +431,7 @@ Focus on completing this specific task while keeping the overall objective in mi
         return state
 
     def _evaluate_progress(self, state: LoopState) -> LoopState:
-        """Evaluate overall progress toward objective."""
+        """Evaluate progress and determine if redecomposition is needed."""
         pending = [
             _task_to_dict(t) for t in state.tasks if t.status == TaskStatus.PENDING
         ]
@@ -442,9 +442,12 @@ Focus on completing this specific task while keeping the overall objective in mi
             codebase_state=self._get_codebase_context(),
         )
 
+        # Log progress but don't set completion here - let task selection drive that
         if evaluated.is_complete:
-            state.status = LoopStatus.COMPLETED
-            logger.info("Objective completed!")
+            logger.info(
+                "Evaluator suggests objective met (progress: %d%%)",
+                evaluated.completion_percentage,
+            )
 
         return state
 
