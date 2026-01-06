@@ -183,3 +183,61 @@ class TestTask:
         assert task.plan_doc_path is None
         assert task.research_doc_path is None
         assert task.commit_hash is None
+
+
+class TestStateTimestamps:
+    """Tests for state timestamp fields."""
+
+    def test_first_save_sets_created_and_updated(self, tmp_path: Path) -> None:
+        """First save sets both created_at and updated_at."""
+        import json
+
+        state = LoopState(objective="Test")
+        path = tmp_path / "state.json"
+
+        save_state(state, path)
+
+        data = json.loads(path.read_text())
+        assert "created_at" in data
+        assert "updated_at" in data
+        assert data["created_at"] == data["updated_at"]
+        # Verify ISO 8601 format with timezone
+        assert data["created_at"].endswith("+00:00")
+
+    def test_subsequent_save_preserves_created_updates_updated(
+        self, tmp_path: Path
+    ) -> None:
+        """Subsequent saves preserve created_at but update updated_at."""
+        import json
+        import time
+
+        state = LoopState(objective="Test")
+        path = tmp_path / "state.json"
+
+        save_state(state, path)
+        first_data = json.loads(path.read_text())
+        original_created = first_data["created_at"]
+
+        time.sleep(0.01)  # Ensure time difference
+        state.iteration = 1
+        save_state(state, path)
+
+        second_data = json.loads(path.read_text())
+        assert second_data["created_at"] == original_created
+        assert second_data["updated_at"] >= original_created
+
+    def test_timestamps_are_utc_iso8601(self, tmp_path: Path) -> None:
+        """Verify timestamps are UTC in ISO 8601 format."""
+        import json
+        from datetime import datetime
+
+        state = LoopState(objective="Test")
+        path = tmp_path / "state.json"
+
+        save_state(state, path)
+
+        data = json.loads(path.read_text())
+        # Should parse without error and have UTC timezone
+        parsed = datetime.fromisoformat(data["created_at"])
+        assert parsed.tzinfo is not None
+        assert parsed.utcoffset().total_seconds() == 0

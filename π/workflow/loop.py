@@ -7,6 +7,7 @@ import json
 import logging
 import subprocess
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -149,6 +150,17 @@ def _task_from_dict(data: dict[str, Any]) -> Task:
 
 def save_state(state: LoopState, path: Path) -> None:
     """Persist loop state to disk with atomic write."""
+    now = datetime.now(UTC).isoformat()
+
+    # Preserve created_at from existing file, or set it on first save
+    created_at = now
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            created_at = existing.get("created_at", now)
+        except (json.JSONDecodeError, OSError):
+            pass  # Fall back to current timestamp
+
     data = {
         "objective": state.objective,
         "clarified_objective": state.clarified_objective,
@@ -157,6 +169,8 @@ def save_state(state: LoopState, path: Path) -> None:
         "status": state.status.value,
         "completed_task_ids": list(state.completed_task_ids),
         "tasks": [_task_to_dict(t) for t in state.tasks],
+        "created_at": created_at,
+        "updated_at": now,
     }
 
     # Atomic write: write to temp file, then rename
