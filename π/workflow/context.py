@@ -34,6 +34,7 @@ class Command(StrEnum):
     ITERATE_PLAN = "iterate_plan"
     IMPLEMENT_PLAN = "implement_plan"
     COMMIT = "commit"
+    WRITE_CLAUDE_MD = "write_claude_md"  # Non-numbered command
 
 
 def build_command_map(
@@ -45,6 +46,7 @@ def build_command_map(
     if not command_dir.exists():
         return command_map
 
+    # Numbered commands (existing pattern: 1_research_codebase.md)
     for f in sorted(command_dir.glob("[0-9]_*.md")):
         try:
             # e.g., '1_research_codebase' -> 'RESEARCH_CODEBASE'
@@ -53,6 +55,15 @@ def build_command_map(
                 command_map[command_enum_member] = f"/{f.stem}"
         except (IndexError, AttributeError):
             logging.warning("Skipping malformed command file: %s", f.name)
+
+    # Non-numbered commands (explicit mapping)
+    non_numbered = {
+        Command.WRITE_CLAUDE_MD: "write-claude-md",
+    }
+    for cmd, filename in non_numbered.items():
+        cmd_file = command_dir / f"{filename}.md"
+        if cmd_file.exists():
+            command_map[cmd] = f"/{filename}"
 
     return command_map
 
