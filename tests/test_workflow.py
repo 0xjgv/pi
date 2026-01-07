@@ -303,3 +303,36 @@ class TestWorkflowFunctions:
 
         # Session should now be stored
         assert ctx.session_ids.get(Command.RESEARCH_CODEBASE) == "new-session-xyz"
+
+
+class TestCommandEnumAndMapping:
+    """Tests for Command enum and build_command_map."""
+
+    def test_write_claude_md_command_exists(self):
+        """WRITE_CLAUDE_MD is a valid Command enum member."""
+        assert hasattr(Command, "WRITE_CLAUDE_MD")
+        assert Command.WRITE_CLAUDE_MD == "write_claude_md"
+
+    def test_build_command_map_includes_non_numbered(self, tmp_path: Path):
+        """build_command_map() includes non-numbered commands."""
+        from π.workflow.context import build_command_map
+
+        # Create test command file
+        (tmp_path / "write-claude-md.md").write_text("# Test")
+
+        cmd_map = build_command_map(command_dir=tmp_path)
+
+        assert Command.WRITE_CLAUDE_MD in cmd_map
+        assert cmd_map[Command.WRITE_CLAUDE_MD] == "/write-claude-md"
+
+    def test_build_command_map_preserves_numbered(self, tmp_path: Path):
+        """build_command_map() still discovers numbered commands."""
+        from π.workflow.context import build_command_map
+
+        # Create numbered command file
+        (tmp_path / "1_research_codebase.md").write_text("# Test")
+
+        cmd_map = build_command_map(command_dir=tmp_path)
+
+        assert Command.RESEARCH_CODEBASE in cmd_map
+        assert cmd_map[Command.RESEARCH_CODEBASE] == "/1_research_codebase"
