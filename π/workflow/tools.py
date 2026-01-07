@@ -178,3 +178,33 @@ def commit_changes(
         session_id=session_id,
         query=query,
     )
+
+
+@workflow_tool(Command.WRITE_CLAUDE_MD, phase_name="Updating documentation")
+def write_claude_md(
+    *,
+    git_diff_context: str,
+    query: str,
+    session_id: str | None = None,
+) -> tuple[str, str]:
+    """Update CLAUDE.md based on codebase changes.
+
+    Args:
+        git_diff_context: Summary of changes since last doc sync.
+        query: Specific instructions for what to update.
+        session_id: Session ID for resumption (injected by decorator).
+
+    Returns:
+        Tuple of (result text, session ID).
+    """
+    full_query = (
+        f"Based on the following recent codebase changes, update CLAUDE.md:\n\n"
+        f"## Changes Since Last Sync\n{git_diff_context}\n\n"
+        f"## Update Instructions\n{query}"
+    )
+    return execute_claude_task(
+        tool_command=Command.WRITE_CLAUDE_MD,
+        path_to_document=None,
+        session_id=session_id,
+        query=full_query,
+    )
