@@ -88,7 +88,7 @@ REST API for the Acme marketplace, handling orders, inventory, and payments.
 For complex projects, use auxiliary docs:
 
 ```shell
-agent_docs/
+.claude/docs/
 ├── architecture.md
 ├── testing.md
 └── conventions.md
@@ -100,7 +100,7 @@ Reference with one-line descriptions in CLAUDE.md.
 
 | Scenario | Approach |
 |----------|----------|
-| **Bloated CLAUDE.md** | Move content to `agent_docs/`. Keep essentials, reference the rest. |
+| **Bloated CLAUDE.md** | Move content to `.claude/docs/`. Keep essentials, reference the rest. |
 | **User wants everything** | Explain trade-off: >300 lines → Claude may miss instructions. Progressive disclosure gives same info with better retention. |
 | **Monorepo** | Root-only (universal context) or Root + per-app (app-specific in subdirectories). |
 
