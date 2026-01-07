@@ -135,6 +135,8 @@ def main(argv: list[str] | None = None) -> None:
     archive_old_documents()  # Archive old research/plan documents
     log_path = setup_logging(logs_dir)
 
+    logger.info("Objective: %s", objective)
+
     print(f"Logging to: {log_path}")
 
     # Configure input provider based on --auto flag

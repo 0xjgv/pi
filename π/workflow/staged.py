@@ -10,6 +10,7 @@ import logging
 import dspy
 
 from π.core import MAX_ITERS
+from π.workflow.callbacks import LoggingCallback
 from π.workflow.context import get_ctx
 from π.workflow.module import DesignSignature, ExecuteSignature, ResearchSignature
 from π.workflow.tools import (
@@ -30,6 +31,9 @@ from π.workflow.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Register logging callback globally (idempotent - safe to import multiple times)
+dspy.configure(callbacks=[LoggingCallback()])
 
 
 def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:

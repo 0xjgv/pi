@@ -75,7 +75,7 @@ def timed_phase(phase_name: str) -> Generator[None]:
 def _log_tool_call(block: ToolUseBlock) -> None:
     """Log tool invocation details."""
     input_str = str(block.input)
-    input_preview = input_str[:500] + "..." if len(input_str) > 500 else input_str
+    input_preview = input_str[:2000] + "..." if len(input_str) > 2000 else input_str
     logger.debug("Tool: %s | Input: %s", block.name, input_preview)
 
 
