@@ -1,3 +1,5 @@
+"""CLI entry point for the π workflow agent."""
+
 import argparse
 import logging
 import sys
@@ -5,13 +7,16 @@ from importlib.metadata import version as get_version
 
 from dotenv import load_dotenv
 
-from π.config import Provider, Tier, get_lm
+from π.cli.utils import prevent_sleep, setup_logging
+from π.core import Provider, Tier, get_lm
 from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
-from π.utils import prevent_sleep, setup_logging, speak
+from π.support.hitl import AgentInputProvider
+from π.utils import speak
 from π.workflow import StagedWorkflow
+from π.workflow.context import get_ctx
 from π.workflow.loop import LoopStatus, ObjectiveLoop, TaskStatus
 
-logger = logging.getLogger(__name__)  # Use module's own logger
+logger = logging.getLogger(__name__)
 VERSION = get_version("pi-rpi")
 
 
@@ -38,6 +43,11 @@ def _create_parser() -> argparse.ArgumentParser:
         type=int,
         default=50,
         help="Maximum iterations for loop mode (default: 50)",
+    )
+    parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="Auto-answer questions using an agent (no human input required)",
     )
     return parser
 
@@ -126,6 +136,11 @@ def main(argv: list[str] | None = None) -> None:
     log_path = setup_logging(logs_dir)
 
     print(f"Logging to: {log_path}")
+
+    # Configure input provider based on --auto flag
+    if args.auto:
+        print("[Auto Mode] Questions will be answered by an agent")
+        get_ctx().input_provider = AgentInputProvider()
 
     if args.loop:
         run_loop_mode(

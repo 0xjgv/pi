@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from claude_agent_sdk.types import ResultMessage
 
-from π.errors import AgentExecutionError
+from π.core import AgentExecutionError
 from π.workflow import (
     Command,
     create_plan,
@@ -17,11 +17,11 @@ from π.workflow import (
 )
 from π.workflow.bridge import (
     _get_agent_options,
-    _get_ctx,
     _get_event_loop,
     _log_result_metrics,
     _log_tool_call,
     _log_tool_result,
+    get_ctx,
     timed_phase,
 )
 
@@ -161,7 +161,7 @@ class TestContextVarHelpers:
         """Should create new ExecutionContext if none exists."""
         from π.workflow import ExecutionContext
 
-        ctx = _get_ctx()
+        ctx = get_ctx()
 
         assert isinstance(ctx, ExecutionContext)
 

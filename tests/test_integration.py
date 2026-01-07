@@ -19,7 +19,7 @@ class TestFullWorkflowIntegration:
         """Redirect logging to temporary directory."""
         mock_logs_dir = tmp_path / ".π" / "logs"
         mock_logs_dir.mkdir(parents=True)
-        with patch("π.cli.get_logs_dir", return_value=mock_logs_dir):
+        with patch("π.cli.main.get_logs_dir", return_value=mock_logs_dir):
             yield
 
     @pytest.fixture
@@ -52,7 +52,7 @@ class TestFullWorkflowIntegration:
     @pytest.fixture
     def mock_staged_workflow(self) -> Generator[MagicMock]:
         """Mock StagedWorkflow for integration tests."""
-        with patch("π.cli.StagedWorkflow") as mock:
+        with patch("π.cli.main.StagedWorkflow") as mock:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
                 status="success",
@@ -178,7 +178,7 @@ class TestSessionStateIntegration:
     def test_session_persists_across_workflow_calls(self):
         """Session state should persist across multiple workflow calls."""
         from π.workflow import Command, ExecutionContext
-        from π.workflow.bridge import _ctx, _get_ctx
+        from π.workflow.bridge import _ctx, get_ctx
 
         # Clear any existing context
         try:
@@ -186,11 +186,11 @@ class TestSessionStateIntegration:
         except LookupError:
             pass
 
-        ctx = _get_ctx()
+        ctx = get_ctx()
         ctx.session_ids[Command.RESEARCH_CODEBASE] = "test-session"
 
         # Retrieve again - should be same context
-        retrieved = _get_ctx()
+        retrieved = get_ctx()
         assert retrieved.session_ids.get(Command.RESEARCH_CODEBASE) == "test-session"
 
     def test_command_map_built_correctly(self):
@@ -237,7 +237,7 @@ class TestLogCleanupIntegration:
         monkeypatch.chdir(tmp_path)
 
         # Mock the workflow execution to avoid actual agent run
-        with patch("π.cli.StagedWorkflow") as mock_workflow:
+        with patch("π.cli.main.StagedWorkflow") as mock_workflow:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
                 status="success",
@@ -296,7 +296,7 @@ class TestLogCleanupIntegration:
         monkeypatch.chdir(tmp_path)
 
         # Mock the workflow execution
-        with patch("π.cli.StagedWorkflow") as mock_workflow:
+        with patch("π.cli.main.StagedWorkflow") as mock_workflow:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
                 status="success",
@@ -320,7 +320,7 @@ class TestWorkflowIntegrationNoAPI:
         """Redirect logging to temporary directory."""
         mock_logs_dir = tmp_path / ".π" / "logs"
         mock_logs_dir.mkdir(parents=True)
-        with patch("π.cli.get_logs_dir", return_value=mock_logs_dir):
+        with patch("π.cli.main.get_logs_dir", return_value=mock_logs_dir):
             yield
 
     @pytest.fixture(autouse=True)

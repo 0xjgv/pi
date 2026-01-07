@@ -9,7 +9,8 @@ import logging
 
 import dspy
 
-from π.config import MAX_ITERS
+from π.core import MAX_ITERS
+from π.workflow.context import get_ctx
 from π.workflow.module import DesignSignature, ExecuteSignature, ResearchSignature
 from π.workflow.tools import (
     ask_user_question,
@@ -44,6 +45,11 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     Raises:
         ValueError: If research did not produce a valid document.
     """
+    # Set context for ask_user_question
+    ctx = get_ctx()
+    ctx.current_stage = "research"
+    ctx.objective = objective
+
     agent = dspy.ReAct(
         tools=[research_codebase, ask_user_question],
         signature=ResearchSignature,
@@ -95,6 +101,12 @@ def stage_design(
     Raises:
         ValueError: If design did not produce a valid plan document.
     """
+    # Set context for ask_user_question
+    ctx = get_ctx()
+    ctx.extracted_paths["research"] = research_doc.path
+    ctx.current_stage = "design"
+    ctx.objective = objective
+
     agent = dspy.ReAct(
         tools=[create_plan, review_plan, iterate_plan, ask_user_question],
         signature=DesignSignature,
@@ -133,6 +145,12 @@ def stage_execute(
     Returns:
         ExecuteResult from signature outputs.
     """
+    # Set context for ask_user_question
+    ctx = get_ctx()
+    ctx.extracted_paths["plan"] = plan_doc.path
+    ctx.current_stage = "execute"
+    ctx.objective = objective
+
     agent = dspy.ReAct(
         tools=[implement_plan, commit_changes, ask_user_question],
         signature=ExecuteSignature,

@@ -17,13 +17,13 @@ class TestMain:
         """Redirect logging to temporary directory to avoid polluting real logs."""
         mock_logs_dir = tmp_path / ".π" / "logs"
         mock_logs_dir.mkdir(parents=True)
-        with patch("π.cli.get_logs_dir", return_value=mock_logs_dir):
+        with patch("π.cli.main.get_logs_dir", return_value=mock_logs_dir):
             yield
 
     @pytest.fixture
     def mock_staged_workflow(self) -> Generator[MagicMock]:
         """Mock StagedWorkflow."""
-        with patch("π.cli.StagedWorkflow") as mock:
+        with patch("π.cli.main.StagedWorkflow") as mock:
             mock_instance = MagicMock()
             mock_instance.return_value = MagicMock(
                 status="success",

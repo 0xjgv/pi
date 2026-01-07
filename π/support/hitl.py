@@ -1,13 +1,21 @@
 """Human-in-the-loop (HITL) providers for π workflow."""
 
-import logging
-from collections.abc import Callable
-from typing import Protocol
+from __future__ import annotations
 
+import logging
+from pathlib import Path
+from typing import TYPE_CHECKING, Protocol
+
+import dspy
 from rich.console import Console
 from rich.prompt import Prompt
 
+from π.core import Provider, Tier, get_lm
 from π.utils import speak
+from π.workflow.context import get_ctx
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -92,20 +100,96 @@ class ConsoleInputProvider:
         return response
 
 
+class AgentInputProvider:
+    """Agent-based input provider for autonomous question answering.
+
+    Reads workflow context from ExecutionContext and delegates
+    questions to an LM for autonomous decision-making.
+    """
+
+    def __init__(self, lm: dspy.LM | None = None) -> None:
+        """Initialize with optional language model.
+
+        Args:
+            lm: DSPy language model. If None, uses default from config.
+        """
+        self.lm = lm
+        self._answer_log: list[tuple[str, str]] = []  # (question, answer) pairs
+
+    def ask(self, question: str) -> str:
+        """Generate an answer using LM with workflow context.
+
+        Args:
+            question: The question from the workflow agent
+
+        Returns:
+            LM-generated answer based on workflow context
+        """
+        logger.debug("AgentInputProvider question: %s", question)
+
+        ctx = get_ctx()
+        lm = self.lm or get_lm(Provider.Claude, Tier.HIGH)
+
+        # Build context from workflow state
+        context_parts = []
+        if ctx.objective:
+            context_parts.append(f"## Objective\n{ctx.objective}")
+        if ctx.current_stage:
+            context_parts.append(f"## Current Stage\n{ctx.current_stage}")
+
+        # Include document contents if available
+        for doc_type, doc_path in ctx.extracted_paths.items():
+            try:
+                content = Path(doc_path).read_text(encoding="utf-8")
+                # Truncate very long documents
+                if len(content) > 10000:
+                    content = content[:10000] + "\n... (truncated)"
+                context_parts.append(f"## {doc_type.title()} Document\n{content}")
+            except OSError:
+                logger.debug("Could not read %s document: %s", doc_type, doc_path)
+
+        if context_parts:
+            context = "\n\n".join(context_parts)
+        else:
+            context = "(no context available)"
+
+        # Generate answer using DSPy
+        with dspy.context(lm=lm):
+            result = dspy.Predict("context: str, question: str -> answer: str")(
+                context=context,
+                question=question,
+            )
+            answer = result.answer
+
+        truncated = answer[:100] if len(answer) > 100 else answer
+        logger.info("AgentInputProvider answer: %s", truncated)
+        self._answer_log.append((question, answer))
+
+        return answer
+
+    @property
+    def answers(self) -> list[tuple[str, str]]:
+        """Get log of all question/answer pairs for debugging."""
+        return self._answer_log.copy()
+
+
 def create_ask_user_question_tool(
-    provider: HumanInputProvider,
+    default_provider: HumanInputProvider | None = None,
 ) -> Callable[[str], str]:
     """Create a DSPy-compatible ask_user_question tool.
 
-    Factory function that wraps a HumanInputProvider into a callable
-    that can be used as a DSPy ReAct tool.
+    Factory function that creates a callable that:
+    1. Checks ExecutionContext for a configured provider
+    2. Falls back to the default_provider if not set
+    3. Falls back to ConsoleInputProvider if no default
 
     Args:
-        provider: Any object implementing HumanInputProvider protocol
+        default_provider: Fallback provider when context has none
 
     Returns:
         A callable function suitable for use as a DSPy tool
     """
+    fallback = default_provider or ConsoleInputProvider()
 
     def ask_user_question(question: str) -> str:
         """Ask user for clarification.
@@ -120,8 +204,10 @@ def create_ask_user_question_tool(
             question: Clear, specific question for the user
 
         Returns:
-            User's response
+            User's response (from human or agent depending on mode)
         """
+        ctx = get_ctx()
+        provider = ctx.input_provider or fallback
         return provider.ask(question)
 
     return ask_user_question

@@ -306,7 +306,7 @@ def mock_lm(
     Note: Depends on clear_lm_cache to ensure LRU cache is cleared before
     patching. This prevents test pollution from cached LM instances.
     """
-    with patch("π.config.dspy.LM") as mock_class:
+    with patch("π.core.models.dspy.LM") as mock_class:
         mock_instance = MagicMock()
 
         # Mock the __call__ method to return completions
@@ -523,9 +523,9 @@ def mock_rpi_workflow_full():
     """Mock StagedWorkflow with complete stage simulation.
 
     Simulates a full workflow execution with all stages returning success.
-    Note: Must patch at π.cli.StagedWorkflow since that's where the CLI imports it.
+    Note: Must patch at π.cli.main.StagedWorkflow since that's where the CLI imports it.
     """
-    with patch("π.cli.StagedWorkflow") as mock_class:
+    with patch("π.cli.main.StagedWorkflow") as mock_class:
         mock_instance = MagicMock()
 
         # Configure return value

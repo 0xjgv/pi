@@ -1,7 +1,6 @@
 """π - Research, Plan, Implement workflows for Claude agents."""
 
-from π.config import Provider, get_lm
-from π.errors import AgentExecutionError
+from π.core import AgentExecutionError, Provider, get_lm
 from π.workflow import (
     StagedWorkflow,
     create_plan,

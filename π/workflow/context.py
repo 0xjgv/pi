@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
     from claude_agent_sdk import ClaudeAgentOptions
 
+    from π.support.hitl import HumanInputProvider
+
 logger = logging.getLogger(__name__)
 
 # Project root for command discovery
@@ -80,6 +82,10 @@ class ExecutionContext:
     session_ids: dict[Command, str] = field(default_factory=dict)
     doc_paths: dict[Command, str] = field(default_factory=dict)
     extracted_paths: dict[str, str] = field(default_factory=dict)  # doc_type -> path
+    # Auto-answer support fields
+    objective: str | None = None
+    current_stage: str | None = None
+    input_provider: HumanInputProvider | None = None  # type: ignore[name-defined]
 
     def validate_plan_doc(self, plan_path: str) -> None:
         """Validate that plan_path is not the research document.
@@ -113,7 +119,7 @@ class ExecutionContext:
 _ctx: ContextVar[ExecutionContext | None] = ContextVar("ctx", default=None)
 
 
-def _get_ctx() -> ExecutionContext:
+def get_ctx() -> ExecutionContext:
     """Get or create the execution context."""
     ctx = _ctx.get()
     if ctx is None:
@@ -133,4 +139,4 @@ def get_extracted_path(doc_type: str) -> str | None:
     Returns:
         Validated absolute path if available, None otherwise
     """
-    return _get_ctx().extracted_paths.get(doc_type)
+    return get_ctx().extracted_paths.get(doc_type)

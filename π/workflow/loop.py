@@ -15,8 +15,8 @@ from typing import Any
 import dspy
 from pydantic import BaseModel, Field
 
-from π.config import MAX_ITERS, Provider, Tier, get_lm
-from π.workflow.context import _get_ctx
+from π.core import MAX_ITERS, Provider, Tier, get_lm
+from π.workflow.context import get_ctx
 from π.workflow.orchestrator import StagedWorkflow
 from π.workflow.tools import research_codebase
 
@@ -383,7 +383,7 @@ class ObjectiveLoop(dspy.Module):
     def _execute_task(self, task: Task, state: LoopState) -> dspy.Prediction:
         """Execute StagedWorkflow on a single task."""
         # Clear session context for fresh task isolation
-        _get_ctx().session_ids.clear()
+        get_ctx().session_ids.clear()
 
         # Build context for resumption
         resume_context = ""

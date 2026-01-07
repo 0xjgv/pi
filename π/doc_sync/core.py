@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 import dspy
 
-from π.config import MAX_ITERS
+from π.core import MAX_ITERS
 from π.support.directory import get_project_root
 from π.workflow.tools import ask_user_question, write_claude_md
 

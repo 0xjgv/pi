@@ -11,7 +11,7 @@ import logging
 import subprocess
 import sys
 
-from π.config import Provider, Tier, get_lm
+from π.core import Provider, Tier, get_lm
 from π.doc_sync.core import DocSyncState, stage_doc_sync
 from π.support.directory import get_project_root
 

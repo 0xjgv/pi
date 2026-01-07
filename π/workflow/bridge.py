@@ -25,7 +25,7 @@ from claude_agent_sdk.types import (
 from rich.console import Console
 
 from π.config import get_agent_options
-from π.errors import AgentExecutionError
+from π.core import AgentExecutionError
 from π.state import set_current_status
 from π.support.directory import get_project_root
 from π.utils import speak
@@ -33,7 +33,7 @@ from π.workflow.context import (
     COMMAND_MAP,
     Command,
     _ctx,
-    _get_ctx,
+    get_ctx,
 )
 
 if TYPE_CHECKING:
@@ -131,7 +131,7 @@ def _process_assistant_message(message: AssistantMessage) -> str:
 
 def _get_event_loop() -> asyncio.AbstractEventLoop:
     """Get or create a reusable event loop for the current context."""
-    ctx = _get_ctx()
+    ctx = get_ctx()
     if ctx.event_loop is not None and not ctx.event_loop.is_closed():
         return ctx.event_loop
     loop = asyncio.new_event_loop()
@@ -142,7 +142,7 @@ def _get_event_loop() -> asyncio.AbstractEventLoop:
 
 def _get_agent_options() -> ClaudeAgentOptions:
     """Get agent options for the current context (evaluates cwd at runtime)."""
-    ctx = _get_ctx()
+    ctx = get_ctx()
     if ctx.agent_options is not None:
         return ctx.agent_options
     options = get_agent_options(cwd=get_project_root())
@@ -351,7 +351,7 @@ def execute_claude_task(
     logger.debug("Tool call: %s", command)
 
     # For debugging purposes
-    _get_ctx().log_session_state()
+    get_ctx().log_session_state()
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
     return _get_event_loop().run_until_complete(
@@ -391,7 +391,7 @@ def workflow_tool(
         @wraps(func)
         def wrapper(**kwargs: str | Path | None) -> str:
             logger.debug(">>> Entering %s tool", command.value)
-            session = _get_ctx()
+            session = get_ctx()
             session_id = session.session_ids.get(command)
 
             # Validate plan document if required
