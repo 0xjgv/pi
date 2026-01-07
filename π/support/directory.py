@@ -119,9 +119,7 @@ def archive_old_documents(
         Dict with counts of archived files: {"research": N, "plans": M}
     """
     root = root or get_project_root()
-    cutoff = (datetime.now() - timedelta(days=retention_days)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    cutoff = datetime.now() - timedelta(days=retention_days)
     archived = {"research": 0, "plans": 0}
 
     for doc_type in ("research", "plans"):
@@ -133,15 +131,14 @@ def archive_old_documents(
 
         for doc_file in source_dir.glob("*.md"):
             try:
-                # Parse date from filename: YYYY-MM-DD-description.md
-                date_str = doc_file.stem[:10]
-                file_date = datetime.strptime(date_str, "%Y-%m-%d")
+                # Use file modification time for age calculation
+                file_date = datetime.fromtimestamp(doc_file.stat().st_mtime)
                 if file_date < cutoff:
                     archive_dir.mkdir(parents=True, exist_ok=True)
                     doc_file.rename(archive_dir / doc_file.name)
                     archived[doc_type] += 1
-            except (ValueError, OSError):
-                continue  # Skip files with unexpected format
+            except OSError:
+                continue  # Skip files with stat/permission errors
 
     return archived
 

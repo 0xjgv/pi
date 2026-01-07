@@ -1,9 +1,16 @@
 """Tests for π.directory module."""
 
+import os
 from datetime import datetime, timedelta
 
 from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
 from π.support.directory import get_project_root
+
+
+def _set_mtime_days_ago(path, days_ago):
+    """Set file mtime to specified days ago from now."""
+    mtime = (datetime.now() - timedelta(days=days_ago)).timestamp()
+    os.utime(path, (mtime, mtime))
 
 
 class TestGetProjectRoot:
@@ -221,20 +228,19 @@ class TestArchiveOldDocuments:
         assert result == {"research": 0, "plans": 0}
 
     def test_archives_old_research_documents(self, tmp_path):
-        """Should archive research documents older than retention days."""
+        """Should archive research documents older than retention days by mtime."""
         research_dir = tmp_path / "thoughts" / "shared" / "research"
         research_dir.mkdir(parents=True)
 
-        # Create old document (10 days ago)
-        old_date = datetime.now() - timedelta(days=10)
-        old_file = research_dir / f"{old_date.strftime('%Y-%m-%d')}-old-research.md"
+        # Create old document (mtime 10 days ago)
+        old_file = research_dir / "old-research.md"
         old_file.write_text("# Old Research")
+        _set_mtime_days_ago(old_file, 10)
 
-        # Create recent document (3 days ago)
-        recent_date = datetime.now() - timedelta(days=3)
-        recent_name = f"{recent_date.strftime('%Y-%m-%d')}-recent-research.md"
-        recent_file = research_dir / recent_name
+        # Create recent document (mtime 3 days ago)
+        recent_file = research_dir / "recent-research.md"
         recent_file.write_text("# Recent Research")
+        _set_mtime_days_ago(recent_file, 3)
 
         result = archive_old_documents(root=tmp_path, retention_days=5)
 
@@ -245,14 +251,14 @@ class TestArchiveOldDocuments:
         assert (archived / old_file.name).exists()
 
     def test_archives_old_plan_documents(self, tmp_path):
-        """Should archive plan documents older than retention days."""
+        """Should archive plan documents older than retention days by mtime."""
         plans_dir = tmp_path / "thoughts" / "shared" / "plans"
         plans_dir.mkdir(parents=True)
 
-        # Create old document (10 days ago)
-        old_date = datetime.now() - timedelta(days=10)
-        old_file = plans_dir / f"{old_date.strftime('%Y-%m-%d')}-old-plan.md"
+        # Create old document (mtime 10 days ago)
+        old_file = plans_dir / "old-plan.md"
         old_file.write_text("# Old Plan")
+        _set_mtime_days_ago(old_file, 10)
 
         result = archive_old_documents(root=tmp_path, retention_days=5)
 
@@ -262,90 +268,77 @@ class TestArchiveOldDocuments:
         assert (archived / old_file.name).exists()
 
     def test_preserves_recent_documents(self, tmp_path):
-        """Should preserve documents newer than retention days."""
+        """Should preserve documents newer than retention days by mtime."""
         research_dir = tmp_path / "thoughts" / "shared" / "research"
         research_dir.mkdir(parents=True)
 
-        # Create recent documents
-        today = datetime.now()
+        # Create recent documents with various mtimes
         for days_ago in [0, 1, 2, 4]:
-            date = today - timedelta(days=days_ago)
-            doc_file = research_dir / f"{date.strftime('%Y-%m-%d')}-doc-{days_ago}.md"
+            doc_file = research_dir / f"doc-{days_ago}.md"
             doc_file.write_text(f"# Doc from {days_ago} days ago")
+            _set_mtime_days_ago(doc_file, days_ago)
 
         result = archive_old_documents(root=tmp_path, retention_days=5)
 
         assert result == {"research": 0, "plans": 0}
         assert len(list(research_dir.glob("*.md"))) == 4
 
-    def test_boundary_date_exactly_at_retention_days(self, tmp_path):
-        """Should NOT archive document exactly at retention_days boundary.
+    def test_boundary_mtime_exactly_at_retention_days(self, tmp_path):
+        """Should NOT archive document with mtime at retention_days boundary.
 
-        A file from exactly 5 days ago with retention_days=5 should be kept,
+        A file with mtime at the retention boundary should be kept,
         because file_date < cutoff uses strict less-than comparison.
-        cutoff = now - 5 days, so a file from 5 days ago has file_date == cutoff.
+        We set mtime to 4.9 days ago to ensure it's within retention.
         """
         research_dir = tmp_path / "thoughts" / "shared" / "research"
         research_dir.mkdir(parents=True)
 
-        # Create document exactly at boundary (5 days ago)
-        boundary_date = datetime.now() - timedelta(days=5)
-        boundary_name = f"{boundary_date.strftime('%Y-%m-%d')}-boundary-doc.md"
-        boundary_file = research_dir / boundary_name
+        # Create document with mtime just within retention (4.9 days ago)
+        boundary_file = research_dir / "boundary-doc.md"
         boundary_file.write_text("# Boundary Document")
+        _set_mtime_days_ago(boundary_file, 4.9)
 
         result = archive_old_documents(root=tmp_path, retention_days=5)
 
-        # File at exactly boundary should NOT be archived (file_date < cutoff)
+        # File within retention should NOT be archived
         assert result == {"research": 0, "plans": 0}
         assert boundary_file.exists()
-
-    def test_skips_invalid_filenames(self, tmp_path):
-        """Should skip files with unexpected format."""
-        research_dir = tmp_path / "thoughts" / "shared" / "research"
-        research_dir.mkdir(parents=True)
-
-        # Create files with invalid names
-        (research_dir / "invalid.md").write_text("# Invalid")
-        (research_dir / "2025-13-99-bad-date.md").write_text("# Bad date")
-        (research_dir / "not-a-date.md").write_text("# Not a date")
-
-        result = archive_old_documents(root=tmp_path, retention_days=5)
-
-        assert result == {"research": 0, "plans": 0}
-        assert len(list(research_dir.glob("*.md"))) == 3
 
     def test_only_archives_markdown_files(self, tmp_path):
         """Should only archive .md files, not other files."""
         research_dir = tmp_path / "thoughts" / "shared" / "research"
         research_dir.mkdir(parents=True)
 
-        # Create old markdown file
-        old_date = datetime.now() - timedelta(days=10)
-        old_md = research_dir / f"{old_date.strftime('%Y-%m-%d')}-research.md"
+        # Create old markdown file (mtime 10 days ago)
+        old_md = research_dir / "research.md"
         old_md.write_text("# Research")
+        _set_mtime_days_ago(old_md, 10)
 
-        # Create other files that should not be archived
-        date_prefix = old_date.strftime("%Y-%m-%d")
-        (research_dir / f"{date_prefix}-data.json").write_text("{}")
-        (research_dir / f"{date_prefix}-notes.txt").write_text("notes")
+        # Create other files with old mtime that should not be archived
+        json_file = research_dir / "data.json"
+        json_file.write_text("{}")
+        _set_mtime_days_ago(json_file, 10)
+
+        txt_file = research_dir / "notes.txt"
+        txt_file.write_text("notes")
+        _set_mtime_days_ago(txt_file, 10)
 
         result = archive_old_documents(root=tmp_path, retention_days=5)
 
         assert result == {"research": 1, "plans": 0}
         assert not old_md.exists()
-        assert (research_dir / f"{date_prefix}-data.json").exists()
-        assert (research_dir / f"{date_prefix}-notes.txt").exists()
+        assert json_file.exists()
+        assert txt_file.exists()
 
     def test_creates_archive_directories_on_demand(self, tmp_path):
         """Should create archive directories only when needed."""
         research_dir = tmp_path / "thoughts" / "shared" / "research"
         research_dir.mkdir(parents=True)
 
-        # Create old document
-        old_date = datetime.now() - timedelta(days=10)
-        old_file = research_dir / f"{old_date.strftime('%Y-%m-%d')}-research.md"
+        # Create old document (mtime 10 days ago)
+        old_file = research_dir / "research.md"
         old_file.write_text("# Research")
+        _set_mtime_days_ago(old_file, 10)
 
         # Archive dir should not exist yet
         archive_dir = tmp_path / "thoughts" / "shared" / "archived" / "research"
@@ -361,10 +354,10 @@ class TestArchiveOldDocuments:
         research_dir = tmp_path / "thoughts" / "shared" / "research"
         research_dir.mkdir(parents=True)
 
-        # Create old document
-        old_date = datetime.now() - timedelta(days=10)
-        old_file = research_dir / f"{old_date.strftime('%Y-%m-%d')}-research.md"
+        # Create old document (mtime 10 days ago)
+        old_file = research_dir / "research.md"
         old_file.write_text("# Research")
+        _set_mtime_days_ago(old_file, 10)
 
         result1 = archive_old_documents(root=tmp_path, retention_days=5)
         result2 = archive_old_documents(root=tmp_path, retention_days=5)
@@ -377,11 +370,11 @@ class TestArchiveOldDocuments:
         research_dir = tmp_path / "thoughts" / "shared" / "research"
         research_dir.mkdir(parents=True)
 
-        # Create documents at various ages
+        # Create documents with various mtimes
         for days_ago in [3, 8, 15]:
-            date = datetime.now() - timedelta(days=days_ago)
-            doc_file = research_dir / f"{date.strftime('%Y-%m-%d')}-doc-{days_ago}.md"
+            doc_file = research_dir / f"doc-{days_ago}.md"
             doc_file.write_text(f"# Doc from {days_ago} days ago")
+            _set_mtime_days_ago(doc_file, days_ago)
 
         result = archive_old_documents(root=tmp_path, retention_days=7)
 
