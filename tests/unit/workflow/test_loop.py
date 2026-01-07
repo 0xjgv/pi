@@ -1,6 +1,7 @@
 """Tests for ObjectiveLoop."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from π.workflow.loop import (
     LoopState,
@@ -8,8 +9,10 @@ from π.workflow.loop import (
     Task,
     TaskStatus,
     _objective_hash,
+    _state_path,
     _task_from_dict,
     _task_to_dict,
+    archive_state,
     load_state,
     save_state,
 )
@@ -241,3 +244,168 @@ class TestStateTimestamps:
         parsed = datetime.fromisoformat(data["created_at"])
         assert parsed.tzinfo is not None
         assert parsed.utcoffset().total_seconds() == 0
+
+
+class TestStatePath:
+    """Tests for _state_path() function."""
+
+    def test_creates_checkpoint_directory(self, tmp_path: Path) -> None:
+        """Should create checkpoint directory if it doesn't exist."""
+        checkpoint_dir = tmp_path / "nonexistent" / "checkpoint"
+        assert not checkpoint_dir.exists()
+
+        result = _state_path("test objective", checkpoint_dir)
+
+        assert checkpoint_dir.exists()
+        assert result.parent == checkpoint_dir
+
+    def test_uses_objective_hash_as_filename(self, tmp_path: Path) -> None:
+        """Should use objective hash for filename."""
+        result = _state_path("test objective", tmp_path)
+
+        expected_hash = _objective_hash("test objective")
+        assert result.name == f"{expected_hash}.json"
+
+
+class TestArchiveState:
+    """Tests for archive_state() function."""
+
+    def test_moves_state_to_archive_directory(self, tmp_path: Path) -> None:
+        """Should move state file to archive subdirectory."""
+        state_file = tmp_path / "test-state.json"
+        state_file.write_text('{"objective": "test"}')
+
+        archive_state(state_file, tmp_path)
+
+        assert not state_file.exists()
+        assert (tmp_path / "archive" / "test-state.json").exists()
+
+    def test_creates_archive_directory_if_missing(self, tmp_path: Path) -> None:
+        """Should create archive directory if it doesn't exist."""
+        state_file = tmp_path / "state.json"
+        state_file.write_text("{}")
+
+        archive_dir = tmp_path / "archive"
+        assert not archive_dir.exists()
+
+        archive_state(state_file, tmp_path)
+
+        assert archive_dir.exists()
+
+
+class TestObjectiveLoopHelpers:
+    """Tests for ObjectiveLoop helper methods."""
+
+    def test_should_continue_returns_false_when_not_running(self) -> None:
+        """Should return False when status is not RUNNING."""
+        from π.workflow.loop import ObjectiveLoop
+
+        with patch("π.workflow.loop.get_lm"):
+            loop = ObjectiveLoop()
+
+        state = LoopState(objective="test", status=LoopStatus.COMPLETED)
+        assert loop._should_continue(state) is False
+
+        state = LoopState(objective="test", status=LoopStatus.FAILED)
+        assert loop._should_continue(state) is False
+
+    def test_should_continue_returns_false_at_max_iterations(self) -> None:
+        """Should return False and set FAILED when max iterations reached."""
+        from π.workflow.loop import ObjectiveLoop
+
+        with patch("π.workflow.loop.get_lm"):
+            loop = ObjectiveLoop()
+
+        state = LoopState(objective="test", iteration=50, max_iterations=50)
+        result = loop._should_continue(state)
+
+        assert result is False
+        assert state.status == LoopStatus.FAILED
+
+    def test_should_continue_returns_true_when_running(self) -> None:
+        """Should return True when running and under max iterations."""
+        from π.workflow.loop import ObjectiveLoop
+
+        with patch("π.workflow.loop.get_lm"):
+            loop = ObjectiveLoop()
+
+        state = LoopState(objective="test", iteration=5, max_iterations=50)
+        assert loop._should_continue(state) is True
+
+    def test_should_redecompose_when_all_tasks_done_but_running(self) -> None:
+        """Should return True when all tasks done but loop still running."""
+        from π.workflow.loop import ObjectiveLoop
+
+        with patch("π.workflow.loop.get_lm"):
+            loop = ObjectiveLoop()
+
+        state = LoopState(
+            objective="test",
+            tasks=[
+                Task(id="t1", description="Task 1", status=TaskStatus.COMPLETED),
+                Task(id="t2", description="Task 2", status=TaskStatus.FAILED),
+            ],
+            status=LoopStatus.RUNNING,
+        )
+        assert loop._should_redecompose(state) is True
+
+    def test_should_redecompose_returns_false_when_pending_tasks(self) -> None:
+        """Should return False when there are pending tasks."""
+        from π.workflow.loop import ObjectiveLoop
+
+        with patch("π.workflow.loop.get_lm"):
+            loop = ObjectiveLoop()
+
+        state = LoopState(
+            objective="test",
+            tasks=[
+                Task(id="t1", description="Task 1", status=TaskStatus.COMPLETED),
+                Task(id="t2", description="Task 2", status=TaskStatus.PENDING),
+            ],
+            status=LoopStatus.RUNNING,
+        )
+        assert loop._should_redecompose(state) is False
+
+    def test_handle_no_tasks_completes_when_no_pending(self) -> None:
+        """Should set COMPLETED status when no pending tasks remain."""
+        from π.workflow.loop import ObjectiveLoop
+
+        with patch("π.workflow.loop.get_lm"):
+            loop = ObjectiveLoop()
+
+        state = LoopState(
+            objective="test",
+            tasks=[
+                Task(id="t1", description="Task 1", status=TaskStatus.COMPLETED),
+            ],
+            status=LoopStatus.RUNNING,
+        )
+        result = loop._handle_no_tasks(state)
+
+        assert result.status == LoopStatus.COMPLETED
+
+    def test_get_codebase_context_returns_git_info(self) -> None:
+        """Should return git status and recent commits."""
+        from π.workflow.loop import ObjectiveLoop
+
+        with patch("π.workflow.loop.get_lm"):
+            loop = ObjectiveLoop()
+
+        with patch("π.workflow.loop.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="M file.py\nabc123 commit")
+
+            result = loop._get_codebase_context()
+
+            assert "M file.py" in result or "Git status" in result
+
+    def test_get_codebase_context_handles_error(self) -> None:
+        """Should return fallback message when git fails."""
+        from π.workflow.loop import ObjectiveLoop
+
+        with patch("π.workflow.loop.get_lm"):
+            loop = ObjectiveLoop()
+
+        with patch("π.workflow.loop.subprocess.run", side_effect=Exception("git err")):
+            result = loop._get_codebase_context()
+
+            assert "unable to get git context" in result

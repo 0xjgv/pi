@@ -32,6 +32,19 @@ def _get_validation_error_message(
 class TestResearchDocPath:
     """Tests for ResearchDocPath validation."""
 
+    def test_rejects_path_containing_both_dirs(self, tmp_path: Path) -> None:
+        """Should reject path containing both research and plans directories."""
+        # Create a contrived path that contains both directory patterns
+        weird_dir = tmp_path / "thoughts/shared/research/subdir/thoughts/shared/plans"
+        weird_dir.mkdir(parents=True)
+        doc = weird_dir / "2026-01-05-test.md"
+        doc.write_text("# Test")
+
+        with pytest.raises(ValidationError) as exc_info:
+            ResearchDocPath(path=str(doc))
+        error_msg = _get_validation_error_message(exc_info)
+        assert "plan document when research expected" in error_msg
+
     def test_valid_research_path(self, tmp_path: Path) -> None:
         """Valid research path should pass validation."""
         # Create valid research doc
@@ -125,6 +138,25 @@ class TestPlanDocPath:
         error_msg = _get_validation_error_message(exc_info)
         assert "must start with YYYY-MM-DD" in error_msg
 
+    def test_rejects_wrong_extension(self, tmp_path: Path) -> None:
+        """Should reject non-markdown files."""
+        plans_dir = tmp_path / "thoughts/shared/plans"
+        plans_dir.mkdir(parents=True)
+        doc = plans_dir / "2026-01-05-test.txt"
+        doc.write_text("Test")
+
+        with pytest.raises(ValidationError) as exc_info:
+            PlanDocPath(path=str(doc))
+        error_msg = _get_validation_error_message(exc_info)
+        assert "must be markdown" in error_msg
+
+    def test_rejects_nonexistent_file(self) -> None:
+        """Should reject nonexistent files."""
+        with pytest.raises(ValidationError) as exc_info:
+            PlanDocPath(path="thoughts/shared/plans/2026-01-05-nonexistent.md")
+        error_msg = _get_validation_error_message(exc_info)
+        assert "does not exist" in error_msg
+
 
 class TestResultModels:
     """Tests for result model structures."""
@@ -167,3 +199,35 @@ class TestResultModels:
         )
 
         assert result.estimated_changes == 0
+
+
+class TestDatePrefixValidation:
+    """Parametrized tests for date prefix validation."""
+
+    @pytest.mark.parametrize(
+        "filename,should_pass",
+        [
+            ("2026-01-05-test.md", True),
+            ("2025-12-31-test.md", True),
+            ("2026-01-01-minimum.md", True),
+            ("2026-1-5-test.md", False),  # missing zero padding
+            ("26-01-05-test.md", False),  # 2-digit year
+            ("no-date-test.md", False),  # no date at all
+            ("test-2026-01-05.md", False),  # date not at start
+        ],
+    )
+    def test_research_doc_date_formats(
+        self, tmp_path: Path, filename: str, should_pass: bool
+    ) -> None:
+        """Test various date format edge cases for research docs."""
+        research_dir = tmp_path / "thoughts/shared/research"
+        research_dir.mkdir(parents=True)
+        doc = research_dir / filename
+        doc.write_text("# Test")
+
+        if should_pass:
+            result = ResearchDocPath(path=str(doc))
+            assert result.path is not None
+        else:
+            with pytest.raises(ValidationError):
+                ResearchDocPath(path=str(doc))

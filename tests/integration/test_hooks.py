@@ -70,3 +70,137 @@ class TestHookIntegration:
         result = await check_bash_command(safe_input, None, context)
 
         assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_check_file_format_ignores_non_edit_write(self):
+        """check_file_format should only run for Edit/Write tools."""
+        from π.hooks import check_file_format
+
+        input_data = cast(
+            "HookInput",
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "ls"},
+            },
+        )
+        context = HookContext(signal=None)
+
+        result = await check_file_format(input_data, None, context)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_check_file_format_ignores_missing_file_path(self):
+        """check_file_format should return empty when no file_path."""
+        from π.hooks import check_file_format
+
+        input_data = cast(
+            "HookInput",
+            {
+                "tool_name": "Edit",
+                "tool_input": {},
+            },
+        )
+        context = HookContext(signal=None)
+
+        result = await check_file_format(input_data, None, context)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_check_file_format_ignores_nonexistent_file(self, tmp_path: Path):
+        """check_file_format should return empty when file doesn't exist."""
+        from π.hooks import check_file_format
+
+        input_data = cast(
+            "HookInput",
+            {
+                "tool_name": "Write",
+                "tool_input": {"file_path": str(tmp_path / "nonexistent.py")},
+            },
+        )
+        context = HookContext(signal=None)
+
+        result = await check_file_format(input_data, None, context)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_check_file_format_ignores_unknown_extension(self, tmp_path: Path):
+        """check_file_format should return empty for unknown file types."""
+        from π.hooks import check_file_format
+
+        unknown_file = tmp_path / "test.xyz"
+        unknown_file.write_text("content")
+
+        input_data = cast(
+            "HookInput",
+            {
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(unknown_file)},
+            },
+        )
+        context = HookContext(signal=None)
+
+        result = await check_file_format(input_data, None, context)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_check_file_format_runs_checker_on_python(self, tmp_path: Path):
+        """check_file_format should run checker for Python files."""
+        from unittest.mock import MagicMock, patch
+
+        from π.hooks import check_file_format
+        from π.hooks.registry import LanguageChecker
+
+        python_file = tmp_path / "test.py"
+        python_file.write_text("print('hello')\n")
+
+        input_data = cast(
+            "HookInput",
+            {
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(python_file)},
+            },
+        )
+        context = HookContext(signal=None)
+
+        # Mock get_checker to return a mock checker that succeeds
+        mock_checker = LanguageChecker(
+            func=MagicMock(return_value=0), scope="file", project_markers=[]
+        )
+        with patch("π.hooks.get_checker", return_value=mock_checker):
+            result = await check_file_format(input_data, None, context)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_check_file_format_blocks_on_failure(self, tmp_path: Path):
+        """check_file_format should block when checker returns exit code 2."""
+        from unittest.mock import MagicMock, patch
+
+        from π.hooks import check_file_format
+        from π.hooks.registry import LanguageChecker
+
+        python_file = tmp_path / "test.py"
+        python_file.write_text("print('hello')\n")
+
+        input_data = cast(
+            "HookInput",
+            {
+                "tool_name": "Edit",
+                "tool_input": {"file_path": str(python_file)},
+            },
+        )
+        context = HookContext(signal=None)
+
+        # Mock get_checker to return a mock checker that fails
+        mock_checker = LanguageChecker(
+            func=MagicMock(return_value=2), scope="file", project_markers=[]
+        )
+        with patch("π.hooks.get_checker", return_value=mock_checker):
+            result = await check_file_format(input_data, None, context)
+
+        assert result.get("decision") == "block"
+        assert "Code quality checks failed" in result.get("reason", "")
