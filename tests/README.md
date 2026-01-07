@@ -4,19 +4,52 @@
 
 This test suite is designed to run **without any API token usage**. All external dependencies (DSPy LM, Claude SDK) are mocked at appropriate layers.
 
+## Structure
+
+```
+tests/
+├── conftest.py           # Shared fixtures (paths, env, cleanup, mocks)
+├── factories.py          # Test data factories
+│
+├── unit/                 # Unit tests (isolated, heavily mocked)
+│   ├── conftest.py       # Unit-specific documentation
+│   ├── cli/              # CLI module tests
+│   ├── config/           # Configuration tests
+│   ├── core/             # Core types and errors tests
+│   ├── doc_sync/         # Document sync tests
+│   ├── hooks/            # Hook system tests
+│   ├── support/          # Support utilities tests
+│   ├── workflow/         # Workflow module tests
+│   └── test_utils.py     # Utility function tests
+│
+└── integration/          # Integration tests (minimal mocking)
+    ├── conftest.py       # Integration-specific documentation
+    ├── test_cli_workflow.py
+    ├── test_hooks.py
+    ├── test_session_state.py
+    ├── test_log_cleanup.py
+    └── test_workflow_no_api.py
+```
+
 ## Running Tests
 
 ```bash
-# Run all tests
+# All tests
 make test
 
-# Run tests with coverage
+# Unit tests only
+pytest tests/unit/
+
+# Integration tests only
+pytest tests/integration/
+
+# Specific module
+pytest tests/unit/hooks/ -v
+
+# With coverage
 make test-cov
 
-# Run tests explicitly without API (CI mode)
-make test-no-api
-
-# Run only tests marked as no_api
+# No-API tests only
 make test-markers
 ```
 

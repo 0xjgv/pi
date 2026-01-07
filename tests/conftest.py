@@ -1,4 +1,11 @@
-"""Shared pytest fixtures for π test suite."""
+"""Root test fixtures shared across unit and integration tests.
+
+Module-specific fixtures are in:
+- tests/unit/conftest.py (unit test documentation)
+- tests/integration/conftest.py (integration test documentation)
+
+This file contains fixtures used by both test categories.
+"""
 
 import asyncio
 import logging
