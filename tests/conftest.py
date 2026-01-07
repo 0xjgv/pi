@@ -9,12 +9,20 @@ This file contains fixtures used by both test categories.
 
 import asyncio
 import logging
+import warnings
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+# Suppress warnings from third-party libraries (litellm via dspy)
+# Note: RuntimeWarning about 'close_litellm_async_clients' may still appear
+# during interpreter shutdown - this is a known litellm issue and cannot be
+# suppressed from within pytest as it occurs after the test session ends.
+warnings.filterwarnings("ignore", category=ResourceWarning, module="litellm.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="litellm.*")
 
 # ============================================================================
 # Path Fixtures
@@ -212,9 +220,11 @@ def cleanup_logging_handlers():
     with FileHandlers that write to real log files.
     """
     yield
-    # Cleanup after test
+    # Cleanup after test - close handlers before clearing to avoid ResourceWarning
     for logger_name in ("π", "π.session", "π.workflow", "π.hooks"):
         logger = logging.getLogger(logger_name)
+        for handler in logger.handlers[:]:
+            handler.close()
         logger.handlers.clear()
 
 
@@ -422,7 +432,7 @@ def fresh_execution_context():
     This fixture:
     - Creates a new ExecutionContext
     - Sets it as the current context
-    - Cleans up after the test
+    - Cleans up after the test (including closing event loop)
     """
     from π.workflow import ExecutionContext
     from π.workflow.bridge import _ctx
@@ -430,6 +440,9 @@ def fresh_execution_context():
     ctx = ExecutionContext()
     token = _ctx.set(ctx)
     yield ctx
+    # Close event loop if one was created to avoid ResourceWarning
+    if ctx.event_loop is not None and not ctx.event_loop.is_closed():
+        ctx.event_loop.close()
     _ctx.reset(token)
 
 

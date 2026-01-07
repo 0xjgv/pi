@@ -1,6 +1,6 @@
 """Tests for π.workflow.bridge module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from claude_agent_sdk.types import (
@@ -295,40 +295,53 @@ class TestExecuteClaudeTask:
 
     def test_appends_path_to_command(self, mock_ctx):
         """Should append document path to command string."""
+        mock_session = AsyncMock(return_value=("result", "sid"))
+        mock_loop = MagicMock()
+        mock_loop.run_until_complete.side_effect = lambda coro: coro.close() or (
+            "result",
+            "sid",
+        )
         with (
             patch("π.workflow.bridge.COMMAND_MAP", {Command.CREATE_PLAN: "/plan"}),
-            patch("π.workflow.bridge._get_event_loop") as mock_loop,
+            patch("π.workflow.bridge._run_claude_session", mock_session),
+            patch("π.workflow.bridge._get_event_loop", return_value=mock_loop),
         ):
-            mock_loop.return_value.run_until_complete.return_value = ("result", "sid")
-
             execute_claude_task(
                 tool_command=Command.CREATE_PLAN,
                 path_to_document="/path/to/doc.md",
                 query="create a plan",
             )
 
-            # Verify the command was built correctly
-            call_args = mock_loop.return_value.run_until_complete.call_args
-            assert call_args is not None
+            # Verify the command was built correctly with path appended
+            mock_session.assert_called_once()
+            call_args = mock_session.call_args[0]
+            assert "/path/to/doc.md" in call_args[0]
 
     def test_planning_command_resumption_prefix(self, mock_ctx):
         """Should prefix planning commands with explicit instruction on resume."""
+        mock_session = AsyncMock(return_value=("result", "sid"))
+        mock_loop = MagicMock()
+        mock_loop.run_until_complete.side_effect = lambda coro: coro.close() or (
+            "result",
+            "sid",
+        )
         with (
             patch(
                 "π.workflow.bridge.COMMAND_MAP", {Command.CREATE_PLAN: "/create_plan"}
             ),
-            patch("π.workflow.bridge._get_event_loop") as mock_loop,
+            patch("π.workflow.bridge._run_claude_session", mock_session),
+            patch("π.workflow.bridge._get_event_loop", return_value=mock_loop),
         ):
-            mock_loop.return_value.run_until_complete.return_value = ("result", "sid")
-
             execute_claude_task(
                 tool_command=Command.CREATE_PLAN,
                 session_id="existing-session",
                 query="user feedback here",
             )
 
-            # Verify run_until_complete was called
-            mock_loop.return_value.run_until_complete.assert_called_once()
+            # Verify _run_claude_session was called with session_id
+            mock_session.assert_called_once()
+            call_args = mock_session.call_args[0]
+            assert call_args[1] == "existing-session"
 
 
 class TestWorkflowToolDecorator:

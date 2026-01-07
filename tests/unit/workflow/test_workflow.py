@@ -143,19 +143,25 @@ class TestLogHelpers:
 class TestContextVarHelpers:
     """Tests for context variable helpers."""
 
-    def test_get_event_loop_creates_new_loop(self):
+    def test_get_event_loop_creates_new_loop(self, fresh_execution_context):
         """Should create a new event loop if none exists."""
         loop = _get_event_loop()
 
         assert isinstance(loop, asyncio.AbstractEventLoop)
         assert not loop.is_closed()
 
-    def test_get_event_loop_reuses_existing(self):
+        # Cleanup to avoid ResourceWarning
+        loop.close()
+
+    def test_get_event_loop_reuses_existing(self, fresh_execution_context):
         """Should reuse existing loop if not closed."""
         loop1 = _get_event_loop()
         loop2 = _get_event_loop()
 
         assert loop1 is loop2
+
+        # Cleanup to avoid ResourceWarning
+        loop1.close()
 
     def test_get_ctx_creates_new_context(self):
         """Should create new ExecutionContext if none exists."""
