@@ -38,6 +38,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "ruff>=0.14.9",
     "vulture>=2.14",
+    "mutmut>=3.3.0",
 ]
 
 [project.scripts]
@@ -68,6 +69,7 @@ markers = [
 target-version = "py313"
 line-length = 88
 preview = true  # enables RUF052, RUF059 for better dead code detection
+extend-exclude = ["mutants/"]  # mutmut generated directory
 
 [tool.ruff.lint]
 select = [
@@ -115,3 +117,29 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["π"]
+
+[tool.coverage.run]
+source = ["π"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+]
+show_missing = true
+
+[tool.mutmut]
+paths_to_mutate = ["π/"]
+pytest_add_cli_args_test_selection = ["tests/unit/"]
+
+# Skip files with low mutation value
+do_not_mutate = [
+    "π/__init__.py",
+    "π/*/__init__.py",
+    "π/core/enums.py",        # Simple enums
+    "π/doc_sync/",            # Separate utility
+]

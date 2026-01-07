@@ -56,8 +56,8 @@ test: ## Run tests with pytest
 		run_silent "Running tests" "uv run pytest -x -v tests/"
 
 .PHONY: test-cov
-test-cov: ## Run tests with coverage
-	@$(SILENT_HELPER) && run_silent "Running tests with coverage" "uv run pytest tests/ -v --cov=π --cov-report=term-missing"
+test-cov: ## Run tests with coverage (fails if <80%)
+	@$(SILENT_HELPER) && run_silent "Running tests with coverage" "uv run pytest tests/ -v --cov=π --cov-report=term-missing --cov-fail-under=80"
 
 .PHONY: test-no-api
 test-no-api: ## Run tests without API access
@@ -67,6 +67,23 @@ test-no-api: ## Run tests without API access
 .PHONY: test-markers
 test-markers: ## Run only tests marked as no_api
 	@$(SILENT_HELPER) && run_silent "Running no_api marked tests" "uv run pytest -m no_api tests/ -v"
+
+##@ Mutation Testing
+
+.PHONY: mutate
+mutate: ## Run mutation testing (uses pyproject.toml config)
+	@echo "Running mutation testing (this may take several minutes)..."
+	@uv run mutmut run
+	@uv run mutmut results
+
+.PHONY: mutate-browse
+mutate-browse: ## Browse mutation testing results interactively
+	@uv run mutmut browse
+
+.PHONY: mutate-clean
+mutate-clean: ## Clear mutation testing cache
+	@rm -rf mutants/
+	@echo "Mutation cache cleared"
 
 ##@ Development
 

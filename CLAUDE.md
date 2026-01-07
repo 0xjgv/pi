@@ -13,6 +13,7 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan 
 - Run: `π "objective"`
 - Quality: `make check` (fix → format → lint → test)
 - Test: `make test` or `make test-cov` — aim for 80% coverage
+- Mutate: `make mutate` (all paths) or `make mutate-browse` (interactive)
 
 ## Environment
 

@@ -19,3 +19,4 @@ wheels/
 
 # Project-specific
 .π/
+mutants/  # mutmut generated directory
