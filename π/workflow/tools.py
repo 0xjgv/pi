@@ -23,14 +23,14 @@ ask_user_question = create_ask_user_question_tool()
 def research_codebase(
     *,
     research_document_path: Path | str | None = None,
-    query: str,
     session_id: str | None = None,
+    query: str,
 ) -> tuple[str, str]:
     """Research the codebase and return the results.
 
     Args:
-        research_document_path: Optional path to the research document.
         query: The query to research the codebase (goal, question, etc.).
+        research_document_path: Optional path to the research document.
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
