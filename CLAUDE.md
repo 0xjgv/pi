@@ -27,11 +27,12 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → plan 
 
 **Modules:**
 
-- `cli.py` — Entry point, logging setup
-- `config.py` — Provider/model/stage config, available tools
-- `workflow/` — DSPy ReAct agents (`module.py`) + sync→async bridge (`bridge.py`)
-- `support/` — Directory management, permissions, HITL providers
-- `hooks/` — PreToolUse (bash safety), PostToolUse (ruff/eslint/cargo/go)
+- `core/` — Leaf layer: enums, models, errors (no internal deps)
+- `cli/` — Entry point, logging, CLI utilities
+- `config.py` — Stage/tool config, re-exports from core
+- `workflow/` — DSPy ReAct agents + sync→async bridge
+- `support/` — Directory management, permissions, HITL
+- `hooks/` — PreToolUse (bash safety), PostToolUse (linting)
 
 ## Conventions
 
