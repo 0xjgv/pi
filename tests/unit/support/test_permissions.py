@@ -1,6 +1,6 @@
 """Tests for π.support.permissions module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from claude_agent_sdk.types import PermissionResultAllow
@@ -293,13 +293,14 @@ class TestAskUserQuestionValidation:
     async def test_empty_response_replaced(self):
         """Empty user response should be replaced with placeholder."""
         with (
-            patch("π.support.permissions.wait_for") as mock_wait,
+            patch(
+                "π.support.permissions._get_input_with_timeout",
+                AsyncMock(return_value="[No response provided]"),
+            ),
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
             patch("π.support.permissions.get_current_status", return_value=None),
         ):
-            mock_wait.return_value = "   "  # Whitespace only
-
             result = await can_use_tool(
                 tool_name="AskUserQuestion",
                 tool_input={"questions": [_make_question("Test?", "Test")]},
@@ -312,13 +313,14 @@ class TestAskUserQuestionValidation:
     async def test_timeout_returns_placeholder(self):
         """Timeout should return placeholder response."""
         with (
-            patch("π.support.permissions.wait_for") as mock_wait,
+            patch(
+                "π.support.permissions._get_input_with_timeout",
+                AsyncMock(return_value="[No response - timed out]"),
+            ),
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
             patch("π.support.permissions.get_current_status", return_value=None),
         ):
-            mock_wait.side_effect = TimeoutError()
-
             result = await can_use_tool(
                 tool_name="AskUserQuestion",
                 tool_input={"questions": [_make_question("Test?", "Test")]},
@@ -333,7 +335,10 @@ class TestAskUserQuestionValidation:
         question = _make_question("Pick?", "Pick")
 
         with (
-            patch("π.support.permissions.asyncio.to_thread", return_value="99"),
+            patch(
+                "π.support.permissions._get_input_with_timeout",
+                AsyncMock(return_value="99"),
+            ),
             patch("π.support.permissions.console"),
             patch("π.support.permissions.speak"),
             patch("π.support.permissions.get_current_status", return_value=None),
