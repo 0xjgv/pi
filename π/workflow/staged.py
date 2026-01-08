@@ -96,9 +96,9 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     )
 
     return ResearchResult(
+        needs_implementation=result.needs_implementation,
         research_docs=research_docs,
         summaries=summaries,
-        needs_implementation=result.needs_implementation,
         reason=reason,
     )
 

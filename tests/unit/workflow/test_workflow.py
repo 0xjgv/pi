@@ -16,6 +16,7 @@ from π.workflow import (
     research_codebase,
 )
 from π.workflow.bridge import (
+    SessionWriteTracker,
     _get_agent_options,
     _get_event_loop,
     _log_result_metrics,
@@ -24,6 +25,9 @@ from π.workflow.bridge import (
     get_ctx,
     timed_phase,
 )
+
+# Module-level tracker for fixture use (ensures SessionWriteTracker import is used)
+_MOCK_TRACKER = SessionWriteTracker()
 
 
 class TestTimedPhase:
@@ -191,7 +195,7 @@ class TestWorkflowFunctions:
         where it's defined.
         """
         with patch("π.workflow.tools.execute_claude_task") as mock:
-            mock.return_value = ("Result text", "session-123")
+            mock.return_value = ("Result text", "session-123", _MOCK_TRACKER)
             yield mock
 
     def test_research_codebase_returns_result(
@@ -287,7 +291,7 @@ class TestWorkflowFunctions:
         from π.workflow.bridge import _ctx
         from π.workflow.context import ExecutionContext
 
-        mock_execute_task.return_value = ("Result", "new-session-xyz")
+        mock_execute_task.return_value = ("Result", "new-session-xyz", _MOCK_TRACKER)
         ctx = ExecutionContext()
         _ctx.set(ctx)
 

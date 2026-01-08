@@ -11,6 +11,7 @@ import logging
 import re
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from functools import wraps
 from typing import TYPE_CHECKING
 
@@ -111,11 +112,15 @@ def _log_result_metrics(message: ResultMessage) -> None:
         )
 
 
-def _process_assistant_message(message: AssistantMessage) -> str:
+def _process_assistant_message(
+    message: AssistantMessage,
+    tracker: SessionWriteTracker | None = None,
+) -> str:
     """Process assistant message content blocks and return accumulated text.
 
     Args:
         message: AssistantMessage containing content blocks
+        tracker: Optional write tracker for capturing file writes
 
     Returns:
         Accumulated text from TextBlock content
@@ -126,8 +131,16 @@ def _process_assistant_message(message: AssistantMessage) -> str:
             block_text += block.text
         elif isinstance(block, ToolUseBlock):
             _log_tool_call(block)
+            if (
+                tracker
+                and block.name in _FILE_WRITE_TOOLS
+                and (file_path := block.input.get("file_path"))
+            ):
+                tracker.on_tool_use(block.id, file_path)
         elif isinstance(block, ToolResultBlock):
             _log_tool_result(block)
+            if tracker:
+                tracker.on_tool_result(block.tool_use_id, is_error=block.is_error)
     return block_text
 
 
@@ -158,13 +171,61 @@ _DOC_PATH_PATTERNS: dict[str, str] = {
     "plan": r"(thoughts/shared/plans/[\w\-]+\.md)",
 }
 
+# Tools that create/modify files
+_FILE_WRITE_TOOLS = frozenset({"Write", "Edit"})
 
-def _extract_doc_path(result: str, doc_type: DocType) -> str | None:
-    """Extract and validate document path from agent response.
+
+@dataclass
+class SessionWriteTracker:
+    """Tracks file writes during a single SDK session.
+
+    Captures all writes per doc_type. Pending/confirm pattern excludes failed writes.
+    """
+
+    writes: dict[str, list[str]] = field(default_factory=dict)  # doc_type -> [paths]
+    _pending: dict[str, tuple[str, str]] = field(
+        default_factory=dict
+    )  # tool_use_id -> (doc_type, path)
+
+    def on_tool_use(self, tool_use_id: str, file_path: str) -> None:
+        """Record pending write from ToolUseBlock."""
+        if doc_type := self._infer_doc_type(file_path):
+            self._pending[tool_use_id] = (doc_type, file_path)
+
+    def on_tool_result(self, tool_use_id: str, *, is_error: bool) -> None:
+        """Confirm or reject write based on ToolResultBlock."""
+        if (pending := self._pending.pop(tool_use_id, None)) and not is_error:
+            doc_type, path = pending
+            self.writes.setdefault(doc_type, []).append(path)
+
+    def get_paths(self, doc_type: str) -> list[str]:
+        """Get all tracked paths for doc_type that exist on disk."""
+        return [
+            str(get_project_root() / p)
+            for p in self.writes.get(doc_type, [])
+            if (get_project_root() / p).exists()
+        ]
+
+    @staticmethod
+    def _infer_doc_type(file_path: str) -> str | None:
+        """Infer doc_type from file path pattern."""
+        for doc_type, pattern in _DOC_PATH_PATTERNS.items():
+            if re.search(pattern, file_path):
+                return doc_type
+        return None
+
+
+def _extract_doc_path(
+    result: str,
+    doc_type: DocType,
+    tracker: SessionWriteTracker | None = None,
+) -> str | None:
+    """Extract document path. Tracker path preferred, regex fallback.
 
     Args:
         result: Claude agent response text
         doc_type: Type of document ("research" or "plan")
+        tracker: Optional write tracker with captured file paths
 
     Returns:
         Absolute path if found and exists, None otherwise
@@ -174,12 +235,20 @@ def _extract_doc_path(result: str, doc_type: DocType) -> str | None:
         logger.warning("Unknown doc_type: %s", doc_type)
         return None
 
+    # Priority 1: Most recent tracked write
+    if tracker:
+        paths = tracker.get_paths(doc_type)
+        if paths:
+            logger.debug("Using tracked path: %s", paths[-1])
+            return paths[-1]
+
+    # Priority 2: Regex fallback
     if match := re.search(pattern, result):
         path = get_project_root() / match.group(1)
         if path.exists():
-            logger.debug("Extracted and validated doc path: %s", path)
+            logger.debug("Using regex path: %s", path)
             return str(path)
-        logger.debug("Extracted path does not exist: %s", path)
+
     return None
 
 
@@ -221,7 +290,7 @@ def _format_tool_result(
 async def _run_claude_session(
     command: str,
     session_id: str | None,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Execute a Claude agent session asynchronously.
 
     This is the core async logic extracted from _execute_claude_task to
@@ -232,11 +301,12 @@ async def _run_claude_session(
         session_id: Optional session ID for resumption
 
     Returns:
-        Tuple of (result content, new session ID)
+        Tuple of (result content, new session ID, write tracker)
 
     Raises:
         AgentExecutionError: If agent execution fails
     """
+    tracker = SessionWriteTracker()
     last_text_content = ""
     result_content = ""
     new_session_id = ""
@@ -259,15 +329,18 @@ async def _run_claude_session(
                     )
                     break
                 elif isinstance(message, AssistantMessage):
-                    block_text = _process_assistant_message(message)
+                    block_text = _process_assistant_message(message, tracker)
                     if block_text:
                         last_text_content = block_text
         except Exception as e:
             raise AgentExecutionError(f"Agent execution failed: {e}") from e
 
+    logger.debug("Session writes: %s", tracker.writes)
+
     return (
         result_content if result_content else last_text_content,
         new_session_id,
+        tracker,
     )
 
 
@@ -277,7 +350,7 @@ def execute_claude_task(
     session_id: str | None = None,
     tool_command: Command,
     query: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Execute a Claude agent task synchronously.
 
     This is the main sync→async bridge that wraps _run_claude_session.
@@ -289,7 +362,7 @@ def execute_claude_task(
         tool_command: The Command enum value
 
     Returns:
-        Tuple of (result content, session ID)
+        Tuple of (result content, session ID, write tracker)
 
     Raises:
         ValueError: If tool_command is not in COMMAND_MAP
@@ -341,7 +414,9 @@ def workflow_tool(
     phase_name: str,
     doc_type: DocType | None = None,
     validate_plan: bool = False,
-) -> Callable[[Callable[..., tuple[str, str]]], Callable[..., str]]:
+) -> Callable[
+    [Callable[..., tuple[str, str, SessionWriteTracker]]], Callable[..., str]
+]:
     """Decorator for workflow tools with session management, timing, and error handling.
 
     Session Preservation:
@@ -359,7 +434,9 @@ def workflow_tool(
         Decorated function that handles all workflow boilerplate.
     """
 
-    def decorator(func: Callable[..., tuple[str, str]]) -> Callable[..., str]:
+    def decorator(
+        func: Callable[..., tuple[str, str, SessionWriteTracker]],
+    ) -> Callable[..., str]:
         @wraps(func)
         def wrapper(**kwargs: str | Path | None) -> str:
             logger.debug(">>> Entering %s tool", command.value)
@@ -374,7 +451,9 @@ def workflow_tool(
                 with timed_phase(phase_name):
                     # Pop session_id from kwargs if caller passed it (we inject our own)
                     kwargs.pop("session_id", None)
-                    result, last_session_id = func(session_id=session_id, **kwargs)
+                    result, last_session_id, tracker = func(
+                        session_id=session_id, **kwargs
+                    )
                     logger.debug(
                         "%s result - session_id=%s, result=%s",
                         command.value,
@@ -386,8 +465,18 @@ def workflow_tool(
                 speak(f"{phase_name.lower()} complete")
 
                 if doc_type:
-                    doc_path = _extract_doc_path(result, doc_type)
+                    # Add ALL tracked paths to extracted_paths
+                    tracked_paths = tracker.get_paths(doc_type)
+                    if tracked_paths:
+                        paths = session.extracted_paths.setdefault(doc_type, set())
+                        paths.update(tracked_paths)
+                        for p in tracked_paths:
+                            session.extracted_results[p] = result
+
+                    # Primary doc_path for completion marker (latest or regex fallback)
+                    doc_path = _extract_doc_path(result, doc_type, tracker)
                     if doc_path:
+                        # Also add regex-fallback path if not already tracked
                         paths = session.extracted_paths.setdefault(doc_type, set())
                         paths.add(doc_path)
                         session.extracted_results[doc_path] = result

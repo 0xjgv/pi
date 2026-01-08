@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from π.support.hitl import create_ask_user_question_tool
-from π.workflow.bridge import execute_claude_task, workflow_tool
+from π.workflow.bridge import SessionWriteTracker, execute_claude_task, workflow_tool
 from π.workflow.context import Command
 
 # DSPy-compatible ask_user_question tool for workflow stages
@@ -24,7 +24,7 @@ def research_codebase(
     *,
     session_id: str | None = None,
     query: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Research the codebase and return the results.
 
     Args:
@@ -32,7 +32,7 @@ def research_codebase(
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        Tuple of (result text, session ID).
+        Tuple of (result text, session ID, write tracker).
     """
     return execute_claude_task(
         tool_command=Command.RESEARCH_CODEBASE,
@@ -47,7 +47,7 @@ def create_plan(
     research_document_paths: list[Path | str],
     session_id: str | None = None,
     query: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Create a plan for the codebase.
 
     Args:
@@ -56,7 +56,7 @@ def create_plan(
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        Tuple of (result text, session ID).
+        Tuple of (result text, session ID, write tracker).
     """
     return execute_claude_task(
         path_to_documents=research_document_paths,
@@ -72,7 +72,7 @@ def review_plan(
     plan_document_path: Path | str,
     session_id: str | None = None,
     query: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Review the plan for the codebase.
 
     Args:
@@ -81,7 +81,7 @@ def review_plan(
         plan_document_path: Required path to the plan document.
 
     Returns:
-        Tuple of (result text, session ID).
+        Tuple of (result text, session ID, write tracker).
     """
     return execute_claude_task(
         path_to_documents=[Path(plan_document_path)],
@@ -97,7 +97,7 @@ def iterate_plan(
     plan_document_path: Path | str,
     session_id: str | None = None,
     review_feedback: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Iterate the plan for the codebase.
 
     Args:
@@ -106,7 +106,7 @@ def iterate_plan(
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        Tuple of (result text, session ID).
+        Tuple of (result text, session ID, write tracker).
     """
     return execute_claude_task(
         path_to_documents=[Path(plan_document_path)],
@@ -124,7 +124,7 @@ def implement_plan(
     plan_document_path: Path | str,
     session_id: str | None = None,
     query: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Implement the plan by executing all phases.
 
     Args:
@@ -133,7 +133,7 @@ def implement_plan(
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        Tuple of (result text, session ID).
+        Tuple of (result text, session ID, write tracker).
     """
     return execute_claude_task(
         path_to_documents=[Path(plan_document_path)],
@@ -148,7 +148,7 @@ def commit_changes(
     *,
     session_id: str | None = None,
     query: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Commit the changes made during implementation.
 
     Args:
@@ -156,7 +156,7 @@ def commit_changes(
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
-        Tuple of (result text, session ID).
+        Tuple of (result text, session ID, write tracker).
     """
     return execute_claude_task(
         tool_command=Command.COMMIT,
@@ -171,7 +171,7 @@ def write_claude_md(
     session_id: str | None = None,
     git_diff_context: str,
     query: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, SessionWriteTracker]:
     """Update CLAUDE.md based on codebase changes.
 
     Args:
@@ -180,7 +180,7 @@ def write_claude_md(
         query: Specific instructions for what to update.
 
     Returns:
-        Tuple of (result text, session ID).
+        Tuple of (result text, session ID, write tracker).
     """
     full_query = (
         f"Based on the following recent codebase changes, update CLAUDE.md:\n\n"
