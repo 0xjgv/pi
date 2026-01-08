@@ -36,29 +36,6 @@ logger = logging.getLogger(__name__)
 dspy.configure(callbacks=[LoggingCallback()])
 
 
-def _build_research_summary(summaries: list[str]) -> str:
-    """Build combined summary from multiple research summaries.
-
-    Args:
-        summaries: List of research summary strings.
-
-    Returns:
-        Combined summary string with findings from each research document.
-    """
-    if not summaries:
-        return "(No research findings)"
-
-    if len(summaries) == 1:
-        return summaries[0]
-
-    # Multiple summaries: format with separators
-    formatted = []
-    for i, summary in enumerate(summaries, 1):
-        formatted.append(f"### Research {i}\n{summary}")
-
-    return "\n\n---\n\n".join(formatted)
-
-
 def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     """Research stage using ReAct agent.
 
@@ -102,16 +79,19 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
         if doc.path in all_results and all_results[doc.path] not in summaries:
             summaries.append(all_results[doc.path])
 
-    reason = (
-        "Agent determined no implementation needed"
-        if not result.needs_implementation
-        else None
-    )
+    # Determine reason based on agent's explicit task_status and needs_implementation
+    if not result.needs_implementation:
+        reason = "Agent determined no implementation needed"
+    elif result.task_status == "needs_clarification":
+        reason = "Agent requires user clarification"
+    else:
+        reason = None
 
     logger.info(
-        "Research complete: needs_implementation=%s, docs=%d, reason=%s",
+        "Research complete: needs_impl=%s, docs=%d, status=%s, reason=%s",
         result.needs_implementation,
         len(research_docs),
+        result.task_status,
         reason,
     )
 
@@ -151,9 +131,9 @@ def stage_design(
     research_paths = {doc.path for doc in research.research_docs}
     ctx.extracted_paths["research"] = research_paths
 
-    # Build comma-separated paths and combined summary for agent
-    research_doc_paths = ",".join(sorted(research_paths))
-    research_summary = _build_research_summary(research.summaries)
+    # Pass research data as lists directly to match DesignSignature
+    research_doc_paths = list(research_paths)
+    research_summaries = research.summaries
 
     agent = dspy.ReAct(
         tools=[create_plan, review_plan, iterate_plan, ask_user_question],
@@ -164,7 +144,7 @@ def stage_design(
     with dspy.context(lm=lm):
         result = agent(
             research_doc_paths=research_doc_paths,
-            research_summary=research_summary,
+            research_summaries=research_summaries,
             objective=objective,
         )
 

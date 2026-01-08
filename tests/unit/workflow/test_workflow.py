@@ -199,42 +199,40 @@ class TestWorkflowFunctions:
         mock_execute_task: MagicMock,
     ):
         """Should return result with session ID."""
-        result = research_codebase(
-            query="test query",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        result = research_codebase(query="test query")
 
-        # With markers, result should contain [NEEDS_INPUT] or [TASK_COMPLETE]
-        assert "[NEEDS_INPUT]" in result or "[TASK_COMPLETE]" in result
+        # With doc_type set, result should contain session context or TASK_COMPLETE
+        assert "Session:" in result or "[TASK_COMPLETE]" in result
         assert "session-123" in result
 
     def test_research_codebase_passes_query(self, mock_execute_task: MagicMock):
         """Should pass query to execute task."""
-        research_codebase(
-            query="find all tests",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        research_codebase(query="find all tests")
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["query"] == "find all tests"
         assert call_kwargs["tool_command"] == Command.RESEARCH_CODEBASE
 
     def test_create_plan_requires_research_path(self, mock_execute_task: MagicMock):
-        """Should pass research document path."""
+        """Should pass research document paths."""
         create_plan(
             query="create plan",
-            research_document_path=Path("/path/to/research.md"),
+            research_document_paths=[Path("/path/to/research.md")],
         )
 
         call_kwargs = mock_execute_task.call_args.kwargs
-        assert call_kwargs["path_to_document"] == Path("/path/to/research.md")
+        assert call_kwargs["path_to_documents"] == [Path("/path/to/research.md")]
 
-    def test_iterate_plan_validates_plan_doc(self):
-        """Should validate plan document is not research doc."""
-        from π.workflow import ExecutionContext
+    def test_iterate_plan_validates_plan_doc(self, mock_execute_task: MagicMock):
+        """Should validate plan document is not research doc.
+
+        Note: The actual validation logic is tested in test_bridge.py. This test
+        verifies the tool integration passes the path to the validator.
+        """
         from π.workflow.bridge import _ctx
+        from π.workflow.context import ExecutionContext
 
-        # Set up a context with research doc in extracted_paths
+        # Create and set a context with research doc in extracted_paths
         ctx = ExecutionContext()
         ctx.extracted_paths["research"] = {"/research.md"}
         _ctx.set(ctx)
@@ -243,7 +241,7 @@ class TestWorkflowFunctions:
         with pytest.raises(ValueError) as exc_info:
             iterate_plan(
                 review_feedback="implement",
-                plan_document_path=Path("/research.md"),
+                plan_document_path="/research.md",
             )
 
         assert "implement_plan requires the PLAN document" in str(exc_info.value)
@@ -252,60 +250,48 @@ class TestWorkflowFunctions:
         """Should return error message on AgentExecutionError."""
         mock_execute_task.side_effect = AgentExecutionError("Agent failed")
 
-        result = research_codebase(
-            query="test",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        result = research_codebase(query="test")
 
         assert "[ERROR]" in result
         assert "Agent failed" in result
 
     def test_auto_resumes_existing_session(self, mock_execute_task: MagicMock):
         """Should automatically resume when session exists."""
-        from π.workflow import ExecutionContext
         from π.workflow.bridge import _ctx
+        from π.workflow.context import ExecutionContext
 
         ctx = ExecutionContext()
         ctx.session_ids[Command.RESEARCH_CODEBASE] = "auto-resume-session"
         _ctx.set(ctx)
 
-        research_codebase(
-            query="continue work",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        research_codebase(query="continue work")
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["session_id"] == "auto-resume-session"
 
     def test_starts_new_session_when_none_exists(self, mock_execute_task: MagicMock):
         """Should start new session when no prior session exists."""
-        from π.workflow import ExecutionContext
         from π.workflow.bridge import _ctx
+        from π.workflow.context import ExecutionContext
 
         ctx = ExecutionContext()  # Fresh context, no IDs
         _ctx.set(ctx)
 
-        research_codebase(
-            query="new research",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        research_codebase(query="new research")
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["session_id"] is None
 
     def test_stores_session_for_future_resumption(self, mock_execute_task: MagicMock):
         """Should store session ID for future auto-resumption."""
-        from π.workflow import ExecutionContext
         from π.workflow.bridge import _ctx
+        from π.workflow.context import ExecutionContext
 
         mock_execute_task.return_value = ("Result", "new-session-xyz")
         ctx = ExecutionContext()
         _ctx.set(ctx)
 
-        research_codebase(
-            query="first call",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        research_codebase(query="first call")
 
         # Session should now be stored
         assert ctx.session_ids.get(Command.RESEARCH_CODEBASE) == "new-session-xyz"

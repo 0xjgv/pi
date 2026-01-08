@@ -40,6 +40,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
     from pathlib import Path
 
+    from π.workflow.types import DocType
+
 # Re-export _ctx for backwards compatibility (tests import it from bridge.py)
 __all__ = ["_ctx"]
 
@@ -157,7 +159,7 @@ _DOC_PATH_PATTERNS: dict[str, str] = {
 }
 
 
-def _extract_doc_path(result: str, doc_type: str) -> str | None:
+def _extract_doc_path(result: str, doc_type: DocType) -> str | None:
     """Extract and validate document path from agent response.
 
     Args:
@@ -181,33 +183,6 @@ def _extract_doc_path(result: str, doc_type: str) -> str | None:
     return None
 
 
-# Signals indicating the agent completed its task without creating a new document
-_COMPLETION_SIGNALS = (
-    "complete picture",
-    "summary of findings",
-    "research complete",
-    "investigation complete",
-    "analysis complete",
-)
-
-
-def _result_indicates_completion(result: str) -> bool:
-    """Detect if result text signals completion without a new document.
-
-    When DSPy ReAct calls a tool for follow-up research, the agent may complete
-    its investigation without creating a new doc. This heuristic detects such
-    cases to avoid falsely signaling that clarification is needed.
-
-    Args:
-        result: The agent's result text
-
-    Returns:
-        True if result contains completion signals
-    """
-    result_lower = result.lower()
-    return any(signal in result_lower for signal in _COMPLETION_SIGNALS)
-
-
 def _format_tool_result(
     *,
     result: str,
@@ -215,30 +190,30 @@ def _format_tool_result(
     doc_path: str | None,
     tool_name: str,
 ) -> str:
-    """Format tool result with completion markers for DSPy ReAct.
+    """Format tool result for DSPy ReAct.
+
+    Completion determined by document creation (verifiable).
+    DSPy ReAct handles continuation from response context.
 
     Args:
         result: Raw result from Claude agent
         session_id: Session ID for continuation
         doc_path: Extracted document path (if any)
-        tool_name: Name of the tool for continuation hint
+        tool_name: Name of the tool (unused, kept for interface stability)
 
     Returns:
-        Formatted result with [TASK_COMPLETE] or [NEEDS_INPUT] marker
+        Formatted result with completion marker or session context
     """
-    # Check for completion: doc saved OR result text indicates completion
-    is_complete = doc_path or _result_indicates_completion(result)
-
-    if is_complete:
-        doc_info = f"Document saved: {doc_path}\n" if doc_path else ""
+    if doc_path:
         return (
-            f"[TASK_COMPLETE] {doc_info}"
-            f"Research finished. Proceed to produce output fields.\n\n"
+            f"[TASK_COMPLETE] Document saved: {doc_path}\n"
+            f"Proceed to produce output fields.\n\n"
             f"{result}"
         )
+    # No heuristic - let DSPy decide from context
     return (
-        f"[NEEDS_INPUT] Agent needs clarification to continue.\n"
-        f"Call {tool_name} with your response to resume session: {session_id}\n\n"
+        f"Session: {session_id} | Tool: {tool_name}\n"
+        f"Continue with follow-up if needed, or proceed to outputs.\n\n"
         f"{result}"
     )
 
@@ -298,7 +273,7 @@ async def _run_claude_session(
 
 def execute_claude_task(
     *,
-    path_to_document: Path | str | None = None,
+    path_to_documents: list[Path | str] | None = None,
     session_id: str | None = None,
     tool_command: Command,
     query: str,
@@ -308,10 +283,10 @@ def execute_claude_task(
     This is the main sync→async bridge that wraps _run_claude_session.
 
     Args:
-        path_to_document: Optional path to document for command
+        path_to_documents: Optional list of paths to documents for command.
         session_id: Optional session ID for resumption
-        tool_command: The Command enum value
         query: The query/instruction for the agent
+        tool_command: The Command enum value
 
     Returns:
         Tuple of (result content, session ID)
@@ -324,8 +299,9 @@ def execute_claude_task(
     if not command:
         raise ValueError(f"Invalid tool command: {tool_command}")
 
-    if path_to_document:
-        command += f" {path_to_document}"
+    if path_to_documents:
+        paths_str = " ".join(str(p) for p in path_to_documents)
+        command += f" {paths_str}"
     command += f" {query}"
 
     if session_id:
@@ -363,24 +339,20 @@ def workflow_tool(
     command: Command,
     *,
     phase_name: str,
-    doc_type: str | None = None,
+    doc_type: DocType | None = None,
     validate_plan: bool = False,
 ) -> Callable[[Callable[..., tuple[str, str]]], Callable[..., str]]:
     """Decorator for workflow tools with session management, timing, and error handling.
 
-    Session Preservation for Clarifications:
-        When a Claude agent returns without completing (no doc_path extracted and
-        result doesn't indicate completion), the session_id is stored in
-        ExecutionContext.session_ids[command]. DSPy ReAct can then call the tool
-        again to resume the conversation with preserved context.
-
-        Flow: DSPy calls tool → Claude asks question → [NEEDS_INPUT] returned
-              → DSPy calls tool with answer → Claude resumes with context
+    Session Preservation:
+        Session IDs are stored in ExecutionContext.session_ids[command] for
+        potential continuation. DSPy ReAct decides from context whether to
+        continue the conversation or produce output fields.
 
     Args:
         command: The workflow command for session tracking.
         phase_name: Display name for the timed phase spinner.
-        doc_type: If set, extract doc path from result ("research" or "plan").
+        doc_type: If set, extract doc path from result (DocType: "plan" | "research").
         validate_plan: If True, validate that plan_document_path is not a research doc.
 
     Returns:
@@ -395,10 +367,8 @@ def workflow_tool(
             session_id = session.session_ids.get(command)
 
             # Validate plan document if required
-            if validate_plan:
-                plan_path = kwargs.get("plan_document_path")
-                if plan_path:
-                    session.validate_plan_doc(str(plan_path))
+            if validate_plan and "plan_document_path" in kwargs:
+                session.validate_plan_doc(str(kwargs["plan_document_path"]))
 
             try:
                 with timed_phase(phase_name):
@@ -424,13 +394,15 @@ def workflow_tool(
                         # Document created = research complete, clear session
                         session.session_ids.pop(command, None)
                     return _format_tool_result(
-                        result=result,
                         session_id=last_session_id,
-                        doc_path=doc_path,
                         tool_name=command.value,
+                        doc_path=doc_path,
+                        result=result,
                     )
-                return f"Result: {result}, Session ID: {last_session_id}"
-
+                return (
+                    f"<session_id>{last_session_id}</session_id>\n"
+                    f"<result>{result}</result>\n"
+                )
             except AgentExecutionError as e:
                 logger.exception("%s failed (AgentExecutionError)", command.value)
                 return f"[ERROR] {e}"

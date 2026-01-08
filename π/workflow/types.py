@@ -8,6 +8,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+# Type alias for document types used in path extraction
+DocType = Literal["plan", "research"]
+
 # Directory constants
 RESEARCH_DIR = "thoughts/shared/research"
 PLANS_DIR = "thoughts/shared/plans"

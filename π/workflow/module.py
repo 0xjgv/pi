@@ -26,6 +26,9 @@ class ResearchSignature(dspy.Signature):
     needs_implementation: bool = dspy.OutputField(
         desc="True if implementation needed, False if already done or unnecessary"
     )
+    task_status: str = dspy.OutputField(
+        desc="'complete' when finished, 'needs_clarification' if user input needed"
+    )
 
 
 class DesignSignature(dspy.Signature):
@@ -35,11 +38,11 @@ class DesignSignature(dspy.Signature):
     """
 
     objective: str = dspy.InputField(desc="The clarified objective to design for")
-    research_doc_paths: str = dspy.InputField(
-        desc="Comma-separated paths to all research documents"
+    research_doc_paths: list[str] = dspy.InputField(
+        desc="Paths to the research documents"
     )
-    research_summary: str = dspy.InputField(
-        desc="Aggregated summary of all research findings"
+    research_summaries: list[str] = dspy.InputField(
+        desc="Summaries of the research findings"
     )
 
     plan_doc_path: str = dspy.OutputField(desc="Path to the final plan document")

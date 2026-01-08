@@ -22,7 +22,6 @@ ask_user_question = create_ask_user_question_tool()
 )
 def research_codebase(
     *,
-    research_document_path: Path | str | None = None,
     session_id: str | None = None,
     query: str,
 ) -> tuple[str, str]:
@@ -30,16 +29,13 @@ def research_codebase(
 
     Args:
         query: The query to research the codebase (goal, question, etc.).
-        research_document_path: Optional path to the research document.
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
         Tuple of (result text, session ID).
     """
-    path_to_document = Path(research_document_path) if research_document_path else None
     return execute_claude_task(
         tool_command=Command.RESEARCH_CODEBASE,
-        path_to_document=path_to_document,
         session_id=session_id,
         query=query,
     )
@@ -48,7 +44,7 @@ def research_codebase(
 @workflow_tool(Command.CREATE_PLAN, phase_name="Creating plan", doc_type="plan")
 def create_plan(
     *,
-    research_document_path: Path | str,
+    research_document_paths: list[Path | str],
     session_id: str | None = None,
     query: str,
 ) -> tuple[str, str]:
@@ -56,14 +52,14 @@ def create_plan(
 
     Args:
         query: The query to create a plan for the codebase (goal, question, etc.).
-        research_document_path: Required path to the research document.
+        research_document_paths: Required paths to the research documents.
         session_id: Session ID for resumption (injected by decorator).
 
     Returns:
         Tuple of (result text, session ID).
     """
     return execute_claude_task(
-        path_to_document=Path(research_document_path),
+        path_to_documents=research_document_paths,
         tool_command=Command.CREATE_PLAN,
         session_id=session_id,
         query=query,
@@ -88,7 +84,7 @@ def review_plan(
         Tuple of (result text, session ID).
     """
     return execute_claude_task(
-        path_to_document=Path(plan_document_path),
+        path_to_documents=[Path(plan_document_path)],
         tool_command=Command.REVIEW_PLAN,
         session_id=session_id,
         query=query,
@@ -113,7 +109,7 @@ def iterate_plan(
         Tuple of (result text, session ID).
     """
     return execute_claude_task(
-        path_to_document=Path(plan_document_path),
+        path_to_documents=[Path(plan_document_path)],
         tool_command=Command.ITERATE_PLAN,
         session_id=session_id,
         query=review_feedback,
@@ -140,7 +136,7 @@ def implement_plan(
         Tuple of (result text, session ID).
     """
     return execute_claude_task(
-        path_to_document=Path(plan_document_path),
+        path_to_documents=[Path(plan_document_path)],
         tool_command=Command.IMPLEMENT_PLAN,
         session_id=session_id,
         query=query,
@@ -164,7 +160,6 @@ def commit_changes(
     """
     return execute_claude_task(
         tool_command=Command.COMMIT,
-        path_to_document=None,
         session_id=session_id,
         query=query,
     )
@@ -173,16 +168,16 @@ def commit_changes(
 @workflow_tool(Command.WRITE_CLAUDE_MD, phase_name="Updating documentation")
 def write_claude_md(
     *,
+    session_id: str | None = None,
     git_diff_context: str,
     query: str,
-    session_id: str | None = None,
 ) -> tuple[str, str]:
     """Update CLAUDE.md based on codebase changes.
 
     Args:
+        session_id: Session ID for resumption (injected by decorator).
         git_diff_context: Summary of changes since last doc sync.
         query: Specific instructions for what to update.
-        session_id: Session ID for resumption (injected by decorator).
 
     Returns:
         Tuple of (result text, session ID).
@@ -194,7 +189,6 @@ def write_claude_md(
     )
     return execute_claude_task(
         tool_command=Command.WRITE_CLAUDE_MD,
-        path_to_document=None,
         session_id=session_id,
         query=full_query,
     )

@@ -87,7 +87,7 @@ class ExecutionContext:
     current_stage: str | None = None
     input_provider: HumanInputProvider | None = None  # type: ignore[name-defined]
 
-    def validate_plan_doc(self, plan_path: str) -> None:
+    def validate_plan_doc(self, plan_path: Path | str) -> None:
         """Validate that plan_path is not a research document.
 
         This method prevents a common agent mistake: passing a research
@@ -97,7 +97,7 @@ class ExecutionContext:
             ValueError: If plan_path is in the set of research documents.
         """
         research_paths = self.extracted_paths.get("research", set())
-        if plan_path in research_paths:
+        if str(plan_path) in research_paths:
             raise ValueError(
                 "implement_plan requires the PLAN document, "
                 f"not a research document.\nReceived: {plan_path}\n"

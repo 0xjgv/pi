@@ -18,7 +18,6 @@ from π.workflow.bridge import (
     _log_tool_call,
     _log_tool_result,
     _process_assistant_message,
-    _result_indicates_completion,
     execute_claude_task,
     workflow_tool,
 )
@@ -222,51 +221,31 @@ class TestFormatToolResult:
         assert "[TASK_COMPLETE]" in result
         assert "Document saved: /path/to/doc.md" in result
 
-    def test_formats_complete_without_doc_path(self):
-        """Should still be complete if result indicates completion."""
+    def test_returns_session_context_without_doc_path(self):
+        """Should return session context when no doc_path, letting DSPy decide."""
         result = _format_tool_result(
-            result="Research complete. Here is the summary of findings.",
+            result="Research findings about the codebase architecture.",
             session_id="sess-123",
             doc_path=None,
             tool_name="research_codebase",
         )
 
-        assert "[TASK_COMPLETE]" in result
-        assert "Document saved:" not in result
+        # No completion marker - DSPy decides from context
+        assert "[TASK_COMPLETE]" not in result
+        assert "Session: sess-123" in result
+        assert "Tool: research_codebase" in result
+        assert "Continue with follow-up if needed" in result
 
-    def test_formats_needs_input(self):
-        """Should return NEEDS_INPUT when not complete."""
+    def test_includes_result_in_output(self):
+        """Should include original result text in formatted output."""
         result = _format_tool_result(
-            result="What framework should I use?",
+            result="The codebase uses React with TypeScript.",
             session_id="sess-456",
             doc_path=None,
             tool_name="research_codebase",
         )
 
-        assert "[NEEDS_INPUT]" in result
-        assert "sess-456" in result
-
-
-class TestResultIndicatesCompletion:
-    """Tests for _result_indicates_completion() function."""
-
-    @pytest.mark.parametrize(
-        "text",
-        [
-            "Here is a complete picture of the codebase",
-            "Summary of findings: the code uses React",
-            "Research complete and documented",
-            "Investigation complete - found the bug",
-            "Analysis complete for the feature",
-        ],
-    )
-    def test_detects_completion_signals(self, text):
-        """Should detect various completion signal phrases."""
-        assert _result_indicates_completion(text) is True
-
-    def test_returns_false_for_questions(self):
-        """Should return False for questions or incomplete results."""
-        assert _result_indicates_completion("Which approach should I take?") is False
+        assert "The codebase uses React with TypeScript." in result
 
 
 class TestExecuteClaudeTask:
@@ -308,7 +287,7 @@ class TestExecuteClaudeTask:
         ):
             execute_claude_task(
                 tool_command=Command.CREATE_PLAN,
-                path_to_document="/path/to/doc.md",
+                path_to_documents=["/path/to/doc.md"],
                 query="create a plan",
             )
 

@@ -60,6 +60,7 @@ class TestStageResearch:
             research_summaries=["Found existing patterns"],
             research_doc_paths=[research_doc],
             needs_implementation=True,
+            task_status="complete",
         )
 
         mock_lm = MagicMock()
@@ -80,6 +81,7 @@ class TestStageResearch:
             research_summaries=["Feature already exists"],
             research_doc_paths=[research_doc],
             needs_implementation=False,
+            task_status="complete",
         )
 
         result = stage_research(objective="add logging", lm=MagicMock())
@@ -95,6 +97,7 @@ class TestStageResearch:
             research_summaries=["Research complete"],
             research_doc_paths=[research_doc],
             needs_implementation=True,
+            task_status="complete",
         )
 
         result = stage_research(objective="test", lm=MagicMock())
@@ -111,6 +114,7 @@ class TestStageResearch:
             research_summaries=["Done"],
             research_doc_paths=[research_doc],
             needs_implementation=True,
+            task_status="complete",
         )
 
         stage_research(objective="implement feature", lm=MagicMock())
@@ -124,6 +128,7 @@ class TestStageResearch:
             research_summaries=["Done"],
             research_doc_paths=["/invalid/path.md"],
             needs_implementation=True,
+            task_status="complete",
         )
 
         with pytest.raises(ValueError, match="must be in"):
@@ -149,6 +154,7 @@ class TestStageResearch:
             research_summaries=["Primary research findings"],
             research_doc_paths=[research_doc],
             needs_implementation=True,
+            task_status="complete",
         )
 
         result = stage_research(objective="test", lm=MagicMock())
@@ -160,6 +166,24 @@ class TestStageResearch:
         assert research_doc2 in paths
         # Should have both summaries
         assert len(result.summaries) == 2
+
+    def test_handles_needs_clarification_status(
+        self, tmp_path, mock_context, mock_react
+    ):
+        """Should set reason when agent signals needs_clarification."""
+        research_doc = _create_research_doc(tmp_path)
+
+        mock_react.return_value = dspy.Prediction(
+            research_summaries=["Partial findings"],
+            research_doc_paths=[research_doc],
+            needs_implementation=True,
+            task_status="needs_clarification",
+        )
+
+        result = stage_research(objective="test", lm=MagicMock())
+
+        assert result.needs_implementation is True
+        assert result.reason == "Agent requires user clarification"
 
 
 class TestStageDesign:
@@ -303,15 +327,15 @@ class TestStageDesign:
         call_kwargs = mock_react.call_args[1]
 
         # Should have exactly these fields (matching DesignSignature inputs)
-        expected_fields = {"objective", "research_doc_paths", "research_summary"}
+        expected_fields = {"objective", "research_doc_paths", "research_summaries"}
         assert set(call_kwargs.keys()) == expected_fields
-        assert call_kwargs["research_summary"] == "Research summary text"
+        assert call_kwargs["research_summaries"] == ["Research summary text"]
         assert research_doc in call_kwargs["research_doc_paths"]
 
-    def test_builds_combined_summary_from_multiple_docs(
+    def test_passes_multiple_research_docs_as_lists(
         self, tmp_path, mock_context, mock_react
     ):
-        """Should build combined summary when multiple research docs exist."""
+        """Should pass research paths and summaries as lists."""
         research_doc1 = _create_research_doc(tmp_path)
 
         # Create second research doc
@@ -343,12 +367,11 @@ class TestStageDesign:
 
         call_kwargs = mock_react.call_args[1]
 
-        # Both paths should be in the comma-separated string
+        # Both paths should be in the list
         assert research_doc1 in call_kwargs["research_doc_paths"]
         assert research_doc2 in call_kwargs["research_doc_paths"]
-        # Combined summary should include both findings
-        assert "First finding" in call_kwargs["research_summary"]
-        assert "Second finding" in call_kwargs["research_summary"]
+        # Summaries should be passed as list
+        assert call_kwargs["research_summaries"] == ["First finding", "Second finding"]
 
 
 class TestStageExecute:
@@ -468,34 +491,3 @@ class TestStageExecute:
 
         assert mock_context.current_stage == "execute"
         assert plan_doc in mock_context.extracted_paths["plan"]
-
-
-class TestBuildResearchSummary:
-    """Tests for _build_research_summary() function."""
-
-    def test_empty_summaries_returns_placeholder(self):
-        """Should return placeholder text when no summaries."""
-        from π.workflow.staged import _build_research_summary
-
-        result = _build_research_summary([])
-        assert result == "(No research findings)"
-
-    def test_single_summary_returns_as_is(self):
-        """Should return single summary without formatting."""
-        from π.workflow.staged import _build_research_summary
-
-        result = _build_research_summary(["Authentication uses JWT"])
-        assert result == "Authentication uses JWT"
-
-    def test_multiple_summaries_formatted_with_headers(self):
-        """Should format multiple summaries with headers and separators."""
-        from π.workflow.staged import _build_research_summary
-
-        summaries = ["First finding", "Second finding"]
-        result = _build_research_summary(summaries)
-
-        assert "### Research 1" in result
-        assert "First finding" in result
-        assert "### Research 2" in result
-        assert "Second finding" in result
-        assert "---" in result  # Separator between findings
