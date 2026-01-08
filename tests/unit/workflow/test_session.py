@@ -85,30 +85,53 @@ class TestExecutionContext:
         assert ctx.session_ids.get(Command.RESEARCH_CODEBASE) == "session-123"
         assert ctx.session_ids.get(Command.CLARIFY) is None  # not set
 
-    def test_validate_plan_doc_raises_when_path_is_research_doc(self):
-        """Should raise ValueError if plan path is in research docs."""
+    def test_get_or_validate_plan_path_auto_selects_from_context(self, tmp_path):
+        """Should auto-select most recent plan when no path provided."""
+        # Create plan directory structure
+        plans_dir = tmp_path / "thoughts/shared/plans"
+        plans_dir.mkdir(parents=True)
+
+        # Create two plans with different mtimes
+        old_plan = plans_dir / "2024-01-01-old-plan.md"
+        new_plan = plans_dir / "2024-01-02-new-plan.md"
+        old_plan.write_text("old")
+        new_plan.write_text("new")
+
         ctx = ExecutionContext()
-        ctx.extracted_paths["research"] = {"/path/to/research.md"}
+        ctx.extracted_paths["plan"] = {str(old_plan), str(new_plan)}
+
+        result = ctx.get_or_validate_plan_path()
+        assert result == str(new_plan.resolve())
+
+    def test_get_or_validate_plan_path_validates_provided_path(self, tmp_path):
+        """Should validate and return provided path."""
+        plans_dir = tmp_path / "thoughts/shared/plans"
+        plans_dir.mkdir(parents=True)
+        plan = plans_dir / "2024-01-01-test-plan.md"
+        plan.write_text("plan content")
+
+        ctx = ExecutionContext()
+        result = ctx.get_or_validate_plan_path(str(plan))
+        assert result == str(plan.resolve())
+
+    def test_get_or_validate_plan_path_raises_when_no_plan(self):
+        """Should raise ValueError when no plan in context and none provided."""
+        ctx = ExecutionContext()
 
         with pytest.raises(ValueError) as exc_info:
-            ctx.validate_plan_doc("/path/to/research.md")
+            ctx.get_or_validate_plan_path()
 
-        assert "implement_plan requires the PLAN document" in str(exc_info.value)
+        assert "No plan document available" in str(exc_info.value)
 
-    def test_validate_plan_doc_allows_different_paths(self):
-        """Should not raise when plan path is not a research doc."""
-        ctx = ExecutionContext()
-        ctx.extracted_paths["research"] = {"/path/to/research.md"}
-
-        # Should not raise
-        ctx.validate_plan_doc("/path/to/plan.md")
-
-    def test_validate_plan_doc_allows_when_no_research_doc(self):
-        """Should not raise when no research doc is set."""
+    def test_get_or_validate_plan_path_raises_for_invalid_path(self):
+        """Should raise ValueError for path not in plans directory."""
         ctx = ExecutionContext()
 
-        # Should not raise
-        ctx.validate_plan_doc("/path/to/plan.md")
+        with pytest.raises(ValueError) as exc_info:
+            ctx.get_or_validate_plan_path("/nonexistent/path.md")
+
+        # PlanDocPath validates directory first
+        assert "must be in thoughts/shared/plans" in str(exc_info.value)
 
     def test_log_session_state_logs_all_data(self, caplog: pytest.LogCaptureFixture):
         """Should log all context state at debug level."""

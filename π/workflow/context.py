@@ -13,6 +13,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from π.workflow.types import PlanDocPath
+
 if TYPE_CHECKING:
     import asyncio
 
@@ -87,22 +89,35 @@ class ExecutionContext:
     current_stage: str | None = None
     input_provider: HumanInputProvider | None = None  # type: ignore[name-defined]
 
-    def validate_plan_doc(self, plan_path: Path | str) -> None:
-        """Validate that plan_path is not a research document.
+    def get_or_validate_plan_path(
+        self,
+        plan_path: str | Path | None = None,
+    ) -> str:
+        """Get plan path from context or validate provided path.
 
-        This method prevents a common agent mistake: passing a research
-        document instead of the plan document to implement_plan.
+        If no path provided, auto-selects the most recently modified plan
+        from extracted_paths["plan"]. Validates using PlanDocPath which
+        checks directory, extension, existence, and date prefix.
+
+        Args:
+            plan_path: Optional path to validate. If None, uses latest from context.
+
+        Returns:
+            Validated absolute path string.
 
         Raises:
-            ValueError: If plan_path is in the set of research documents.
+            ValueError: If no plan available or path is invalid.
         """
-        research_paths = self.extracted_paths.get("research", set())
-        if str(plan_path) in research_paths:
-            raise ValueError(
-                "implement_plan requires the PLAN document, "
-                f"not a research document.\nReceived: {plan_path}\n"
-                "Hint: Use the plan document returned by create_plan."
-            )
+        if plan_path is None:
+            plan_paths = self.extracted_paths.get("plan", set())
+            if not plan_paths:
+                raise ValueError("No plan document available. Run create_plan first.")
+            # Select most recently modified plan
+            plan_path = max(plan_paths, key=lambda p: Path(p).stat().st_mtime)
+
+        # Validate using PlanDocPath (checks dir, extension, existence, date)
+        validated = PlanDocPath(path=str(plan_path))
+        return validated.path
 
     def log_session_state(self) -> None:
         """Log all session IDs and extracted paths for debugging."""

@@ -366,9 +366,11 @@ def workflow_tool(
             session = get_ctx()
             session_id = session.session_ids.get(command)
 
-            # Validate plan document if required
-            if validate_plan and "plan_document_path" in kwargs:
-                session.validate_plan_doc(str(kwargs["plan_document_path"]))
+            # Validate and auto-inject plan document if required
+            if validate_plan:
+                plan_path = kwargs.get("plan_document_path")
+                validated_path = session.get_or_validate_plan_path(plan_path)
+                kwargs["plan_document_path"] = validated_path
 
             try:
                 with timed_phase(phase_name):

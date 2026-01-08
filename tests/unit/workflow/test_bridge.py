@@ -402,19 +402,41 @@ class TestWorkflowToolDecorator:
         paths = mock_ctx.extracted_paths["research"]
         assert any("2026-01-05-test.md" in p for p in paths)
 
-    def test_validates_plan_doc_when_required(self, mock_ctx):
-        """Should call validate_plan_doc when validate_plan=True."""
+    def test_validates_and_injects_plan_path(self, mock_ctx):
+        """Should call get_or_validate_plan_path and inject result into kwargs."""
+        mock_ctx.get_or_validate_plan_path.return_value = "/validated/plan.md"
+        captured_kwargs = {}
 
         @workflow_tool(
             Command.IMPLEMENT_PLAN, phase_name="Implement", validate_plan=True
         )
         def implement_tool(**kwargs):
+            captured_kwargs.update(kwargs)
             return ("Implemented", "sess-1")
 
         with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
             implement_tool(plan_document_path="/path/to/plan.md")
 
-        mock_ctx.validate_plan_doc.assert_called_once_with("/path/to/plan.md")
+        mock_ctx.get_or_validate_plan_path.assert_called_once_with("/path/to/plan.md")
+        assert captured_kwargs["plan_document_path"] == "/validated/plan.md"
+
+    def test_auto_injects_plan_path_when_not_provided(self, mock_ctx):
+        """Should auto-inject plan path from context when not provided."""
+        mock_ctx.get_or_validate_plan_path.return_value = "/auto/selected/plan.md"
+        captured_kwargs = {}
+
+        @workflow_tool(
+            Command.IMPLEMENT_PLAN, phase_name="Implement", validate_plan=True
+        )
+        def implement_tool(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ("Implemented", "sess-1")
+
+        with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
+            implement_tool(query="test")  # No plan_document_path
+
+        mock_ctx.get_or_validate_plan_path.assert_called_once_with(None)
+        assert captured_kwargs["plan_document_path"] == "/auto/selected/plan.md"
 
 
 class TestLogToolCall:
