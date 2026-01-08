@@ -1,5 +1,5 @@
 # Silent helper (set VERBOSE=1 for full output)
-SILENT_HELPER := source ~/.claude/hack/run_silent.sh
+SILENT_HELPER := source .claude/hack/run_silent.sh
 
 .PHONY: help
 help: ## Show this help message
