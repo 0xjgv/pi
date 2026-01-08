@@ -1,9 +1,8 @@
 """π - Research, Plan, Implement workflows for Claude agents."""
 
-from π.config import Provider, get_lm
-from π.errors import AgentExecutionError
+from π.core import AgentExecutionError, Provider, get_lm
 from π.workflow import (
-    RPIWorkflow,
+    StagedWorkflow,
     create_plan,
     iterate_plan,
     research_codebase,
@@ -13,7 +12,7 @@ from π.workflow import (
 __all__ = [
     "AgentExecutionError",
     "Provider",
-    "RPIWorkflow",
+    "StagedWorkflow",
     "create_plan",
     "get_lm",
     "iterate_plan",

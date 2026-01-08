@@ -28,6 +28,10 @@ format: ## Format code with ruff
 lint: ## Lint code with ruff
 	@$(SILENT_HELPER) && run_silent "Lint check" "uv run ruff check ."
 
+.PHONY: deadcode
+deadcode: ## Scan for dead code with vulture (informational)
+	-@uv run vulture π/ --min-confidence 90 --exclude "**/conftest.py"
+
 .PHONY: quality-check
 quality-check: ## Run quality checks (fix, format, lint)
 	@$(SILENT_HELPER) && print_main_header "Running Quality Checks"
@@ -52,8 +56,34 @@ test: ## Run tests with pytest
 		run_silent "Running tests" "uv run pytest -x -v tests/"
 
 .PHONY: test-cov
-test-cov: ## Run tests with coverage
-	@$(SILENT_HELPER) && run_silent "Running tests with coverage" "uv run pytest tests/ -v --cov=π --cov-report=term-missing"
+test-cov: ## Run tests with coverage (fails if <80%)
+	@$(SILENT_HELPER) && run_silent "Running tests with coverage" "uv run pytest tests/ -v --cov=π --cov-report=term-missing --cov-fail-under=80"
+
+.PHONY: test-no-api
+test-no-api: ## Run tests without API access
+	@$(SILENT_HELPER) && print_main_header "Running Tests (No API)" && \
+		CLIPROXY_API_BASE="" CLIPROXY_API_KEY="" run_silent "Running tests" "uv run pytest -x -v tests/"
+
+.PHONY: test-markers
+test-markers: ## Run only tests marked as no_api
+	@$(SILENT_HELPER) && run_silent "Running no_api marked tests" "uv run pytest -m no_api tests/ -v"
+
+##@ Mutation Testing
+
+.PHONY: mutate
+mutate: ## Run mutation testing (uses pyproject.toml config)
+	@echo "Running mutation testing (this may take several minutes)..."
+	@uv run mutmut run
+	@uv run mutmut results
+
+.PHONY: mutate-browse
+mutate-browse: ## Browse mutation testing results interactively
+	@uv run mutmut browse
+
+.PHONY: mutate-clean
+mutate-clean: ## Clear mutation testing cache
+	@rm -rf mutants/
+	@echo "Mutation cache cleared"
 
 ##@ Development
 

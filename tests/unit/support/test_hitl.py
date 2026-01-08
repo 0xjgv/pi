@@ -166,3 +166,85 @@ class TestConsoleInputProviderValidation:
             result = provider.ask("Question?")
 
         assert result == ""
+
+
+class TestAgentInputProvider:
+    """Tests for AgentInputProvider."""
+
+    def test_ask_reads_context(self):
+        """AgentInputProvider should read objective from context."""
+        from π.support.hitl import AgentInputProvider
+        from π.workflow.context import get_ctx
+
+        # Setup context
+        ctx = get_ctx()
+        ctx.objective = "Test objective"
+        ctx.current_stage = "research"
+
+        mock_lm = MagicMock()
+
+        with patch("dspy.Predict") as mock_predict:
+            mock_predict.return_value.return_value.answer = "Test answer"
+            provider = AgentInputProvider(lm=mock_lm)
+            answer = provider.ask("What should I do?")
+
+        assert answer == "Test answer"
+        # Verify context was passed to the LM
+        call_kwargs = mock_predict.return_value.call_args.kwargs
+        assert "Test objective" in call_kwargs["context"]
+
+    def test_answer_log_tracking(self):
+        """AgentInputProvider should track question/answer pairs."""
+        from π.support.hitl import AgentInputProvider
+
+        mock_lm = MagicMock()
+
+        with patch("dspy.Predict") as mock_predict:
+            mock_predict.return_value.return_value.answer = "Answer 1"
+            provider = AgentInputProvider(lm=mock_lm)
+            provider.ask("Question 1")
+
+            mock_predict.return_value.return_value.answer = "Answer 2"
+            provider.ask("Question 2")
+
+        assert len(provider.answers) == 2
+        assert provider.answers[0] == ("Question 1", "Answer 1")
+        assert provider.answers[1] == ("Question 2", "Answer 2")
+
+
+class TestLazyProviderResolution:
+    """Tests for lazy provider resolution in ask_user_question."""
+
+    def test_uses_context_provider_when_set(self):
+        """Tool should use provider from context when available."""
+        from π.workflow.context import get_ctx
+
+        mock_provider = MagicMock()
+        mock_provider.ask.return_value = "context answer"
+
+        ctx = get_ctx()
+        ctx.input_provider = mock_provider
+
+        tool = create_ask_user_question_tool()
+        result = tool("test question")
+
+        assert result == "context answer"
+        mock_provider.ask.assert_called_once_with("test question")
+
+        # Clean up
+        ctx.input_provider = None
+
+    def test_falls_back_to_default_provider(self):
+        """Tool should fall back to default when context has no provider."""
+        from π.workflow.context import get_ctx
+
+        mock_default = MagicMock()
+        mock_default.ask.return_value = "default answer"
+
+        ctx = get_ctx()
+        ctx.input_provider = None
+
+        tool = create_ask_user_question_tool(default_provider=mock_default)
+        result = tool("test question")
+
+        assert result == "default answer"
