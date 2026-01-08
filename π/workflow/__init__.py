@@ -6,7 +6,6 @@ from π.workflow.context import (
     Command,
     ExecutionContext,
     build_command_map,
-    get_extracted_path,
 )
 from π.workflow.loop import LoopState, LoopStatus, ObjectiveLoop, Task, TaskStatus
 from π.workflow.orchestrator import StagedWorkflow
@@ -35,7 +34,6 @@ __all__ = [
     "commit_changes",
     "create_plan",
     "get_current_status",
-    "get_extracted_path",
     "implement_plan",
     "iterate_plan",
     "research_codebase",

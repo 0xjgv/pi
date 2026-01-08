@@ -80,39 +80,42 @@ class ExecutionContext:
     agent_options: ClaudeAgentOptions | None = None
     event_loop: asyncio.AbstractEventLoop | None = None
     session_ids: dict[Command, str] = field(default_factory=dict)
-    doc_paths: dict[Command, str] = field(default_factory=dict)
-    extracted_paths: dict[str, str] = field(default_factory=dict)  # doc_type -> path
+    extracted_paths: dict[str, set[str]] = field(default_factory=dict)
+    extracted_results: dict[str, str] = field(default_factory=dict)
     # Auto-answer support fields
     objective: str | None = None
     current_stage: str | None = None
     input_provider: HumanInputProvider | None = None  # type: ignore[name-defined]
 
     def validate_plan_doc(self, plan_path: str) -> None:
-        """Validate that plan_path is not the research document.
+        """Validate that plan_path is not a research document.
 
-        This method prevents a common agent mistake: passing the research
+        This method prevents a common agent mistake: passing a research
         document instead of the plan document to implement_plan.
 
         Raises:
-            ValueError: If plan_path matches the research document.
+            ValueError: If plan_path is in the set of research documents.
         """
-        research_doc = self.doc_paths.get(Command.CREATE_PLAN, "")
-        if research_doc and plan_path == research_doc:
+        research_paths = self.extracted_paths.get("research", set())
+        if plan_path in research_paths:
             raise ValueError(
                 "implement_plan requires the PLAN document, "
-                f"not the research document.\nReceived: {plan_path}\n"
+                f"not a research document.\nReceived: {plan_path}\n"
                 "Hint: Use the plan document returned by create_plan."
             )
 
     def log_session_state(self) -> None:
-        """Log all session IDs and document paths for debugging."""
+        """Log all session IDs and extracted paths for debugging."""
         logger.debug("ExecutionContext state:")
         logger.debug("Session IDs:")
         for command, session_id in self.session_ids.items():
             logger.debug("  %s: %s", command.value, session_id or "(not set)")
-        logger.debug("Document paths:")
-        for command, doc_path in self.doc_paths.items():
-            logger.debug("  %s: %s", command.value, doc_path or "(not set)")
+        logger.debug("Extracted paths:")
+        for doc_type, paths in self.extracted_paths.items():
+            logger.debug("  %s: %s", doc_type, paths)
+        logger.debug("Extracted results: %d", len(self.extracted_results))
+        for path in self.extracted_results:
+            logger.debug("  %s", path)
 
 
 # Single context variable for all execution state
@@ -126,17 +129,3 @@ def get_ctx() -> ExecutionContext:
         ctx = ExecutionContext()
         _ctx.set(ctx)
     return ctx
-
-
-def get_extracted_path(doc_type: str) -> str | None:
-    """Get the last extracted and validated path for a document type.
-
-    Use this instead of LLM-generated output fields to avoid hallucinated paths.
-
-    Args:
-        doc_type: Type of document ("research" or "plan")
-
-    Returns:
-        Validated absolute path if available, None otherwise
-    """
-    return get_ctx().extracted_paths.get(doc_type)

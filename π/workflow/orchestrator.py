@@ -40,11 +40,14 @@ class StagedWorkflow(dspy.Module):
                 reason=str(e),
             )
 
+        # Helper to get research paths as list
+        research_paths = [doc.path for doc in research.research_docs]
+
         # Early exit if already complete
         if not research.needs_implementation:
             logger.info("Early exit: %s", research.reason)
             return dspy.Prediction(
-                research_doc_path=research.research_doc.path,
+                research_doc_paths=research_paths,
                 status="already_complete",
                 reason=research.reason,
             )
@@ -53,14 +56,14 @@ class StagedWorkflow(dspy.Module):
         logger.info("=== STAGE 2/3: DESIGN ===")
         try:
             design = stage_design(
-                research_doc=research.research_doc,
+                research=research,
                 objective=objective,
                 lm=self.lm,
             )
         except ValueError as e:
             logger.error("Design failed: %s", e)
             return dspy.Prediction(
-                research_doc_path=research.research_doc.path,
+                research_doc_paths=research_paths,
                 status="failed",
                 reason=str(e),
             )
@@ -76,14 +79,14 @@ class StagedWorkflow(dspy.Module):
         except ValueError as e:
             logger.error("Execute failed: %s", e)
             return dspy.Prediction(
-                research_doc_path=research.research_doc.path,
+                research_doc_paths=research_paths,
                 plan_doc_path=design.plan_doc.path,
                 status="failed",
                 reason=str(e),
             )
 
         return dspy.Prediction(
-            research_doc_path=research.research_doc.path,
+            research_doc_paths=research_paths,
             files_changed=execute.files_changed,
             plan_doc_path=design.plan_doc.path,
             commit_hash=execute.commit_hash,

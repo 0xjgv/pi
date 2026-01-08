@@ -470,8 +470,6 @@ def execution_context_with_docs(
 
     Creates actual temporary files for validation tests.
     """
-    from π.workflow import Command
-
     # Create research document
     research_dir = tmp_path / "thoughts" / "shared" / "research"
     research_dir.mkdir(parents=True)
@@ -485,10 +483,9 @@ def execution_context_with_docs(
     plan_doc.write_text("# Test Plan\n\nPlan content.")
 
     # Store paths
-    fresh_execution_context.extracted_paths["research"] = str(research_doc)
-    fresh_execution_context.extracted_paths["plan"] = str(plan_doc)
-    fresh_execution_context.doc_paths[Command.RESEARCH_CODEBASE] = str(research_doc)
-    fresh_execution_context.doc_paths[Command.CREATE_PLAN] = str(plan_doc)
+    fresh_execution_context.extracted_paths["research"] = {str(research_doc)}
+    fresh_execution_context.extracted_paths["plan"] = {str(plan_doc)}
+    fresh_execution_context.extracted_results = {}
 
     return fresh_execution_context
 

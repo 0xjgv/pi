@@ -420,6 +420,8 @@ class TestWorkflowToolDecorator:
 
         assert "[TASK_COMPLETE]" in result
         assert "research" in mock_ctx.extracted_paths
+        paths = mock_ctx.extracted_paths["research"]
+        assert any("2026-01-05-test.md" in p for p in paths)
 
     def test_validates_plan_doc_when_required(self, mock_ctx):
         """Should call validate_plan_doc when validate_plan=True."""
@@ -475,3 +477,92 @@ class TestLogToolResult:
             _log_tool_result(block)
             call_args = mock_logger.debug.call_args[0]
             assert "ok" in call_args[1]
+
+
+class TestSessionClearingOnDocExtraction:
+    """Tests for session clearing when document is extracted."""
+
+    @pytest.fixture
+    def mock_ctx(self):
+        """Mock execution context with session_ids and extracted_results."""
+        with patch("π.workflow.bridge.get_ctx") as mock:
+            ctx = MagicMock()
+            ctx.session_ids = {Command.RESEARCH_CODEBASE: "existing-session"}
+            ctx.extracted_paths = {}
+            ctx.extracted_results = {}
+            mock.return_value = ctx
+            yield ctx
+
+    def test_clears_session_when_doc_extracted(self, mock_ctx, tmp_path):
+        """Should clear session_id when document is extracted."""
+        research_dir = tmp_path / "thoughts" / "shared" / "research"
+        research_dir.mkdir(parents=True)
+        doc = research_dir / "2026-01-05-test.md"
+        doc.write_text("# Test")
+
+        @workflow_tool(
+            Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
+        )
+        def research_tool(**kwargs):
+            return (
+                "Done. Created thoughts/shared/research/2026-01-05-test.md",
+                "new-session",
+            )
+
+        with (
+            patch("π.workflow.bridge.timed_phase"),
+            patch("π.workflow.bridge.speak"),
+            patch("π.workflow.bridge.get_project_root", return_value=tmp_path),
+        ):
+            research_tool()
+
+        # Session should be cleared after doc extraction
+        assert Command.RESEARCH_CODEBASE not in mock_ctx.session_ids
+
+    def test_preserves_session_when_no_doc(self, mock_ctx):
+        """Should preserve session_id when no document is extracted."""
+
+        @workflow_tool(
+            Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
+        )
+        def research_tool(**kwargs):
+            return ("What framework should I use?", "new-session")
+
+        with (
+            patch("π.workflow.bridge.timed_phase"),
+            patch("π.workflow.bridge.speak"),
+        ):
+            research_tool()
+
+        # Session should still be stored (for clarification flow)
+        assert mock_ctx.session_ids[Command.RESEARCH_CODEBASE] == "new-session"
+
+    def test_stores_extracted_results(self, mock_ctx, tmp_path):
+        """Should store extracted results when doc is extracted."""
+        research_dir = tmp_path / "thoughts" / "shared" / "research"
+        research_dir.mkdir(parents=True)
+        doc = research_dir / "2026-01-05-test.md"
+        doc.write_text("# Test")
+
+        @workflow_tool(
+            Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
+        )
+        def research_tool(**kwargs):
+            return (
+                "Research complete. "
+                "Created thoughts/shared/research/2026-01-05-test.md",
+                "sess-1",
+            )
+
+        with (
+            patch("π.workflow.bridge.timed_phase"),
+            patch("π.workflow.bridge.speak"),
+            patch("π.workflow.bridge.get_project_root", return_value=tmp_path),
+        ):
+            research_tool()
+
+        # Should have one result stored
+        assert len(mock_ctx.extracted_results) == 1
+        doc_path = next(iter(mock_ctx.extracted_results.keys()))
+        assert "2026-01-05-test.md" in doc_path
+        assert "Research complete" in mock_ctx.extracted_results[doc_path]

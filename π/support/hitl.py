@@ -138,15 +138,15 @@ class AgentInputProvider:
             context_parts.append(f"## Current Stage\n{ctx.current_stage}")
 
         # Include document contents if available
-        for doc_type, doc_path in ctx.extracted_paths.items():
-            try:
-                content = Path(doc_path).read_text(encoding="utf-8")
-                # Truncate very long documents
-                if len(content) > 10000:
-                    content = content[:10000] + "\n... (truncated)"
-                context_parts.append(f"## {doc_type.title()} Document\n{content}")
-            except OSError:
-                logger.debug("Could not read %s document: %s", doc_type, doc_path)
+        for doc_type, doc_paths in ctx.extracted_paths.items():
+            for doc_path in doc_paths:
+                try:
+                    content = Path(doc_path).read_text(encoding="utf-8")
+                    if len(content) > 10000:
+                        content = content[:10000] + "\n... (truncated)"
+                    context_parts.append(f"## {doc_type.title()} Document\n{content}")
+                except OSError:
+                    logger.debug("Could not read %s document: %s", doc_type, doc_path)
 
         if context_parts:
             context = "\n\n".join(context_parts)

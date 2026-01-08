@@ -10,7 +10,7 @@ from pathlib import Path
 
 from π.support.hitl import create_ask_user_question_tool
 from π.workflow.bridge import execute_claude_task, workflow_tool
-from π.workflow.context import Command, get_ctx
+from π.workflow.context import Command
 
 # DSPy-compatible ask_user_question tool for workflow stages
 # No explicit provider - uses context at runtime, falls back to Console
@@ -62,9 +62,6 @@ def create_plan(
     Returns:
         Tuple of (result text, session ID).
     """
-    # Store doc path for validation in later stages
-    get_ctx().doc_paths[Command.CREATE_PLAN] = str(research_document_path)
-
     return execute_claude_task(
         path_to_document=Path(research_document_path),
         tool_command=Command.CREATE_PLAN,
@@ -90,9 +87,6 @@ def review_plan(
     Returns:
         Tuple of (result text, session ID).
     """
-    # Store doc path for reference
-    get_ctx().doc_paths[Command.REVIEW_PLAN] = str(plan_document_path)
-
     return execute_claude_task(
         path_to_document=Path(plan_document_path),
         tool_command=Command.REVIEW_PLAN,
@@ -118,9 +112,6 @@ def iterate_plan(
     Returns:
         Tuple of (result text, session ID).
     """
-    # Store doc path for reference
-    get_ctx().doc_paths[Command.ITERATE_PLAN] = str(plan_document_path)
-
     return execute_claude_task(
         path_to_document=Path(plan_document_path),
         tool_command=Command.ITERATE_PLAN,
@@ -148,8 +139,6 @@ def implement_plan(
     Returns:
         Tuple of (result text, session ID).
     """
-    get_ctx().doc_paths[Command.IMPLEMENT_PLAN] = str(plan_document_path)
-
     return execute_claude_task(
         path_to_document=Path(plan_document_path),
         tool_command=Command.IMPLEMENT_PLAN,

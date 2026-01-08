@@ -89,9 +89,9 @@ class PlanDocPath(BaseModel):
 class ResearchResult(BaseModel):
     """Output from research stage."""
 
-    research_doc: ResearchDocPath
+    research_docs: list[ResearchDocPath]
     needs_implementation: bool
-    summary: str
+    summaries: list[str]
     reason: str | None = None
 
 

@@ -418,7 +418,11 @@ def workflow_tool(
                 if doc_type:
                     doc_path = _extract_doc_path(result, doc_type)
                     if doc_path:
-                        session.extracted_paths[doc_type] = doc_path
+                        paths = session.extracted_paths.setdefault(doc_type, set())
+                        paths.add(doc_path)
+                        session.extracted_results[doc_path] = result
+                        # Document created = research complete, clear session
+                        session.session_ids.pop(command, None)
                     return _format_tool_result(
                         result=result,
                         session_id=last_session_id,

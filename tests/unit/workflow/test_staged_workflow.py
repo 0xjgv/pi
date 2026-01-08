@@ -23,8 +23,8 @@ class TestStagedWorkflowEarlyExit:
         doc.write_text("# Test")
 
         mock_research.return_value = ResearchResult(
-            research_doc=ResearchDocPath(path=str(doc)),
-            summary="Feature already exists",
+            research_docs=[ResearchDocPath(path=str(doc))],
+            summaries=["Feature already exists"],
             needs_implementation=False,
             reason="Already implemented",
         )
@@ -34,7 +34,7 @@ class TestStagedWorkflowEarlyExit:
 
         assert result.status == "already_complete"
         assert result.reason == "Already implemented"
-        assert hasattr(result, "research_doc_path")
+        assert hasattr(result, "research_doc_paths")
         # Should NOT have plan_doc_path since we exited early
         assert not hasattr(result, "plan_doc_path") or result.plan_doc_path is None
 
@@ -63,8 +63,8 @@ class TestStagedWorkflowEarlyExit:
         plan_doc.write_text("# Plan")
 
         mock_research.return_value = ResearchResult(
-            research_doc=ResearchDocPath(path=str(research_doc)),
-            summary="New feature needed",
+            research_docs=[ResearchDocPath(path=str(research_doc))],
+            summaries=["New feature needed"],
             needs_implementation=True,
         )
         mock_design.return_value = DesignResult(
@@ -110,8 +110,8 @@ class TestStagedWorkflowEarlyExit:
         doc.write_text("# Test")
 
         mock_research.return_value = ResearchResult(
-            research_doc=ResearchDocPath(path=str(doc)),
-            summary="New feature needed",
+            research_docs=[ResearchDocPath(path=str(doc))],
+            summaries=["New feature needed"],
             needs_implementation=True,
         )
         mock_design.side_effect = ValueError("Design failed")
@@ -121,7 +121,7 @@ class TestStagedWorkflowEarlyExit:
 
         assert result.status == "failed"
         assert "Design failed" in result.reason
-        assert hasattr(result, "research_doc_path")
+        assert hasattr(result, "research_doc_paths")
 
 
 class TestObjectiveLoopStagedWorkflowIntegration:
@@ -160,7 +160,7 @@ class TestObjectiveLoopStagedWorkflowIntegration:
         mock_workflow.return_value = dspy.Prediction(
             status="already_complete",
             reason="Feature already exists",
-            research_doc_path="/path/research.md",
+            research_doc_paths=["/path/research.md"],
         )
         mock_staged_class.return_value = mock_workflow
 

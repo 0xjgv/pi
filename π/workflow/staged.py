@@ -36,6 +36,29 @@ logger = logging.getLogger(__name__)
 dspy.configure(callbacks=[LoggingCallback()])
 
 
+def _build_research_summary(summaries: list[str]) -> str:
+    """Build combined summary from multiple research summaries.
+
+    Args:
+        summaries: List of research summary strings.
+
+    Returns:
+        Combined summary string with findings from each research document.
+    """
+    if not summaries:
+        return "(No research findings)"
+
+    if len(summaries) == 1:
+        return summaries[0]
+
+    # Multiple summaries: format with separators
+    formatted = []
+    for i, summary in enumerate(summaries, 1):
+        formatted.append(f"### Research {i}\n{summary}")
+
+    return "\n\n---\n\n".join(formatted)
+
+
 def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     """Research stage using ReAct agent.
 
@@ -44,7 +67,7 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
         lm: DSPy language model for ReAct agent.
 
     Returns:
-        ResearchResult from signature outputs.
+        ResearchResult with aggregated docs and summaries from all tool calls.
 
     Raises:
         ValueError: If research did not produce a valid document.
@@ -63,7 +86,21 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     with dspy.context(lm=lm):
         result = agent(objective=objective)
 
-    research_doc = ResearchDocPath(path=result.research_doc_path)
+    # Aggregate all research from tool calls during agent execution
+    all_paths = ctx.extracted_paths.get("research", set())
+    all_results = ctx.extracted_results
+
+    # Include agent's final output docs (may already be in extracted_paths)
+    all_paths.update(result.research_doc_paths)
+
+    # Build list of validated ResearchDocPath objects
+    research_docs = [ResearchDocPath(path=p) for p in sorted(all_paths)]
+
+    # Build list of summaries: agent summaries first, then context-tracked ones
+    summaries = list(result.research_summaries)
+    for doc in research_docs:
+        if doc.path in all_results and all_results[doc.path] not in summaries:
+            summaries.append(all_results[doc.path])
 
     reason = (
         "Agent determined no implementation needed"
@@ -72,30 +109,30 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     )
 
     logger.info(
-        "Research complete: needs_implementation=%s, doc=%s reason=%s",
+        "Research complete: needs_implementation=%s, docs=%d, reason=%s",
         result.needs_implementation,
-        research_doc.path,
+        len(research_docs),
         reason,
     )
 
     return ResearchResult(
+        research_docs=research_docs,
+        summaries=summaries,
         needs_implementation=result.needs_implementation,
-        summary=result.research_summary,
-        research_doc=research_doc,
         reason=reason,
     )
 
 
 def stage_design(
     *,
-    research_doc: ResearchDocPath,
+    research: ResearchResult,
     objective: str,
     lm: dspy.LM,
 ) -> DesignResult:
     """Design stage using ReAct agent.
 
     Args:
-        research_doc: Validated ResearchDocPath from research stage.
+        research: Complete result from research stage with all docs and summaries.
         objective: The original objective.
         lm: DSPy language model for ReAct agent.
 
@@ -105,11 +142,18 @@ def stage_design(
     Raises:
         ValueError: If design did not produce a valid plan document.
     """
-    # Set context for ask_user_question
+    # Set context for ask_user_question (runtime state only)
     ctx = get_ctx()
-    ctx.extracted_paths["research"] = research_doc.path
     ctx.current_stage = "design"
     ctx.objective = objective
+
+    # Keep extracted_paths for validate_plan_doc safety check
+    research_paths = {doc.path for doc in research.research_docs}
+    ctx.extracted_paths["research"] = research_paths
+
+    # Build comma-separated paths and combined summary for agent
+    research_doc_paths = ",".join(sorted(research_paths))
+    research_summary = _build_research_summary(research.summaries)
 
     agent = dspy.ReAct(
         tools=[create_plan, review_plan, iterate_plan, ask_user_question],
@@ -119,7 +163,8 @@ def stage_design(
 
     with dspy.context(lm=lm):
         result = agent(
-            research_doc_path=research_doc.path,
+            research_doc_paths=research_doc_paths,
+            research_summary=research_summary,
             objective=objective,
         )
 
@@ -151,7 +196,7 @@ def stage_execute(
     """
     # Set context for ask_user_question
     ctx = get_ctx()
-    ctx.extracted_paths["plan"] = plan_doc.path
+    ctx.extracted_paths.setdefault("plan", set()).add(plan_doc.path)
     ctx.current_stage = "execute"
     ctx.objective = objective
 

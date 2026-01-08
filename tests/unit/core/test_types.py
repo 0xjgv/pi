@@ -162,7 +162,7 @@ class TestResultModels:
     """Tests for result model structures."""
 
     def test_research_result_with_needs_implementation(self, tmp_path: Path) -> None:
-        """ResearchResult should hold needs_implementation flag."""
+        """ResearchResult should hold needs_implementation and multi-doc fields."""
         research_dir = tmp_path / "thoughts/shared/research"
         research_dir.mkdir(parents=True)
         doc = research_dir / "2026-01-05-test.md"
@@ -170,14 +170,16 @@ class TestResultModels:
 
         research_doc = ResearchDocPath(path=str(doc))
         result = ResearchResult(
-            research_doc=research_doc,
-            summary="Test summary",
+            research_docs=[research_doc],
+            summaries=["Test summary"],
             needs_implementation=False,
             reason="Already exists",
         )
 
         assert result.needs_implementation is False
         assert result.reason == "Already exists"
+        assert len(result.research_docs) == 1
+        assert len(result.summaries) == 1
 
     def test_execute_result_defaults(self) -> None:
         """ExecuteResult should have correct defaults."""

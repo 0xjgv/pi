@@ -234,9 +234,9 @@ class TestWorkflowFunctions:
         from π.workflow import ExecutionContext
         from π.workflow.bridge import _ctx
 
-        # Set up a context with research doc
+        # Set up a context with research doc in extracted_paths
         ctx = ExecutionContext()
-        ctx.doc_paths[Command.CREATE_PLAN] = "/research.md"
+        ctx.extracted_paths["research"] = {"/research.md"}
         _ctx.set(ctx)
 
         # Should raise when plan path matches research doc
