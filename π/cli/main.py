@@ -1,0 +1,163 @@
+"""CLI entry point for the π workflow agent."""
+
+import argparse
+import logging
+import sys
+from importlib.metadata import version as get_version
+
+from dotenv import load_dotenv
+
+from π.cli.utils import prevent_sleep, setup_logging
+from π.core import Provider, Tier, get_lm
+from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
+from π.support.hitl import AgentInputProvider
+from π.utils import speak
+from π.workflow import StagedWorkflow
+from π.workflow.context import get_ctx
+from π.workflow.loop import LoopStatus, ObjectiveLoop, TaskStatus
+
+logger = logging.getLogger(__name__)
+VERSION = get_version("pi-rpi")
+
+
+def _create_parser() -> argparse.ArgumentParser:
+    """Create and return the argument parser."""
+    parser = argparse.ArgumentParser(
+        prog="π",
+        description="Autonomous Research → Plan → Review → Implement workflow.",
+    )
+    parser.add_argument("objective", nargs="?", help="The objective for the agent")
+    parser.add_argument(
+        "--loop",
+        action="store_true",
+        help="Use iterative loop mode for complex objectives",
+    )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Start fresh, ignore existing loop state",
+    )
+    parser.add_argument(
+        "--iterations",
+        "-n",
+        type=int,
+        default=50,
+        help="Maximum iterations for loop mode (default: 50)",
+    )
+    parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="Auto-answer questions using an agent (no human input required)",
+    )
+    return parser
+
+
+# Load environment variables
+load_dotenv()
+
+
+def run_workflow_mode(objective: str) -> None:
+    """Execute objective using StagedWorkflow pipeline."""
+    print(f"[Workflow Mode] Using {Provider.Claude} with staged pipeline")
+    print(">  Stages: Research → Design → Execute")
+
+    lm = get_lm(Provider.Claude, Tier.HIGH)
+    workflow = StagedWorkflow(lm=lm)
+
+    result = workflow(objective=objective)
+
+    print("\n=== Workflow Complete ===")
+    print(f"Status: {result.status}")
+
+    if hasattr(result, "reason") and result.reason:
+        print(f"Reason: {result.reason}")
+    if hasattr(result, "research_doc_path"):
+        print(f"Research Doc: {result.research_doc_path}")
+    if hasattr(result, "plan_doc_path"):
+        print(f"Plan Doc: {result.plan_doc_path}")
+    if hasattr(result, "files_changed") and result.files_changed:
+        print(f"Files Changed: {result.files_changed}")
+    if hasattr(result, "commit_hash") and result.commit_hash:
+        print(f"Commit: {result.commit_hash}")
+
+
+def run_loop_mode(
+    objective: str, *, resume: bool = True, max_iterations: int = 50
+) -> None:
+    """Execute objective using iterative ObjectiveLoop."""
+    print("[Loop Mode] Iterating toward objective")
+    print(f">  Max iterations: {max_iterations}")
+    print(f">  Resume: {resume}")
+
+    lm = get_lm(Provider.Claude, Tier.HIGH)
+    loop = ObjectiveLoop(lm=lm, max_iterations=max_iterations)
+
+    state = loop(objective=objective, resume=resume)
+
+    print("\n=== Loop Complete ===")
+    print(f"Status: {state.status}")
+    print(f"Iterations: {state.iteration}")
+    print(f"Completed Tasks: {len(state.completed_task_ids)}/{len(state.tasks)}")
+
+    if state.status == LoopStatus.COMPLETED:
+        print("\nCompleted tasks:")
+        for task in state.tasks:
+            if task.status == TaskStatus.COMPLETED:
+                print(f"  - {task.description}")
+
+
+@prevent_sleep
+def main(argv: list[str] | None = None) -> None:
+    """Run the π agent with the given OBJECTIVE."""
+    parser = _create_parser()
+    args = parser.parse_args(argv)
+
+    logger.info(f"π (v{VERSION})")
+    print(f"π (v{VERSION})")
+
+    # Use positional arg if provided, otherwise try stdin if piped
+    if args.objective:
+        objective = args.objective
+    elif not sys.stdin.isatty():
+        try:
+            objective = sys.stdin.read().strip()
+        except OSError:
+            objective = None
+    else:
+        objective = None
+
+    if not objective:
+        parser.print_help()
+        return
+
+    logs_dir = get_logs_dir()
+    cleanup_old_logs(logs_dir)  # Clean old logs first
+    archive_old_documents()  # Archive old research/plan documents
+    log_path = setup_logging(logs_dir)
+
+    logger.info("Objective: %s", objective)
+
+    print(f"Logging to: {log_path}")
+
+    # Configure input provider based on --auto flag
+    if args.auto:
+        print("[Auto Mode] Questions will be answered by an agent")
+        get_ctx().input_provider = AgentInputProvider()
+
+    if args.loop:
+        run_loop_mode(
+            objective, resume=not args.no_resume, max_iterations=args.iterations
+        )
+    else:
+        run_workflow_mode(objective)
+
+    speak("π complete")
+
+    # Only show log path if file was actually created
+    logging.shutdown()  # Ensure all handlers flushed/closed
+    if log_path.exists():
+        print(f"\nDebug log: {log_path}")
+
+
+if __name__ == "__main__":
+    main()

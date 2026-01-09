@@ -2,8 +2,8 @@
 
 import logging
 
+from π.cli.utils import setup_logging
 from π.support import get_logs_dir
-from π.utils import setup_logging
 
 
 class TestSetupLogging:

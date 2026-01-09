@@ -76,12 +76,6 @@ class TestExecutionContext:
 
         assert ctx.session_ids == {}
 
-    def test_initial_state_has_empty_doc_paths(self):
-        """New context should have empty doc_paths dict."""
-        ctx = ExecutionContext()
-
-        assert ctx.doc_paths == {}
-
     def test_set_and_get_session_id(self):
         """Should store and retrieve session IDs via dict."""
         ctx = ExecutionContext()
@@ -91,38 +85,59 @@ class TestExecutionContext:
         assert ctx.session_ids.get(Command.RESEARCH_CODEBASE) == "session-123"
         assert ctx.session_ids.get(Command.CLARIFY) is None  # not set
 
-    def test_set_and_get_doc_path(self):
-        """Should store and retrieve doc paths via dict."""
+    def test_get_or_validate_plan_path_auto_selects_from_context(self, tmp_path):
+        """Should auto-select most recent plan when no path provided."""
+        import os
+
+        # Create plan directory structure
+        plans_dir = tmp_path / "thoughts/shared/plans"
+        plans_dir.mkdir(parents=True)
+
+        # Create two plans with different mtimes
+        old_plan = plans_dir / "2024-01-01-old-plan.md"
+        new_plan = plans_dir / "2024-01-02-new-plan.md"
+        old_plan.write_text("old")
+        new_plan.write_text("new")
+
+        # Set explicit mtimes to ensure deterministic selection
+        os.utime(old_plan, (1000000, 1000000))  # older mtime
+        os.utime(new_plan, (2000000, 2000000))  # newer mtime
+
         ctx = ExecutionContext()
+        ctx.extracted_paths["plan"] = {str(old_plan), str(new_plan)}
 
-        ctx.doc_paths[Command.CREATE_PLAN] = "/path/to/research.md"
+        result = ctx.get_or_validate_plan_path()
+        assert result == str(new_plan.resolve())
 
-        assert ctx.doc_paths.get(Command.CREATE_PLAN) == "/path/to/research.md"
+    def test_get_or_validate_plan_path_validates_provided_path(self, tmp_path):
+        """Should validate and return provided path."""
+        plans_dir = tmp_path / "thoughts/shared/plans"
+        plans_dir.mkdir(parents=True)
+        plan = plans_dir / "2024-01-01-test-plan.md"
+        plan.write_text("plan content")
 
-    def test_validate_plan_doc_raises_when_same_as_research(self):
-        """Should raise ValueError if plan path equals research doc."""
         ctx = ExecutionContext()
-        ctx.doc_paths[Command.CREATE_PLAN] = "/path/to/research.md"
+        result = ctx.get_or_validate_plan_path(str(plan))
+        assert result == str(plan.resolve())
+
+    def test_get_or_validate_plan_path_raises_when_no_plan(self):
+        """Should raise ValueError when no plan in context and none provided."""
+        ctx = ExecutionContext()
 
         with pytest.raises(ValueError) as exc_info:
-            ctx.validate_plan_doc("/path/to/research.md")
+            ctx.get_or_validate_plan_path()
 
-        assert "implement_plan requires the PLAN document" in str(exc_info.value)
+        assert "No plan document available" in str(exc_info.value)
 
-    def test_validate_plan_doc_allows_different_paths(self):
-        """Should not raise when plan path differs from research doc."""
-        ctx = ExecutionContext()
-        ctx.doc_paths[Command.CREATE_PLAN] = "/path/to/research.md"
-
-        # Should not raise
-        ctx.validate_plan_doc("/path/to/plan.md")
-
-    def test_validate_plan_doc_allows_when_no_research_doc(self):
-        """Should not raise when no research doc is set."""
+    def test_get_or_validate_plan_path_raises_for_invalid_path(self):
+        """Should raise ValueError for path not in plans directory."""
         ctx = ExecutionContext()
 
-        # Should not raise
-        ctx.validate_plan_doc("/path/to/plan.md")
+        with pytest.raises(ValueError) as exc_info:
+            ctx.get_or_validate_plan_path("/nonexistent/path.md")
+
+        # PlanDocPath validates directory first
+        assert "must be in thoughts/shared/plans" in str(exc_info.value)
 
     def test_log_session_state_logs_all_data(self, caplog: pytest.LogCaptureFixture):
         """Should log all context state at debug level."""
@@ -130,9 +145,9 @@ class TestExecutionContext:
 
         ctx = ExecutionContext()
         ctx.session_ids[Command.CLARIFY] = "test-id"
-        ctx.doc_paths[Command.CREATE_PLAN] = "/test/path.md"
+        ctx.extracted_paths["research"] = {"/test/path.md"}
 
-        with caplog.at_level(logging.DEBUG, logger="π.workflow.bridge"):
+        with caplog.at_level(logging.DEBUG, logger="π.workflow.context"):
             ctx.log_session_state()
 
         assert "ExecutionContext state" in caplog.text

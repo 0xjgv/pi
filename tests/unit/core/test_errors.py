@@ -2,7 +2,7 @@
 
 import pytest
 
-from π.errors import AgentExecutionError
+from π.core import AgentExecutionError
 
 
 class TestAgentExecutionError:

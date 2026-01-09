@@ -24,9 +24,9 @@ def setup_logging(log_dir: Path) -> Path:
     logger.handlers.clear()
 
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
-    _log_path = log_dir / f"{timestamp}.log"
+    log_path = log_dir / f"{timestamp}.log"
 
-    file_handler = logging.FileHandler(_log_path, delay=True)
+    file_handler = logging.FileHandler(log_path, delay=True)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(
         logging.Formatter(
@@ -43,7 +43,7 @@ def setup_logging(log_dir: Path) -> Path:
     for name in ("httpcore", "httpx", "claude_agent_sdk"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
-    return _log_path
+    return log_path
 
 
 def prevent_sleep(func: Callable[..., Any]) -> Callable[..., Any]:

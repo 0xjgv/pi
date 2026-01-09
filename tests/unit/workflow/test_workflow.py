@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from claude_agent_sdk.types import ResultMessage
 
-from π.errors import AgentExecutionError
+from π.core import AgentExecutionError
 from π.workflow import (
     Command,
     create_plan,
@@ -16,14 +16,18 @@ from π.workflow import (
     research_codebase,
 )
 from π.workflow.bridge import (
+    SessionWriteTracker,
     _get_agent_options,
-    _get_ctx,
     _get_event_loop,
     _log_result_metrics,
     _log_tool_call,
     _log_tool_result,
+    get_ctx,
     timed_phase,
 )
+
+# Module-level tracker for fixture use (ensures SessionWriteTracker import is used)
+_MOCK_TRACKER = SessionWriteTracker()
 
 
 class TestTimedPhase:
@@ -81,14 +85,14 @@ class TestLogHelpers:
         assert "key" in caplog.text
 
     def test_log_tool_call_truncates_long_input(self, caplog: pytest.LogCaptureFixture):
-        """Should truncate inputs longer than 500 chars."""
+        """Should truncate inputs longer than 2000 chars."""
         import logging
 
         from claude_agent_sdk.types import ToolUseBlock
 
         block = MagicMock(spec=ToolUseBlock)
         block.name = "TestTool"
-        block.input = {"data": "x" * 600}  # 600 chars exceeds 500 limit
+        block.input = {"data": "x" * 2100}  # 2100 chars exceeds 2000 limit
 
         with caplog.at_level(logging.DEBUG, logger="π.workflow"):
             _log_tool_call(block)
@@ -143,25 +147,31 @@ class TestLogHelpers:
 class TestContextVarHelpers:
     """Tests for context variable helpers."""
 
-    def test_get_event_loop_creates_new_loop(self):
+    def test_get_event_loop_creates_new_loop(self, fresh_execution_context):
         """Should create a new event loop if none exists."""
         loop = _get_event_loop()
 
         assert isinstance(loop, asyncio.AbstractEventLoop)
         assert not loop.is_closed()
 
-    def test_get_event_loop_reuses_existing(self):
+        # Cleanup to avoid ResourceWarning
+        loop.close()
+
+    def test_get_event_loop_reuses_existing(self, fresh_execution_context):
         """Should reuse existing loop if not closed."""
         loop1 = _get_event_loop()
         loop2 = _get_event_loop()
 
         assert loop1 is loop2
 
+        # Cleanup to avoid ResourceWarning
+        loop1.close()
+
     def test_get_ctx_creates_new_context(self):
         """Should create new ExecutionContext if none exists."""
         from π.workflow import ExecutionContext
 
-        ctx = _get_ctx()
+        ctx = get_ctx()
 
         assert isinstance(ctx, ExecutionContext)
 
@@ -179,9 +189,13 @@ class TestWorkflowFunctions:
 
     @pytest.fixture
     def mock_execute_task(self) -> Generator[MagicMock]:
-        """Mock _execute_claude_task."""
-        with patch("π.workflow.bridge._execute_claude_task") as mock:
-            mock.return_value = ("Result text", "session-123")
+        """Mock execute_claude_task.
+
+        Patches at tools.py where the function is used, not bridge.py
+        where it's defined.
+        """
+        with patch("π.workflow.tools.execute_claude_task") as mock:
+            mock.return_value = ("Result text", "session-123", _MOCK_TRACKER)
             yield mock
 
     def test_research_codebase_returns_result(
@@ -189,113 +203,132 @@ class TestWorkflowFunctions:
         mock_execute_task: MagicMock,
     ):
         """Should return result with session ID."""
-        result = research_codebase(
-            query="test query",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        result = research_codebase(query="test query")
 
-        # With markers, result should contain [IN_PROGRESS] or [COMPLETE]
-        assert "[IN_PROGRESS]" in result or "[COMPLETE]" in result
+        # With doc_type set, result should contain session context or TASK_COMPLETE
+        assert "Session:" in result or "[TASK_COMPLETE]" in result
         assert "session-123" in result
 
     def test_research_codebase_passes_query(self, mock_execute_task: MagicMock):
         """Should pass query to execute task."""
-        research_codebase(
-            query="find all tests",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        research_codebase(query="find all tests")
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["query"] == "find all tests"
         assert call_kwargs["tool_command"] == Command.RESEARCH_CODEBASE
 
     def test_create_plan_requires_research_path(self, mock_execute_task: MagicMock):
-        """Should pass research document path."""
+        """Should pass research document paths."""
         create_plan(
             query="create plan",
-            research_document_path=Path("/path/to/research.md"),
+            research_document_paths=[Path("/path/to/research.md")],
         )
 
         call_kwargs = mock_execute_task.call_args.kwargs
-        assert call_kwargs["path_to_document"] == Path("/path/to/research.md")
+        assert call_kwargs["path_to_documents"] == [Path("/path/to/research.md")]
 
-    def test_iterate_plan_validates_plan_doc(self):
-        """Should validate plan document is not research doc."""
-        from π.workflow import ExecutionContext
+    def test_iterate_plan_validates_plan_doc(self, mock_execute_task: MagicMock):
+        """Should validate plan document via PlanDocPath.
+
+        Note: The actual validation logic is tested in test_bridge.py. This test
+        verifies the tool integration uses get_or_validate_plan_path which
+        validates via PlanDocPath (directory, extension, existence, date prefix).
+        """
         from π.workflow.bridge import _ctx
+        from π.workflow.context import ExecutionContext
 
-        # Set up a context with research doc
         ctx = ExecutionContext()
-        ctx.doc_paths[Command.CREATE_PLAN] = "/research.md"
         _ctx.set(ctx)
 
-        # Should raise when plan path matches research doc
+        # Should raise when plan path is not in correct directory
         with pytest.raises(ValueError) as exc_info:
             iterate_plan(
                 review_feedback="implement",
-                plan_document_path=Path("/research.md"),
+                plan_document_path="/invalid/path.md",
             )
 
-        assert "implement_plan requires the PLAN document" in str(exc_info.value)
+        # PlanDocPath validates directory first
+        assert "must be in thoughts/shared/plans" in str(exc_info.value)
 
     def test_workflow_handles_agent_error(self, mock_execute_task: MagicMock):
         """Should return error message on AgentExecutionError."""
         mock_execute_task.side_effect = AgentExecutionError("Agent failed")
 
-        result = research_codebase(
-            query="test",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        result = research_codebase(query="test")
 
         assert "[ERROR]" in result
         assert "Agent failed" in result
 
     def test_auto_resumes_existing_session(self, mock_execute_task: MagicMock):
         """Should automatically resume when session exists."""
-        from π.workflow import ExecutionContext
         from π.workflow.bridge import _ctx
+        from π.workflow.context import ExecutionContext
 
         ctx = ExecutionContext()
         ctx.session_ids[Command.RESEARCH_CODEBASE] = "auto-resume-session"
         _ctx.set(ctx)
 
-        research_codebase(
-            query="continue work",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        research_codebase(query="continue work")
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["session_id"] == "auto-resume-session"
 
     def test_starts_new_session_when_none_exists(self, mock_execute_task: MagicMock):
         """Should start new session when no prior session exists."""
-        from π.workflow import ExecutionContext
         from π.workflow.bridge import _ctx
+        from π.workflow.context import ExecutionContext
 
         ctx = ExecutionContext()  # Fresh context, no IDs
         _ctx.set(ctx)
 
-        research_codebase(
-            query="new research",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        research_codebase(query="new research")
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["session_id"] is None
 
     def test_stores_session_for_future_resumption(self, mock_execute_task: MagicMock):
         """Should store session ID for future auto-resumption."""
-        from π.workflow import ExecutionContext
         from π.workflow.bridge import _ctx
+        from π.workflow.context import ExecutionContext
 
-        mock_execute_task.return_value = ("Result", "new-session-xyz")
+        mock_execute_task.return_value = ("Result", "new-session-xyz", _MOCK_TRACKER)
         ctx = ExecutionContext()
         _ctx.set(ctx)
 
-        research_codebase(
-            query="first call",
-            research_document_path=Path("/path/to/research.md"),
-        )
+        research_codebase(query="first call")
 
         # Session should now be stored
         assert ctx.session_ids.get(Command.RESEARCH_CODEBASE) == "new-session-xyz"
+
+
+class TestCommandEnumAndMapping:
+    """Tests for Command enum and build_command_map."""
+
+    def test_write_claude_md_command_exists(self):
+        """WRITE_CLAUDE_MD is a valid Command enum member."""
+        assert hasattr(Command, "WRITE_CLAUDE_MD")
+        assert Command.WRITE_CLAUDE_MD == "write_claude_md"
+
+    def test_build_command_map_includes_non_numbered(self, tmp_path: Path):
+        """build_command_map() includes non-numbered commands."""
+        from π.workflow.context import build_command_map
+
+        # Create test command file
+        (tmp_path / "write-claude-md.md").write_text("# Test")
+
+        cmd_map = build_command_map(command_dir=tmp_path)
+
+        assert Command.WRITE_CLAUDE_MD in cmd_map
+        assert cmd_map[Command.WRITE_CLAUDE_MD] == "/write-claude-md"
+
+    def test_build_command_map_preserves_numbered(self, tmp_path: Path):
+        """build_command_map() still discovers numbered commands."""
+        from π.workflow.context import build_command_map
+
+        # Create numbered command file
+        (tmp_path / "1_research_codebase.md").write_text("# Test")
+
+        cmd_map = build_command_map(command_dir=tmp_path)
+
+        assert Command.RESEARCH_CODEBASE in cmd_map
+        assert cmd_map[Command.RESEARCH_CODEBASE] == "/1_research_codebase"
