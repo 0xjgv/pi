@@ -170,7 +170,7 @@ class TestHookIntegration:
         mock_checker = LanguageChecker(
             func=MagicMock(return_value=0), scope="file", project_markers=[]
         )
-        with patch("π.hooks.get_checker", return_value=mock_checker):
+        with patch("π.hooks.linting.get_checker", return_value=mock_checker):
             result = await check_file_format(input_data, None, context)
 
         assert result == {}
@@ -199,7 +199,7 @@ class TestHookIntegration:
         mock_checker = LanguageChecker(
             func=MagicMock(return_value=2), scope="file", project_markers=[]
         )
-        with patch("π.hooks.get_checker", return_value=mock_checker):
+        with patch("π.hooks.linting.get_checker", return_value=mock_checker):
             result = await check_file_format(input_data, None, context)
 
         assert result.get("decision") == "block"

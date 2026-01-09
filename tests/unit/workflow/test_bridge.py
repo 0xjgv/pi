@@ -513,10 +513,13 @@ class TestExecuteClaudeTask:
         mock_tracker = SessionWriteTracker()
         mock_session = AsyncMock(return_value=("result", "sid", mock_tracker))
         mock_loop = MagicMock()
-        mock_loop.run_until_complete.side_effect = lambda coro: coro.close() or (
-            "result",
-            "sid",
-            mock_tracker,
+        mock_loop.run_until_complete.side_effect = lambda coro: (
+            coro.close()
+            or (
+                "result",
+                "sid",
+                mock_tracker,
+            )
         )
         with (
             patch("π.workflow.bridge.COMMAND_MAP", {Command.CREATE_PLAN: "/plan"}),
@@ -539,10 +542,13 @@ class TestExecuteClaudeTask:
         mock_tracker = SessionWriteTracker()
         mock_session = AsyncMock(return_value=("result", "sid", mock_tracker))
         mock_loop = MagicMock()
-        mock_loop.run_until_complete.side_effect = lambda coro: coro.close() or (
-            "result",
-            "sid",
-            mock_tracker,
+        mock_loop.run_until_complete.side_effect = lambda coro: (
+            coro.close()
+            or (
+                "result",
+                "sid",
+                mock_tracker,
+            )
         )
         with (
             patch(
