@@ -87,6 +87,8 @@ class TestExecutionContext:
 
     def test_get_or_validate_plan_path_auto_selects_from_context(self, tmp_path):
         """Should auto-select most recent plan when no path provided."""
+        import os
+
         # Create plan directory structure
         plans_dir = tmp_path / "thoughts/shared/plans"
         plans_dir.mkdir(parents=True)
@@ -96,6 +98,10 @@ class TestExecutionContext:
         new_plan = plans_dir / "2024-01-02-new-plan.md"
         old_plan.write_text("old")
         new_plan.write_text("new")
+
+        # Set explicit mtimes to ensure deterministic selection
+        os.utime(old_plan, (1000000, 1000000))  # older mtime
+        os.utime(new_plan, (2000000, 2000000))  # newer mtime
 
         ctx = ExecutionContext()
         ctx.extracted_paths["plan"] = {str(old_plan), str(new_plan)}

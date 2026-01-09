@@ -23,7 +23,7 @@ if [[ -f "$HOOK_TARGET" ]]; then
     if ! grep -q "doc-sync" "$HOOK_TARGET"; then
         echo "" >> "$HOOK_TARGET"
         echo "# Documentation sync hook" >> "$HOOK_TARGET"
-        cat "$HOOK_SOURCE" >> "$HOOK_TARGET"
+        tail -n +2 "$HOOK_SOURCE" >> "$HOOK_TARGET"
         echo "Documentation sync appended to existing post-commit hook"
     else
         echo "Documentation sync hook already installed"
