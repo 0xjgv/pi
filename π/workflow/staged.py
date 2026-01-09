@@ -12,6 +12,7 @@ import dspy
 from π.core import MAX_ITERS
 from π.workflow.callbacks import LoggingCallback
 from π.workflow.context import get_ctx
+from π.workflow.memory_tools import search_memories, store_memory
 from π.workflow.module import DesignSignature, ExecuteSignature, ResearchSignature
 from π.workflow.tools import (
     ask_user_question,
@@ -55,7 +56,7 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     ctx.objective = objective
 
     agent = dspy.ReAct(
-        tools=[research_codebase, ask_user_question],
+        tools=[research_codebase, ask_user_question, search_memories, store_memory],
         signature=ResearchSignature,
         max_iters=MAX_ITERS,
     )
@@ -136,7 +137,14 @@ def stage_design(
     research_summaries = research.summaries
 
     agent = dspy.ReAct(
-        tools=[create_plan, review_plan, iterate_plan, ask_user_question],
+        tools=[
+            create_plan,
+            review_plan,
+            iterate_plan,
+            ask_user_question,
+            search_memories,
+            store_memory,
+        ],
         signature=DesignSignature,
         max_iters=MAX_ITERS,
     )
@@ -181,7 +189,7 @@ def stage_execute(
     ctx.objective = objective
 
     agent = dspy.ReAct(
-        tools=[implement_plan, commit_changes, ask_user_question],
+        tools=[implement_plan, commit_changes, ask_user_question, store_memory],
         signature=ExecuteSignature,
         max_iters=MAX_ITERS,
     )

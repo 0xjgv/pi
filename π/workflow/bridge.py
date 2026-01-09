@@ -76,7 +76,9 @@ def timed_phase(phase_name: str) -> Generator[None]:
 
 
 def _log_tool_call(block: ToolUseBlock) -> None:
-    """Log tool invocation details."""
+    """Log tool invocation details (skips read-only tools)."""
+    if block.name in _READ_TOOLS:
+        return
     input_str = str(block.input)
     input_preview = input_str[:2000] + "..." if len(input_str) > 2000 else input_str
     logger.debug("Tool: %s | Input: %s", block.name, input_preview)
@@ -140,7 +142,9 @@ def _process_assistant_message(
         elif isinstance(block, ToolResultBlock):
             _log_tool_result(block)
             if tracker:
-                tracker.on_tool_result(block.tool_use_id, is_error=block.is_error)
+                tracker.on_tool_result(
+                    block.tool_use_id, is_error=block.is_error or False
+                )
     return block_text
 
 
@@ -173,6 +177,10 @@ _DOC_PATH_PATTERNS: dict[str, str] = {
 
 # Tools that create/modify files
 _FILE_WRITE_TOOLS = frozenset({"Write", "Edit"})
+
+# Read-only tools excluded from debug logs to reduce noise.
+# These don't mutate state, and SessionWriteTracker already captures writes explicitly.
+_READ_TOOLS = frozenset({"Read", "Glob", "LS", "Grep"})
 
 
 @dataclass

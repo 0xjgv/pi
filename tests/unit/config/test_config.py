@@ -119,4 +119,4 @@ class TestProviderModels:
     def test_raises_for_invalid_tier(self):
         """Should raise KeyError for invalid tier via PROVIDER_MODELS."""
         with pytest.raises(KeyError):
-            _ = PROVIDER_MODELS[Provider.Claude]["invalid"]
+            _ = PROVIDER_MODELS[Provider.Claude]["invalid"]  # type: ignore[index]

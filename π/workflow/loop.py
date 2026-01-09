@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from π.core import MAX_ITERS, Provider, Tier, get_lm
 from π.workflow.context import get_ctx
+from π.workflow.memory_tools import search_memories
 from π.workflow.orchestrator import StagedWorkflow
 from π.workflow.tools import research_codebase
 
@@ -76,7 +77,13 @@ class LoopState:
 
 
 class DecomposeSignature(dspy.Signature):
-    """Decompose a high-level objective into discrete, implementable tasks."""
+    """Decompose a high-level objective into discrete, implementable tasks.
+
+    IMPORTANT: Before generating tasks, use search_memories to check for:
+    - Previously identified blockers and how they were resolved
+    - Strategic insights from past iterations
+    - Lessons learned that may inform task breakdown
+    """
 
     objective: str = dspy.InputField(desc="The high-level objective to accomplish")
     codebase_context: str = dspy.InputField(desc="Current state of the codebase")
@@ -236,11 +243,15 @@ class ObjectiveLoop(dspy.Module):
         self._workflow = StagedWorkflow(lm=self.lm)
         self._decomposer = dspy.ReAct(
             signature=DecomposeSignature,
-            tools=[research_codebase],
+            tools=[research_codebase, search_memories],
             max_iters=MAX_ITERS,
         )
         self._prioritizer = dspy.ChainOfThought(PrioritizerSignature)
-        self._evaluator = dspy.ChainOfThought(EvaluatorSignature)
+        self._evaluator = dspy.ReAct(
+            signature=EvaluatorSignature,
+            tools=[search_memories],
+            max_iters=3,
+        )
 
     def forward(self, objective: str, *, resume: bool = True) -> LoopState:
         """Execute the orchestration loop until objective is complete."""
