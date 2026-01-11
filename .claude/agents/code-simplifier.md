@@ -51,7 +51,7 @@ Only refine code that has been recently modified or touched in the current sessi
 3. Apply project-specific best practices and coding standards
 4. Ensure all functionality remains unchanged
 5. Verify the refined code is simpler and more maintainable
-6. Document only significant changes that affect understanding
+6. Document significant refactoring by adding a concise code comment explaining the rationale
 
 ## Operating Mode
 
