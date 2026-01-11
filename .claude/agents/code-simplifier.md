@@ -20,7 +20,7 @@ You are an expert code simplification specialist focused on enhancing code clari
 - Prefer `function` keyword over arrow functions
 - Use explicit return type annotations for top-level functions
 - Follow proper React component patterns with explicit Props types
-- Use proper error handling patterns (avoid try/catch when possible)
+- Use proper error handling patterns (e.g., return error values or use a Result type), avoiding `try/catch` for control flow
 - Maintain consistent naming conventions
 
 ### 3. **Enhance Clarity**
