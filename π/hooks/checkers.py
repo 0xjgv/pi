@@ -110,31 +110,31 @@ def _go_command(_path: Path, _project_root: Path | None) -> tuple[list[str], str
 # --- Checker configurations ---
 
 _PYTHON = CheckerConfig(
-    emoji="🐍",
-    language="Python",
-    project_markers=[],
     get_command=_python_command,
+    project_markers=[],
+    language="Python",
+    emoji="🐍",
 )
 
 _TYPESCRIPT = CheckerConfig(
-    emoji="📦",
-    language="TypeScript/JS",
     project_markers=["package.json"],
     get_command=_typescript_command,
+    language="TypeScript/JS",
+    emoji="📦",
 )
 
 _RUST = CheckerConfig(
-    emoji="🦀",
-    language="Rust",
     project_markers=["Cargo.toml"],
     get_command=_rust_command,
+    language="Rust",
+    emoji="🦀",
 )
 
 _GO = CheckerConfig(
-    emoji="🔵",
-    language="Go",
     project_markers=["go.mod"],
     get_command=_go_command,
+    language="Go",
+    emoji="🔵",
 )
 
 
