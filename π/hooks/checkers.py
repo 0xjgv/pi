@@ -64,13 +64,15 @@ def _run_checker(path: Path, config: CheckerConfig) -> int:
 # --- Command builders ---
 
 
-def _python_command(path: Path, _project_root: Path | None) -> tuple[list[str], str]:
+def _python_command(
+    path: Path, _project_root: Path | None
+) -> tuple[list[str], str] | None:
     if shutil.which("uvx"):
         return ["uvx", "ruff", "check", "--fix", str(path)], "ruff"
     if shutil.which("ruff"):
         return ["ruff", "check", "--fix", str(path)], "ruff"
     console.print("⚠️  Ruff not found")
-    return None  # type: ignore[return-value]
+    return None
 
 
 def _typescript_command(
