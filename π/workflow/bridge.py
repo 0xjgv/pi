@@ -22,9 +22,9 @@ from claude_agent_sdk.types import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from rich.console import Console
 
 from π.config import get_agent_options
+from π.console import console
 from π.core import AgentExecutionError
 from π.state import set_current_status
 from π.support.directory import get_project_root
@@ -46,9 +46,7 @@ if TYPE_CHECKING:
 # Re-export _ctx for backwards compatibility (tests import it from bridge.py)
 __all__ = ["_ctx"]
 
-# Logger and Console for the workflow
 logger = logging.getLogger(__name__)
-console = Console()
 
 
 @contextmanager

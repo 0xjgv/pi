@@ -10,13 +10,12 @@ from claude_agent_sdk.types import (
     PermissionResultAllow,
     ToolPermissionContext,
 )
-from rich.console import Console
 
+from π.console import console
 from π.state import get_current_status
 from π.utils import speak
 
 logger = logging.getLogger(__name__)
-console = Console()
 
 # Default timeout for user input (5 minutes)
 USER_INPUT_TIMEOUT = 300.0

@@ -51,7 +51,7 @@ class TestLogCleanupIntegration:
             captured = capsys.readouterr()
 
         # Verify cleanup occurred
-        assert "Workflow Mode" in captured.out
+        assert "π Workflow" in captured.out
         assert not old_log.exists(), "Old log should be deleted"
         assert recent_log.exists(), "Recent log should be preserved"
 
@@ -83,4 +83,4 @@ class TestLogCleanupIntegration:
             captured = capsys.readouterr()
 
         # Should complete successfully with no errors
-        assert "Workflow Mode" in captured.out
+        assert "π Workflow" in captured.out

@@ -5,7 +5,7 @@ from typing import cast
 
 from claude_agent_sdk.types import HookContext, HookInput, HookJSONOutput
 
-from π.hooks.utils import console
+from π.console import console
 
 
 def is_dangerous_command(cmd: str) -> bool:

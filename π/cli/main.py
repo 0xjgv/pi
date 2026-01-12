@@ -6,7 +6,9 @@ import sys
 from importlib.metadata import version as get_version
 
 from dotenv import load_dotenv
+from rich.panel import Panel
 
+from π.console import console
 from π.core import Provider, Tier, get_lm
 from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
@@ -32,27 +34,40 @@ load_dotenv()
 
 def run_workflow_mode(objective: str) -> None:
     """Execute objective using StagedWorkflow pipeline."""
-    print(f"[Workflow Mode] Using {Provider.Claude} with staged pipeline")
-    print(">  Stages: Research → Design → Execute")
+    console.print(
+        Panel(
+            "[heading]Research → Design → Execute[/heading]",
+            title="[heading]π Workflow[/heading]",
+            subtitle=f"Provider: {Provider.Claude}",
+            border_style="cyan",
+        )
+    )
 
     lm = get_lm(Provider.Claude, Tier.HIGH)
     workflow = StagedWorkflow(lm=lm)
 
     result = workflow(objective=objective)
 
-    print("\n=== Workflow Complete ===")
-    print(f"Status: {result.status}")
-
+    # Build summary content
+    lines = [f"[success]Status:[/success] {result.status}"]
     if hasattr(result, "reason") and result.reason:
-        print(f"Reason: {result.reason}")
+        lines.append(f"[muted]Reason:[/muted] {result.reason}")
     if hasattr(result, "research_doc_path"):
-        print(f"Research Doc: {result.research_doc_path}")
+        lines.append(f"[muted]Research:[/muted] [path]{result.research_doc_path}[/]")
     if hasattr(result, "plan_doc_path"):
-        print(f"Plan Doc: {result.plan_doc_path}")
+        lines.append(f"[muted]Plan:[/muted] [path]{result.plan_doc_path}[/]")
     if hasattr(result, "files_changed") and result.files_changed:
-        print(f"Files Changed: {result.files_changed}")
+        lines.append(f"[muted]Files:[/muted] {result.files_changed}")
     if hasattr(result, "commit_hash") and result.commit_hash:
-        print(f"Commit: {result.commit_hash}")
+        lines.append(f"[muted]Commit:[/muted] [path]{result.commit_hash}[/]")
+
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="[success]Workflow Complete[/success]",
+            border_style="green",
+        )
+    )
 
 
 @prevent_sleep
@@ -62,7 +77,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     logger.info(f"π (v{VERSION})")
-    print(f"π (v{VERSION})")
+    console.print(f"[heading]π[/heading] [muted](v{VERSION})[/muted]")
 
     # Use positional arg if provided, otherwise try stdin if piped
     if args.objective:
@@ -86,7 +101,7 @@ def main(argv: list[str] | None = None) -> None:
 
     logger.info("Objective: %s", objective)
 
-    print(f"Logging to: {log_path}")
+    console.print(f"[muted]Logging to:[/muted] [path]{log_path}[/path]")
 
     run_workflow_mode(objective)
 
@@ -95,7 +110,7 @@ def main(argv: list[str] | None = None) -> None:
     # Only show log path if file was actually created
     logging.shutdown()  # Ensure all handlers flushed/closed
     if log_path.exists():
-        print(f"\nDebug log: {log_path}")
+        console.print(f"\n[muted]Debug log:[/muted] [path]{log_path}[/path]")
 
 
 if __name__ == "__main__":

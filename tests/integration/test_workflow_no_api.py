@@ -75,7 +75,7 @@ class TestWorkflowIntegrationNoAPI:
         main(["test objective"])
 
         captured = capsys.readouterr()
-        assert "[Workflow Mode]" in captured.out
+        assert "π Workflow" in captured.out
         # Verify mock_lm was injected (mocking is working)
         assert self.mock_lm is not None
 

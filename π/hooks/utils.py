@@ -3,12 +3,7 @@
 import subprocess
 from pathlib import Path
 
-from rich.console import Console
-
 from π.support.directory import get_project_root
-
-# Shared console for hook output
-console = Console()
 
 _home_dir = Path.home()
 

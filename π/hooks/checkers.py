@@ -5,8 +5,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from π.console import console
 from π.hooks.registry import language_checker
-from π.hooks.utils import compact_path, console, find_project_root, run_check_command
+from π.hooks.utils import compact_path, find_project_root, run_check_command
 
 
 @dataclass

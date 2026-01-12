@@ -5,8 +5,9 @@ from typing import cast
 
 from claude_agent_sdk.types import HookContext, HookInput, HookJSONOutput
 
+from π.console import console
 from π.hooks.registry import get_checker
-from π.hooks.utils import compact_path, console
+from π.hooks.utils import compact_path
 
 
 async def check_file_format(
