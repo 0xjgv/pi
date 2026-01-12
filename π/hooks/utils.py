@@ -5,7 +5,6 @@ from pathlib import Path
 
 from rich.console import Console
 
-from π.hooks.logging import log_event
 from π.support.directory import get_project_root
 
 # Shared console for hook output
@@ -74,8 +73,7 @@ def run_check_command(
     cwd: Path,
     cmd: list[str],
     name: str,
-    tool_name: str | None = None,
-    file_path: str | None = None,
+    *,
     timeout: int = 30,
 ) -> tuple[int, str, str]:
     """Run a check command and return raw results for processing.
@@ -84,42 +82,15 @@ def run_check_command(
         cwd: Working directory to run command in
         cmd: Command and arguments as list
         name: Human-readable name for the checker
-        tool_name: Optional tool that triggered this check
-        file_path: Optional file path being checked
         timeout: Command timeout in seconds (default: 30)
 
     Returns:
         Tuple of (exit_code, stdout, stderr)
     """
     try:
-        compact_file = compact_path(file_path) if file_path else "unknown"
-        log_event(
-            "[CHECK_COMMAND]",
-            {
-                "tool": tool_name or "unknown",
-                "file": compact_file,
-                "command": " ".join(cmd),
-                "checker": name,
-                "cwd": str(cwd),
-            },
-        )
-
         result = subprocess.run(
             cmd, check=False, cwd=cwd, capture_output=True, text=True, timeout=timeout
         )
-
-        if result.returncode != 0:
-            output = result.stderr or result.stdout
-            log_event(
-                "[CHECK_FAILED]",
-                {
-                    "reason": (output or "unknown"),
-                    "exit_code": result.returncode,
-                    "file": compact_file,
-                    "checker": name,
-                },
-            )
-
         return (result.returncode, result.stdout, result.stderr)
 
     except subprocess.TimeoutExpired:

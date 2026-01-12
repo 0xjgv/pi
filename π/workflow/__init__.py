@@ -7,7 +7,6 @@ from π.workflow.context import (
     ExecutionContext,
     build_command_map,
 )
-from π.workflow.loop import LoopState, LoopStatus, ObjectiveLoop, Task, TaskStatus
 from π.workflow.memory import get_memory_client
 from π.workflow.memory_tools import (
     MemoryTools,
@@ -18,7 +17,7 @@ from π.workflow.memory_tools import (
 )
 from π.workflow.orchestrator import StagedWorkflow
 from π.workflow.tools import (
-    ask_user_question,
+    ask_questions,
     commit_changes,
     create_plan,
     implement_plan,
@@ -31,14 +30,9 @@ __all__ = [
     "COMMAND_MAP",
     "Command",
     "ExecutionContext",
-    "LoopState",
-    "LoopStatus",
     "MemoryTools",
-    "ObjectiveLoop",
     "StagedWorkflow",
-    "Task",
-    "TaskStatus",
-    "ask_user_question",
+    "ask_questions",
     "build_command_map",
     "commit_changes",
     "create_plan",

@@ -14,7 +14,7 @@ import dspy
 
 from π.core import MAX_ITERS
 from π.support.directory import get_project_root
-from π.workflow.tools import ask_user_question, write_claude_md
+from π.workflow.tools import ask_questions, write_claude_md
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def stage_doc_sync(
         DocSyncResult with evaluation outcome.
     """
     agent = dspy.ReAct(
-        tools=[write_claude_md, ask_user_question],
+        tools=[write_claude_md, ask_questions],
         signature=DocSyncSignature,
         max_iters=MAX_ITERS,
     )

@@ -15,14 +15,13 @@ from π.workflow.bridge import (
     SessionWriteTracker,
     _extract_doc_path,
     _format_tool_result,
-    _get_event_loop,
     _log_tool_call,
     _log_tool_result,
     _process_assistant_message,
     execute_claude_task,
     workflow_tool,
 )
-from π.workflow.context import Command
+from π.workflow.context import Command, get_event_loop
 
 
 class TestSessionWriteTracker:
@@ -332,20 +331,20 @@ class TestProcessAssistantMessage:
 
 
 class TestGetEventLoop:
-    """Tests for _get_event_loop() function."""
+    """Tests for get_event_loop() function."""
 
     def test_creates_new_loop_when_none_exists(self):
         """Should create new event loop when context has none."""
-        with patch("π.workflow.bridge.get_ctx") as mock_ctx:
+        with patch("π.workflow.context.get_ctx") as mock_ctx:
             ctx = MagicMock()
             ctx.event_loop = None
             mock_ctx.return_value = ctx
 
-            with patch("π.workflow.bridge.asyncio") as mock_asyncio:
+            with patch("π.workflow.context.asyncio") as mock_asyncio:
                 mock_loop = MagicMock()
                 mock_asyncio.new_event_loop.return_value = mock_loop
 
-                result = _get_event_loop()
+                result = get_event_loop()
 
                 mock_asyncio.new_event_loop.assert_called_once()
                 mock_asyncio.set_event_loop.assert_called_once_with(mock_loop)
@@ -354,31 +353,31 @@ class TestGetEventLoop:
 
     def test_reuses_existing_open_loop(self):
         """Should return existing loop if not closed."""
-        with patch("π.workflow.bridge.get_ctx") as mock_ctx:
+        with patch("π.workflow.context.get_ctx") as mock_ctx:
             mock_loop = MagicMock()
             mock_loop.is_closed.return_value = False
             ctx = MagicMock()
             ctx.event_loop = mock_loop
             mock_ctx.return_value = ctx
 
-            result = _get_event_loop()
+            result = get_event_loop()
 
             assert result == mock_loop
 
     def test_creates_new_loop_when_closed(self):
         """Should create new loop if existing one is closed."""
-        with patch("π.workflow.bridge.get_ctx") as mock_ctx:
+        with patch("π.workflow.context.get_ctx") as mock_ctx:
             closed_loop = MagicMock()
             closed_loop.is_closed.return_value = True
             ctx = MagicMock()
             ctx.event_loop = closed_loop
             mock_ctx.return_value = ctx
 
-            with patch("π.workflow.bridge.asyncio") as mock_asyncio:
+            with patch("π.workflow.context.asyncio") as mock_asyncio:
                 new_loop = MagicMock()
                 mock_asyncio.new_event_loop.return_value = new_loop
 
-                result = _get_event_loop()
+                result = get_event_loop()
 
                 mock_asyncio.new_event_loop.assert_called_once()
                 assert result == new_loop
@@ -446,7 +445,7 @@ class TestFormatToolResult:
     """Tests for _format_tool_result() function."""
 
     def test_formats_complete_with_doc_path(self):
-        """Should include doc_path in TASK_COMPLETE result."""
+        """Should include doc_path in structured result."""
         result = _format_tool_result(
             result="Research done",
             session_id="sess-123",
@@ -454,8 +453,9 @@ class TestFormatToolResult:
             tool_name="research_codebase",
         )
 
-        assert "[TASK_COMPLETE]" in result
-        assert "Document saved: /path/to/doc.md" in result
+        assert "<session_id>sess-123</session_id>" in result
+        assert "<tool_name>research_codebase</tool_name>" in result
+        assert "<doc_path>/path/to/doc.md</doc_path>" in result
 
     def test_returns_session_context_without_doc_path(self):
         """Should return session context when no doc_path, letting DSPy decide."""
@@ -468,9 +468,9 @@ class TestFormatToolResult:
 
         # No completion marker - DSPy decides from context
         assert "[TASK_COMPLETE]" not in result
-        assert "Session: sess-123" in result
-        assert "Tool: research_codebase" in result
-        assert "Continue with follow-up if needed" in result
+        assert "<session_id>sess-123</session_id>" in result
+        assert "<tool_name>research_codebase</tool_name>" in result
+        assert "<result>Research findings" in result
 
     def test_includes_result_in_output(self):
         """Should include original result text in formatted output."""
@@ -524,7 +524,7 @@ class TestExecuteClaudeTask:
         with (
             patch("π.workflow.bridge.COMMAND_MAP", {Command.CREATE_PLAN: "/plan"}),
             patch("π.workflow.bridge._run_claude_session", mock_session),
-            patch("π.workflow.bridge._get_event_loop", return_value=mock_loop),
+            patch("π.workflow.bridge.get_event_loop", return_value=mock_loop),
         ):
             execute_claude_task(
                 tool_command=Command.CREATE_PLAN,
@@ -555,7 +555,7 @@ class TestExecuteClaudeTask:
                 "π.workflow.bridge.COMMAND_MAP", {Command.CREATE_PLAN: "/create_plan"}
             ),
             patch("π.workflow.bridge._run_claude_session", mock_session),
-            patch("π.workflow.bridge._get_event_loop", return_value=mock_loop),
+            patch("π.workflow.bridge.get_event_loop", return_value=mock_loop),
         ):
             execute_claude_task(
                 tool_command=Command.CREATE_PLAN,
@@ -644,7 +644,8 @@ class TestWorkflowToolDecorator:
         ):
             result = research_tool()
 
-        assert "[TASK_COMPLETE]" in result
+        assert "<doc_path>" in result
+        assert "2026-01-05-test.md" in result
         assert "research" in mock_ctx.extracted_paths
         paths = mock_ctx.extracted_paths["research"]
         assert any("2026-01-05-test.md" in p for p in paths)

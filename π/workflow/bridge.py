@@ -6,7 +6,6 @@ tools to invoke the async Claude Agent SDK.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import time
@@ -35,6 +34,7 @@ from π.workflow.context import (
     Command,
     _ctx,
     get_ctx,
+    get_event_loop,
 )
 
 if TYPE_CHECKING:
@@ -148,17 +148,6 @@ def _process_assistant_message(
     return block_text
 
 
-def _get_event_loop() -> asyncio.AbstractEventLoop:
-    """Get or create a reusable event loop for the current context."""
-    ctx = get_ctx()
-    if ctx.event_loop is not None and not ctx.event_loop.is_closed():
-        return ctx.event_loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    ctx.event_loop = loop
-    return loop
-
-
 def _get_agent_options() -> ClaudeAgentOptions:
     """Get agent options for the current context (evaluates cwd at runtime)."""
     ctx = get_ctx()
@@ -262,10 +251,10 @@ def _extract_doc_path(
 
 def _format_tool_result(
     *,
-    result: str,
-    session_id: str,
     doc_path: str | None,
+    session_id: str,
     tool_name: str,
+    result: str,
 ) -> str:
     """Format tool result for DSPy ReAct.
 
@@ -273,25 +262,24 @@ def _format_tool_result(
     DSPy ReAct handles continuation from response context.
 
     Args:
-        result: Raw result from Claude agent
-        session_id: Session ID for continuation
-        doc_path: Extracted document path (if any)
         tool_name: Name of the tool (unused, kept for interface stability)
+        doc_path: Extracted document path (if any)
+        session_id: Session ID for continuation
+        result: Raw result from Claude agent
 
     Returns:
-        Formatted result with completion marker or session context
+        Formatted result with session context
     """
-    if doc_path:
-        return (
-            f"[TASK_COMPLETE] Document saved: {doc_path}\n"
-            f"Proceed to produce output fields.\n\n"
-            f"{result}"
+    return "\n".join(
+        filter(
+            bool,
+            [
+                f"<doc_path>{doc_path}</doc_path>" if doc_path else "",
+                f"<session_id>{session_id}</session_id>",
+                f"<tool_name>{tool_name}</tool_name>",
+                f"<result>{result}</result>",
+            ],
         )
-    # No heuristic - let DSPy decide from context
-    return (
-        f"Session: {session_id} | Tool: {tool_name}\n"
-        f"Continue with follow-up if needed, or proceed to outputs.\n\n"
-        f"{result}"
     )
 
 
@@ -376,9 +364,18 @@ def execute_claude_task(
         ValueError: If tool_command is not in COMMAND_MAP
         AgentExecutionError: If agent execution fails
     """
+    ctx = get_ctx()
+    # We have noticed that the command (slash command) could also be in a different place
+    # as it gets picked up as a skill. We need to identify if this is a future desired
+    # behavior and if so, we need to update our slash commands to be skills as fallback.
+    # Maybe skills are a better fit for this anyway.
     command = COMMAND_MAP.get(tool_command)
     if not command:
         raise ValueError(f"Invalid tool command: {tool_command}")
+
+    # Prefix command with objective from context (only on initial calls)
+    if ctx.objective and not session_id:
+        command = f"{command}\n<objective>{ctx.objective}</objective>"
 
     if path_to_documents:
         paths_str = " ".join(str(p) for p in path_to_documents)
@@ -408,12 +405,10 @@ def execute_claude_task(
     logger.debug("Tool call: %s", command)
 
     # For debugging purposes
-    get_ctx().log_session_state()
+    ctx.log_session_state()
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
-    return _get_event_loop().run_until_complete(
-        _run_claude_session(command, session_id)
-    )
+    return get_event_loop().run_until_complete(_run_claude_session(command, session_id))
 
 
 def workflow_tool(

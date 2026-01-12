@@ -5,7 +5,6 @@ from typing import cast
 
 from claude_agent_sdk.types import HookContext, HookInput, HookJSONOutput
 
-from π.hooks.logging import log_event
 from π.hooks.registry import get_checker
 from π.hooks.utils import compact_path, console
 
@@ -33,24 +32,12 @@ async def check_file_format(
         return {}
 
     suffix = path.suffix.lower()
-    checker_info = get_checker(suffix)
-    if checker_info:
+    checker = get_checker(suffix)
+    if checker:
         console.print(f"🔍 Checking {compact_path(path)} (triggered by {tool_name})")
 
         # Run the checker
-        exit_code = checker_info.func(path, tool_name)
-
-        # Log the check result
-        log_event(
-            "[LANGUAGE_CHECK]",
-            {
-                "result": "passed" if exit_code == 0 else "failed",
-                "tool": tool_name or "unknown",
-                "file": compact_path(path),
-                "exit_code": exit_code,
-                "checker": suffix,
-            },
-        )
+        exit_code = checker(path, tool_name)
 
         # If checks failed (exit code 2), block the operation
         if exit_code == 2:

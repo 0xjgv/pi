@@ -5,30 +5,30 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from π.config import (
-    DEFAULT_MODELS,
     PROVIDER_MODELS,
     Provider,
     get_lm,
 )
 
 
-class TestThinkingModels:
-    """Tests for THINKING_MODELS constant."""
+class TestClaudeModels:
+    """Tests for Claude provider models."""
 
     def test_contains_all_levels(self):
         """Should have low, med, high levels."""
-        assert "low" in DEFAULT_MODELS
-        assert "med" in DEFAULT_MODELS
-        assert "high" in DEFAULT_MODELS
+        claude_models = PROVIDER_MODELS[Provider.Claude]
+        assert "low" in claude_models
+        assert "med" in claude_models
+        assert "high" in claude_models
 
     def test_models_are_strings(self):
         """All model values should be strings."""
-        for level, model in DEFAULT_MODELS.items():
+        for level, model in PROVIDER_MODELS[Provider.Claude].items():
             assert isinstance(model, str), f"{level} model is not a string"
 
     def test_models_contain_claude(self):
         """All models should be Claude models."""
-        for level, model in DEFAULT_MODELS.items():
+        for level, model in PROVIDER_MODELS[Provider.Claude].items():
             assert "claude" in model.lower(), f"{level} model doesn't contain 'claude'"
 
 

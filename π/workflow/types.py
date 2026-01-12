@@ -19,6 +19,48 @@ PLANS_DIR = "thoughts/shared/plans"
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 
+def _validate_doc_path(
+    v: str,
+    *,
+    required_dir: str,
+    rejected_dir: str | None,
+    doc_type: str,
+) -> str:
+    """Validate a document path.
+
+    Args:
+        v: Path string to validate
+        required_dir: Directory the path must contain
+        rejected_dir: Directory the path must not contain (None to skip check)
+        doc_type: Document type name for error messages
+
+    Returns:
+        Resolved absolute path string
+
+    Raises:
+        ValueError: If validation fails
+    """
+    if required_dir not in v:
+        msg = f"{doc_type.title()} document must be in {required_dir}/, got: {v}"
+        raise ValueError(msg)
+
+    if rejected_dir and rejected_dir in v:
+        raise ValueError(f"Got plan document when {doc_type} expected: {v}")
+
+    if not v.endswith(".md"):
+        raise ValueError(f"Document must be markdown (.md): {v}")
+
+    path = Path(v)
+    if not path.exists():
+        raise ValueError(f"{doc_type.title()} document does not exist: {v}")
+
+    if not DATE_PATTERN.match(path.name):
+        msg = f"{doc_type.title()} doc must start with YYYY-MM-DD: {path.name}"
+        raise ValueError(msg)
+
+    return str(path.resolve())
+
+
 class ResearchDocPath(BaseModel):
     """Type-safe research document path with validation."""
 
@@ -29,29 +71,9 @@ class ResearchDocPath(BaseModel):
     @classmethod
     def validate_research_path(cls, v: str) -> str:
         """Validate path is a research document."""
-        # 1. Directory check
-        if RESEARCH_DIR not in v:
-            raise ValueError(f"Research document must be in {RESEARCH_DIR}/, got: {v}")
-
-        # 2. Not a plan (explicit rejection)
-        if PLANS_DIR in v:
-            raise ValueError(f"Got plan document when research expected: {v}")
-
-        # 3. Extension check
-        if not v.endswith(".md"):
-            raise ValueError(f"Document must be markdown (.md): {v}")
-
-        # 4. Existence check
-        path = Path(v)
-        if not path.exists():
-            raise ValueError(f"Research document does not exist: {v}")
-
-        # 5. Date prefix check
-        filename = path.name
-        if not DATE_PATTERN.match(filename):
-            raise ValueError(f"Research doc must start with YYYY-MM-DD: {filename}")
-
-        return str(path.resolve())  # Normalize path
+        return _validate_doc_path(
+            v, required_dir=RESEARCH_DIR, rejected_dir=PLANS_DIR, doc_type="research"
+        )
 
 
 class PlanDocPath(BaseModel):
@@ -64,29 +86,9 @@ class PlanDocPath(BaseModel):
     @classmethod
     def validate_plan_path(cls, v: str) -> str:
         """Validate path is a plan document."""
-        # 1. Directory check
-        if PLANS_DIR not in v:
-            raise ValueError(f"Plan document must be in {PLANS_DIR}/, got: {v}")
-
-        # 2. Not research (explicit rejection)
-        if RESEARCH_DIR in v and PLANS_DIR not in v:
-            raise ValueError(f"Got research document when plan expected: {v}")
-
-        # 3. Extension check
-        if not v.endswith(".md"):
-            raise ValueError(f"Document must be markdown (.md): {v}")
-
-        # 4. Existence check
-        path = Path(v)
-        if not path.exists():
-            raise ValueError(f"Plan document does not exist: {v}")
-
-        # 5. Date prefix check (consistent with ResearchDocPath)
-        filename = path.name
-        if not DATE_PATTERN.match(filename):
-            raise ValueError(f"Plan doc must start with YYYY-MM-DD: {filename}")
-
-        return str(path.resolve())
+        return _validate_doc_path(
+            v, required_dir=PLANS_DIR, rejected_dir=None, doc_type="plan"
+        )
 
 
 class ResearchResult(BaseModel):

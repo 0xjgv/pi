@@ -9,7 +9,6 @@ from pathlib import Path
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
 from π.core import (
-    DEFAULT_MODELS,
     MAX_ITERS,
     PROVIDER_MODELS,
     STAGE_TIERS,
@@ -71,7 +70,6 @@ def get_agent_options(
 
 __all__ = [
     "AVAILABLE_TOOLS",
-    "DEFAULT_MODELS",
     "MAX_ITERS",
     "PROVIDER_MODELS",
     "STAGE_TIERS",

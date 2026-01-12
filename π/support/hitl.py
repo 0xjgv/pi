@@ -1,213 +1,227 @@
-"""Human-in-the-loop (HITL) providers for π workflow."""
+"""Question answering providers for π workflow.
+
+Provides a protocol and implementations for answering questions from workflow
+agents using autonomous (agent-based) mode.
+"""
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Protocol
 
-import dspy
-from rich.console import Console
-from rich.prompt import Prompt
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk.types import ResultMessage
 
-from π.core import Provider, Tier, get_lm
-from π.utils import speak
-from π.workflow.context import get_ctx
+from π.support.directory import get_project_root
+from π.workflow.context import get_ctx, get_event_loop
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Read-only tools for the answerer agent
+_ANSWERER_TOOLS = ["Read", "Glob", "Grep"]
 
-class HumanInputProvider(Protocol):
-    """Protocol for human input providers.
 
-    Implement this protocol to create custom HITL providers
-    for different interfaces (CLI, web, Slack, etc.).
+class QuestionAnswerer(Protocol):
+    """Protocol for question answering providers.
+
+    Implement this protocol to create custom answerers for different
+    interfaces (agent, CLI, web, Slack, etc.).
     """
 
-    def ask(self, question: str) -> str:
-        """Ask human a question and return their response.
+    def ask(self, questions: list[str]) -> list[str]:
+        """Answer one or more questions.
 
         Args:
-            question: The question to ask the human
+            questions: List of questions to answer
 
         Returns:
-            The human's response as a string
+            List of answers (same order as questions)
         """
         ...
 
 
-class ConsoleInputProvider:
-    """Console-based human input provider with validation.
+class AgentQuestionAnswerer:
+    """Agent-based question answerer with codebase access.
 
-    Uses Rich library for styled console output and input prompts.
+    Uses Claude SDK with read-only tools (Read, Glob, Grep) to explore
+    the codebase and answer questions autonomously.
     """
 
-    def __init__(
-        self,
-        console: Console | None = None,
-        *,
-        allow_empty: bool = False,
-        max_retries: int = 3,
-    ) -> None:
-        """Initialize with optional custom console and validation settings.
+    def __init__(self, *, cwd: Path | None = None) -> None:
+        """Initialize with optional working directory.
 
         Args:
-            console: Rich Console instance (creates default if None)
-            allow_empty: Whether to allow empty responses (default False)
-            max_retries: Max retries for empty response when not allowed
+            cwd: Working directory for codebase access (default: project root)
         """
-        self.console = console or Console()
-        self.allow_empty = allow_empty
-        self.max_retries = max_retries
+        self.cwd = cwd
+        self._answer_log: list[tuple[list[str], list[str]]] = []
 
-    def ask(self, question: str) -> str:
-        """Display question and get validated user input from console.
-
-        Args:
-            question: The question to display
-
-        Returns:
-            User's typed response
-        """
-        logger.debug("HITL question: %s", question)
-
-        # Match permissions.py formatting for consistent UX
-        self.console.print("\n[bold yellow]🤔 Clarification needed:[/bold yellow]")
-        self.console.print(f"  {question}\n")
-        speak("questions")  # Use same audio cue as permissions.py
-
-        retries = 0
-        while True:
-            response = Prompt.ask("[bold green]Your answer[/bold green]")
-
-            if response.strip() or self.allow_empty:
-                break
-
-            retries += 1
-            if retries >= self.max_retries:
-                logger.warning("Max retries reached, returning empty response")
-                response = "[No response after retries]"
-                break
-
-            self.console.print("[yellow]Please provide a non-empty response.[/yellow]")
-
-        logger.debug(
-            "HITL response: %s", response[:50] if len(response) > 50 else response
+    def _get_agent_options(self) -> ClaudeAgentOptions:
+        """Get agent options with read-only tool subset."""
+        cwd = self.cwd or get_project_root()
+        return ClaudeAgentOptions(
+            allowed_tools=_ANSWERER_TOOLS,
+            permission_mode="acceptEdits",
+            cwd=cwd,
         )
-        return response
 
-
-class AgentInputProvider:
-    """Agent-based input provider for autonomous question answering.
-
-    Reads workflow context from ExecutionContext and delegates
-    questions to an LM for autonomous decision-making.
-    """
-
-    def __init__(self, lm: dspy.LM | None = None) -> None:
-        """Initialize with optional language model.
+    def ask(self, questions: list[str]) -> list[str]:
+        """Answer questions using Claude agent with codebase access.
 
         Args:
-            lm: DSPy language model. If None, uses default from config.
-        """
-        self.lm = lm
-        self._answer_log: list[tuple[str, str]] = []  # (question, answer) pairs
-
-    def ask(self, question: str) -> str:
-        """Generate an answer using LM with workflow context.
-
-        Args:
-            question: The question from the workflow agent
+            questions: List of questions from the workflow agent
 
         Returns:
-            LM-generated answer based on workflow context
+            List of answers (same length as questions)
         """
-        logger.debug("AgentInputProvider question: %s", question)
+        logger.debug("AgentQuestionAnswerer: %d questions", len(questions))
 
         ctx = get_ctx()
-        lm = self.lm or get_lm(Provider.Claude, Tier.HIGH)
 
         # Build context from workflow state
-        context_parts = []
-        if ctx.objective:
-            context_parts.append(f"## Objective\n{ctx.objective}")
-        if ctx.current_stage:
-            context_parts.append(f"## Current Stage\n{ctx.current_stage}")
+        context_parts = self._build_context(ctx)
 
-        # Include document contents if available
-        for doc_type, doc_paths in ctx.extracted_paths.items():
-            for doc_path in doc_paths:
-                try:
-                    content = Path(doc_path).read_text(encoding="utf-8")
-                    if len(content) > 10000:
-                        content = content[:10000] + "\n... (truncated)"
-                    context_parts.append(f"## {doc_type.title()} Document\n{content}")
-                except OSError:
-                    logger.debug("Could not read %s document: %s", doc_type, doc_path)
+        # Format questions for the agent
+        questions_text = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(questions))
 
-        if context_parts:
-            context = "\n\n".join(context_parts)
-        else:
-            context = "(no context available)"
+        prompt = self._build_prompt(context_parts, questions_text, len(questions))
 
-        # Generate answer using DSPy
-        with dspy.context(lm=lm):
-            result = dspy.Predict("context: str, question: str -> answer: str")(
-                context=context,
-                question=question,
-            )
-            answer = result.answer
+        # Execute via async bridge
+        answers = self._execute_agent(prompt, len(questions))
 
-        truncated = answer[:100] if len(answer) > 100 else answer
-        logger.info("AgentInputProvider answer: %s", truncated)
-        self._answer_log.append((question, answer))
+        self._answer_log.append((questions.copy(), answers.copy()))
+        return answers
 
-        return answer
+    def _build_context(self, ctx: object) -> list[str]:
+        """Build context parts from execution context."""
+        parts = []
+        if hasattr(ctx, "objective") and ctx.objective:
+            parts.append(f"## Objective\n{ctx.objective}")
+        if hasattr(ctx, "current_stage") and ctx.current_stage:
+            parts.append(f"## Current Stage\n{ctx.current_stage}")
+
+        # Include document paths (agent can read them if needed)
+        if hasattr(ctx, "extracted_paths"):
+            for doc_type, doc_paths in ctx.extracted_paths.items():
+                if doc_paths:
+                    paths_str = "\n".join(f"- {p}" for p in doc_paths)
+                    parts.append(f"## {doc_type.title()} Documents\n{paths_str}")
+
+        return parts
+
+    def _build_prompt(
+        self,
+        context_parts: list[str],
+        questions_text: str,
+        count: int,
+    ) -> str:
+        """Build the agent prompt."""
+        context = "\n\n".join(context_parts) if context_parts else "(no context)"
+
+        return (
+            "You are answering questions from another agent "
+            "working on a codebase task.\n\n"
+            f"## Workflow Context\n{context}\n\n"
+            f"## Questions to Answer\n{questions_text}\n\n"
+            "## Instructions\n"
+            "1. Use Read, Glob, and Grep tools to explore the codebase as needed\n"
+            "2. Answer each question based on codebase evidence\n"
+            "3. Format your response as a numbered list matching the questions\n"
+            "4. Be concise but complete\n\n"
+            f"Respond with exactly {count} answer(s), one per line, "
+            "numbered to match the questions."
+        )
+
+    def _execute_agent(self, prompt: str, expected_count: int) -> list[str]:
+        """Execute Claude agent and parse answers."""
+
+        async def _run() -> str:
+            async with ClaudeSDKClient(options=self._get_agent_options()) as client:
+                await client.query(prompt)
+
+                result_text = ""
+                async for message in client.receive_response():
+                    if isinstance(message, ResultMessage):
+                        result_text = message.result or ""
+                        break
+
+                return result_text
+
+        # Get or create event loop
+        loop = get_event_loop()
+        result = loop.run_until_complete(_run())
+
+        return self._parse_answers(result, expected_count)
+
+    def _parse_answers(self, result: str, expected_count: int) -> list[str]:
+        """Parse numbered answers from agent response."""
+        lines = result.strip().split("\n")
+        answers = []
+
+        for raw_line in lines:
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            # Match "1. answer" or "1) answer" or "1: answer" patterns
+            match = re.match(r"^\d+[.):\s]+(.+)$", stripped)
+            if match:
+                answers.append(match.group(1).strip())
+            elif stripped.startswith("-"):
+                # Handle bullet point format
+                answers.append(stripped[1:].strip())
+
+        # Pad with placeholder if fewer answers than expected
+        while len(answers) < expected_count:
+            answers.append("(no answer)")
+
+        return answers[:expected_count]
 
     @property
-    def answers(self) -> list[tuple[str, str]]:
-        """Get log of all question/answer pairs for debugging."""
+    def answers(self) -> list[tuple[list[str], list[str]]]:
+        """Get log of all question/answer batches for debugging."""
         return self._answer_log.copy()
 
 
-def create_ask_user_question_tool(
-    default_provider: HumanInputProvider | None = None,
-) -> Callable[[str], str]:
-    """Create a DSPy-compatible ask_user_question tool.
+def create_ask_questions_tool(
+    default_answerer: QuestionAnswerer | None = None,
+) -> Callable[[list[str]], list[str]]:
+    """Create a DSPy-compatible ask_questions tool.
 
     Factory function that creates a callable that:
-    1. Checks ExecutionContext for a configured provider
-    2. Falls back to the default_provider if not set
-    3. Falls back to ConsoleInputProvider if no default
+    1. Checks ExecutionContext for a configured answerer
+    2. Falls back to the default_answerer if not set
+    3. Falls back to AgentQuestionAnswerer if no default
 
     Args:
-        default_provider: Fallback provider when context has none
+        default_answerer: Fallback answerer when context has none
 
     Returns:
         A callable function suitable for use as a DSPy tool
     """
-    fallback = default_provider or ConsoleInputProvider()
+    fallback = default_answerer or AgentQuestionAnswerer()
 
-    def ask_user_question(question: str) -> str:
-        """Ask user for clarification.
+    def ask_questions(questions: list[str]) -> list[str]:
+        """Ask questions and get answers from codebase-aware agent.
 
         Use this tool when:
         - The objective is ambiguous or unclear
-        - You need to confirm assumptions before proceeding
+        - You need to clarify assumptions before proceeding
         - Multiple valid interpretations exist
-        - Critical decisions require human approval
+        - You need information from the codebase to decide
 
         Args:
-            question: Clear, specific question for the user
+            questions: List of clear, specific questions
 
         Returns:
-            User's response (from human or agent depending on mode)
+            List of answers (same length as questions)
         """
         ctx = get_ctx()
-        provider = ctx.input_provider or fallback
-        return provider.ask(question)
+        answerer = ctx.input_provider or fallback
+        return answerer.ask(questions)
 
-    return ask_user_question
+    return ask_questions

@@ -6,6 +6,7 @@ and thread-safe context variable management.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -16,11 +17,9 @@ from typing import TYPE_CHECKING
 from π.workflow.types import PlanDocPath
 
 if TYPE_CHECKING:
-    import asyncio
-
     from claude_agent_sdk import ClaudeAgentOptions
 
-    from π.support.hitl import HumanInputProvider
+    from π.support.hitl import QuestionAnswerer
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +86,7 @@ class ExecutionContext:
     # Auto-answer support fields
     objective: str | None = None
     current_stage: str | None = None
-    input_provider: HumanInputProvider | None = None  # type: ignore[name-defined]
+    input_provider: QuestionAnswerer | None = None  # type: ignore[name-defined]
 
     def get_or_validate_plan_path(
         self,
@@ -144,3 +143,18 @@ def get_ctx() -> ExecutionContext:
         ctx = ExecutionContext()
         _ctx.set(ctx)
     return ctx
+
+
+def get_event_loop() -> asyncio.AbstractEventLoop:
+    """Get or create a reusable event loop for the current context.
+
+    Returns:
+        Event loop stored in ExecutionContext, creating one if needed.
+    """
+    ctx = get_ctx()
+    if ctx.event_loop is not None and not ctx.event_loop.is_closed():
+        return ctx.event_loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    ctx.event_loop = loop
+    return loop
