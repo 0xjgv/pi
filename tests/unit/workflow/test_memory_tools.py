@@ -8,7 +8,8 @@ from π.workflow.memory_tools import MemoryTools, search_memories, store_memory
 class TestMemoryTools:
     """Tests for MemoryTools class."""
 
-    def test_store_memory_success(self):
+    @patch("π.workflow.memory_tools._has_uncommitted_changes", return_value=True)
+    def test_store_memory_success(self, _mock_has_changes):
         mock_memory = MagicMock()
         tools = MemoryTools(mock_memory)
         tools.user_id = "test_repo"
@@ -20,7 +21,8 @@ class TestMemoryTools:
         call_args = mock_memory.add.call_args
         assert "[lesson_learned]" in call_args[0][0]
 
-    def test_store_memory_error(self):
+    @patch("π.workflow.memory_tools._has_uncommitted_changes", return_value=True)
+    def test_store_memory_error(self, _mock_has_changes):
         mock_memory = MagicMock()
         mock_memory.add.side_effect = Exception("Connection failed")
         tools = MemoryTools(mock_memory)
@@ -29,6 +31,17 @@ class TestMemoryTools:
         result = tools.store_memory("Test", "blocker")
 
         assert "Error" in result
+
+    @patch("π.workflow.memory_tools._has_uncommitted_changes", return_value=False)
+    def test_store_memory_skips_without_changes(self, _mock_has_changes):
+        mock_memory = MagicMock()
+        tools = MemoryTools(mock_memory)
+        tools.user_id = "test_repo"
+
+        result = tools.store_memory("Test", "insight")
+
+        assert "Skipped:" in result
+        mock_memory.add.assert_not_called()
 
     def test_search_returns_formatted_results(self):
         mock_memory = MagicMock()
