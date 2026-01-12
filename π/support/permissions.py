@@ -13,7 +13,7 @@ from claude_agent_sdk.types import (
 
 from π.console import console
 from π.state import get_current_status
-from π.utils import speak
+from π.utils import speak, truncate
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ async def _handle_ask_user_question(
             question_text = q.get("question", "")
             answers[question_text] = await _collect_answer(q)
 
-        logger.debug("User responded to AskUserQuestion: %s", str(answers)[:100])
+        logger.debug("User responded to AskUserQuestion: %s", truncate(str(answers)))
 
         return PermissionResultAllow(
             updated_input={"questions": questions, "answers": answers}
@@ -168,9 +168,8 @@ async def can_use_tool(
         return await _handle_ask_user_question(tool_input)
 
     # Log other tool calls
-    input_preview = (
-        str(tool_input)[:100] + "..." if len(str(tool_input)) > 100 else str(tool_input)
+    logger.debug(
+        "Allowing tool %s with input: %s", tool_name, truncate(str(tool_input))
     )
-    logger.debug("Allowing tool %s with input: %s", tool_name, input_preview)
 
     return PermissionResultAllow()

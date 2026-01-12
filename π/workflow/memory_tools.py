@@ -11,6 +11,7 @@ import subprocess
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from π.utils import truncate
 from π.workflow.memory import NoOpMemoryClient, get_memory_client
 
 if TYPE_CHECKING:
@@ -94,6 +95,12 @@ class MemoryTools:
         self.user_id = _get_repo_id()
         self._is_hosted = _is_hosted_client(memory)
 
+    def _user_filter(self, **extra: int) -> dict:
+        """Build API kwargs with correct user_id style for hosted vs self-hosted."""
+        if self._is_hosted:
+            return {"filters": {"user_id": self.user_id}, **extra}
+        return {"user_id": self.user_id, **extra}
+
     def store_memory(self, content: str, memory_type: str = "insight") -> str:
         """Store a learning or insight for future reference.
 
@@ -121,8 +128,9 @@ class MemoryTools:
         try:
             formatted = f"[{memory_type}] {content}"
             self.memory.add(formatted, user_id=self.user_id)
-            logger.debug("Stored memory: %s", content[:100])
-            return f"Stored: {content[:100]}..."
+            preview = truncate(content)
+            logger.debug("Stored memory: %s", preview)
+            return f"Stored: {preview}"
         except Exception as e:
             logger.error("Failed to store memory: %s", e)
             return f"Error storing memory: {e}"
@@ -143,14 +151,7 @@ class MemoryTools:
             search_memories("database migration problems")
         """
         try:
-            if self._is_hosted:
-                # Hosted API: uses filters= parameter
-                results = self.memory.search(
-                    query, filters={"user_id": self.user_id}, limit=limit
-                )
-            else:
-                # Self-hosted API: uses user_id= parameter directly
-                results = self.memory.search(query, user_id=self.user_id, limit=limit)
+            results = self.memory.search(query, **self._user_filter(limit=limit))
 
             if not results or not results.get("results"):
                 return "No relevant memories found."
@@ -175,12 +176,7 @@ class MemoryTools:
             Formatted list of all memories.
         """
         try:
-            if self._is_hosted:
-                # Hosted API: uses filters= parameter
-                results = self.memory.get_all(filters={"user_id": self.user_id})
-            else:
-                # Self-hosted API: uses user_id= parameter directly
-                results = self.memory.get_all(user_id=self.user_id)
+            results = self.memory.get_all(**self._user_filter())
 
             if not results or not results.get("results"):
                 return "No memories stored yet."

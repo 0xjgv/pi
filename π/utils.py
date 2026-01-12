@@ -63,3 +63,8 @@ def speak(text: str) -> None:
     if getenv("PYTEST_CURRENT_TEST"):
         return
     system(f"say '{text}'")
+
+
+def truncate(s: str, length: int = 100, suffix: str = "...") -> str:
+    """Truncate string to length, adding suffix if truncated."""
+    return s[:length] + suffix if len(s) > length else s

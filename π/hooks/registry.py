@@ -12,15 +12,11 @@ _registry: dict[str, CheckerFunc] = {}
 
 def language_checker(
     extensions: list[str],
-    scope: str = "file",  # noqa: ARG001 - kept for API compatibility
-    project_markers: list[str] | None = None,  # noqa: ARG001
 ) -> Callable[[CheckerFunc], CheckerFunc]:
     """Decorator to register functions as language checkers.
 
     Args:
         extensions: List of file extensions to handle (e.g., ['.py', '.pyx'])
-        scope: Unused, kept for API compatibility
-        project_markers: Unused, kept for API compatibility
 
     Returns:
         Decorator function

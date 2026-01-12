@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator
-
-# Type alias for document types used in path extraction
-DocType = Literal["plan", "research"]
 
 # Directory constants
 RESEARCH_DIR = "thoughts/shared/research"
@@ -61,34 +58,41 @@ def _validate_doc_path(
     return str(path.resolve())
 
 
-class ResearchDocPath(BaseModel):
+class _DocPath(BaseModel):
+    """Base class for document path validation."""
+
+    _required_dir: ClassVar[str]
+    _rejected_dir: ClassVar[str | None] = None
+    _doc_type: ClassVar[str]
+    path: str
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, v: str) -> str:
+        """Validate path using class-level configuration."""
+        return _validate_doc_path(
+            v,
+            required_dir=cls._required_dir,
+            rejected_dir=cls._rejected_dir,
+            doc_type=cls._doc_type,
+        )
+
+
+class ResearchDocPath(_DocPath):
     """Type-safe research document path with validation."""
 
+    _required_dir: ClassVar[str] = RESEARCH_DIR
+    _rejected_dir: ClassVar[str | None] = PLANS_DIR
+    _doc_type: ClassVar[str] = "research"
     doc_type: Literal["research"] = "research"
-    path: str
-
-    @field_validator("path")
-    @classmethod
-    def validate_research_path(cls, v: str) -> str:
-        """Validate path is a research document."""
-        return _validate_doc_path(
-            v, required_dir=RESEARCH_DIR, rejected_dir=PLANS_DIR, doc_type="research"
-        )
 
 
-class PlanDocPath(BaseModel):
+class PlanDocPath(_DocPath):
     """Type-safe plan document path with validation."""
 
+    _required_dir: ClassVar[str] = PLANS_DIR
+    _doc_type: ClassVar[str] = "plan"
     doc_type: Literal["plan"] = "plan"
-    path: str
-
-    @field_validator("path")
-    @classmethod
-    def validate_plan_path(cls, v: str) -> str:
-        """Validate path is a plan document."""
-        return _validate_doc_path(
-            v, required_dir=PLANS_DIR, rejected_dir=None, doc_type="plan"
-        )
 
 
 class ResearchResult(BaseModel):

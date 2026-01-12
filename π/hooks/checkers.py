@@ -153,13 +153,13 @@ def check_typescript(path: Path, _tool_name: str | None = None) -> int:
     return _run_checker(path, _TYPESCRIPT)
 
 
-@language_checker([".rs"], scope="project", project_markers=["Cargo.toml"])
+@language_checker([".rs"])
 def check_rust(path: Path, _tool_name: str | None = None) -> int:
     """Run Rust checks using cargo check."""
     return _run_checker(path, _RUST)
 
 
-@language_checker([".go"], scope="project", project_markers=["go.mod"])
+@language_checker([".go"])
 def check_go(path: Path, _tool_name: str | None = None) -> int:
     """Run Go checks using golangci-lint (preferred) or go vet (fallback)."""
     return _run_checker(path, _GO)

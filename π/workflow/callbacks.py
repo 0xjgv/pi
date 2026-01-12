@@ -11,6 +11,8 @@ from typing import Any
 
 from dspy.utils.callback import BaseCallback
 
+from π.utils import truncate
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,10 +20,7 @@ def _summarize_inputs(inputs: dict[str, Any]) -> str:
     """Summarize inputs for logging (truncate long values)."""
     parts = []
     for k, v in inputs.items():
-        val_str = str(v)
-        if len(val_str) > 100:
-            val_str = val_str[:100] + "..."
-        parts.append(f"{k}={val_str!r}")
+        parts.append(f"{k}={truncate(str(v))!r}")
     return ", ".join(parts)
 
 
@@ -105,24 +104,22 @@ class ReActLoggingCallback(BaseCallback):
             or outputs.get("rationale", "")
         )
         if thought:
-            thought_preview = thought[:500] + "..." if len(thought) > 500 else thought
-            logger.info("ReAct THOUGHT (%.2fs): %s", duration, thought_preview)
+            logger.info("ReAct THOUGHT (%.2fs): %s", duration, truncate(thought, 500))
 
     def _log_action(self, outputs: dict[str, Any], duration: float) -> None:
         """Log an action step."""
         tool_name = outputs.get("next_tool_name") or outputs.get("tool_name", "unknown")
         tool_args = outputs.get("next_tool_args") or outputs.get("tool_args", {})
-        args_str = str(tool_args)[:200]
-        logger.info("ReAct ACTION (%.2fs): %s(%s)", duration, tool_name, args_str)
+        logger.info(
+            "ReAct ACTION (%.2fs): %s(%s)",
+            duration,
+            tool_name,
+            truncate(str(tool_args), 200),
+        )
 
         # Log observation if present
         if observation := outputs.get("observation"):
-            obs_preview = (
-                str(observation)[:500] + "..."
-                if len(str(observation)) > 500
-                else str(observation)
-            )
-            logger.info("ReAct OBSERVATION: %s", obs_preview)
+            logger.info("ReAct OBSERVATION: %s", truncate(str(observation), 500))
 
     def _log_completion(
         self, outputs: dict[str, Any], duration: float, call_id: str
