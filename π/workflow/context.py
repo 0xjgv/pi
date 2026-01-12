@@ -30,7 +30,6 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 class Command(StrEnum):
     """Workflow stage commands."""
 
-    CLARIFY = "clarify"
     RESEARCH_CODEBASE = "research_codebase"
     REVIEW_PLAN = "review_plan"
     CREATE_PLAN = "create_plan"

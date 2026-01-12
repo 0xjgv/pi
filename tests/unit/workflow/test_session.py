@@ -16,15 +16,17 @@ class TestCommand:
 
     def test_has_all_workflow_stages(self):
         """Should define all workflow stages."""
-        assert Command.CLARIFY == "clarify"
         assert Command.RESEARCH_CODEBASE == "research_codebase"
         assert Command.CREATE_PLAN == "create_plan"
+        assert Command.REVIEW_PLAN == "review_plan"
         assert Command.ITERATE_PLAN == "iterate_plan"
+        assert Command.IMPLEMENT_PLAN == "implement_plan"
+        assert Command.COMMIT == "commit"
 
     def test_is_string_enum(self):
         """Command values should be usable as strings."""
-        assert str(Command.CLARIFY) == "clarify"
-        assert f"{Command.RESEARCH_CODEBASE}" == "research_codebase"
+        assert str(Command.RESEARCH_CODEBASE) == "research_codebase"
+        assert f"{Command.CREATE_PLAN}" == "create_plan"
 
 
 class TestBuildCommandMap:
@@ -36,27 +38,27 @@ class TestBuildCommandMap:
         assert result == {}
 
     def test_parses_numbered_command_files(self, tmp_path: Path):
-        """Should parse files like 0_clarify.md -> Command.CLARIFY."""
-        (tmp_path / "0_clarify.md").write_text("# Clarify")
+        """Should parse numbered command files to Command enum."""
         (tmp_path / "1_research_codebase.md").write_text("# Research")
+        (tmp_path / "2_create_plan.md").write_text("# Create Plan")
 
         result = build_command_map(command_dir=tmp_path)
 
-        assert Command.CLARIFY in result
-        assert result[Command.CLARIFY] == "/0_clarify"
         assert Command.RESEARCH_CODEBASE in result
         assert result[Command.RESEARCH_CODEBASE] == "/1_research_codebase"
+        assert Command.CREATE_PLAN in result
+        assert result[Command.CREATE_PLAN] == "/2_create_plan"
 
     def test_ignores_malformed_files(self, tmp_path: Path):
         """Should skip files that don't match pattern."""
         (tmp_path / "invalid.md").write_text("# Invalid")
         (tmp_path / "0_.md").write_text("# Empty name")
-        (tmp_path / "0_clarify.md").write_text("# Valid")
+        (tmp_path / "1_research_codebase.md").write_text("# Valid")
 
         result = build_command_map(command_dir=tmp_path)
 
         assert len(result) == 1
-        assert Command.CLARIFY in result
+        assert Command.RESEARCH_CODEBASE in result
 
     def test_ignores_unknown_commands(self, tmp_path: Path):
         """Should skip files with unknown command names."""
@@ -83,7 +85,7 @@ class TestExecutionContext:
         ctx.session_ids[Command.RESEARCH_CODEBASE] = "session-123"
 
         assert ctx.session_ids.get(Command.RESEARCH_CODEBASE) == "session-123"
-        assert ctx.session_ids.get(Command.CLARIFY) is None  # not set
+        assert ctx.session_ids.get(Command.CREATE_PLAN) is None  # not set
 
     def test_get_or_validate_plan_path_auto_selects_from_context(self, tmp_path):
         """Should auto-select most recent plan when no path provided."""
@@ -144,7 +146,7 @@ class TestExecutionContext:
         import logging
 
         ctx = ExecutionContext()
-        ctx.session_ids[Command.CLARIFY] = "test-id"
+        ctx.session_ids[Command.RESEARCH_CODEBASE] = "test-id"
         ctx.extracted_paths["research"] = {"/test/path.md"}
 
         with caplog.at_level(logging.DEBUG, logger="π.workflow.context"):
