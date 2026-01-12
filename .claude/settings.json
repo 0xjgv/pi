@@ -1,17 +1,4 @@
 {
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd /Users/juan/Code/0xjgv/pi && make quality-check"
-          }
-        ]
-      }
-    ]
-  },
   "alwaysThinkingEnabled": true,
   "includeCoAuthoredBy": false
 }

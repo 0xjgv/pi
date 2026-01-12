@@ -66,9 +66,9 @@ def _run_checker(path: Path, config: CheckerConfig) -> int:
 
 def _python_command(path: Path, _project_root: Path | None) -> tuple[list[str], str]:
     if shutil.which("uvx"):
-        return ["uvx", "ruff", "check", str(path)], "ruff"
+        return ["uvx", "ruff", "check", "--fix", str(path)], "ruff"
     if shutil.which("ruff"):
-        return ["ruff", "check", str(path)], "ruff"
+        return ["ruff", "check", "--fix", str(path)], "ruff"
     console.print("⚠️  Ruff not found")
     return None  # type: ignore[return-value]
 
