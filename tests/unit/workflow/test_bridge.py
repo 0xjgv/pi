@@ -304,6 +304,7 @@ class TestProcessAssistantMessage:
     def test_logs_tool_result_block(self):
         """Should call _log_tool_result for ToolResultBlock."""
         result_block = MagicMock(spec=ToolResultBlock)
+        result_block.tool_use_id = "tool-123"
         result_block.content = "Tool completed"
         result_block.is_error = False
 
@@ -319,6 +320,7 @@ class TestProcessAssistantMessage:
         text_block = MagicMock(spec=TextBlock)
         text_block.text = "Analysis: "
         tool_block = MagicMock(spec=ToolUseBlock)
+        tool_block.id = "tool-123"
         tool_block.name = "Read"
         tool_block.input = {}
 
@@ -693,6 +695,7 @@ class TestLogToolCall:
     def test_truncates_long_input(self):
         """Should truncate input longer than 2000 chars."""
         block = MagicMock(spec=ToolUseBlock)
+        block.id = "tool-123"
         block.name = "TestTool"
         block.input = {"data": "x" * 3000}
 
@@ -708,17 +711,20 @@ class TestLogToolResult:
     def test_shows_error_status(self):
         """Should show 'error' status for error results."""
         block = MagicMock(spec=ToolResultBlock)
+        block.tool_use_id = "tool-123"
         block.is_error = True
         block.content = "Failed to read file"
 
         with patch("π.workflow.bridge.logger") as mock_logger:
             _log_tool_result(block)
-            call_args = mock_logger.debug.call_args[0]
+            # Errors are logged at INFO level now
+            call_args = mock_logger.info.call_args[0]
             assert "error" in call_args[1]
 
     def test_shows_ok_status(self):
         """Should show 'ok' status for successful results."""
         block = MagicMock(spec=ToolResultBlock)
+        block.tool_use_id = "tool-123"
         block.is_error = False
         block.content = "File contents here"
 

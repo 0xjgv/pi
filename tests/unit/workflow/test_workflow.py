@@ -75,6 +75,7 @@ class TestLogHelpers:
         from claude_agent_sdk.types import ToolUseBlock
 
         block = MagicMock(spec=ToolUseBlock)
+        block.id = "tool-123"
         block.name = "TestTool"
         block.input = {"key": "value"}
 
@@ -91,6 +92,7 @@ class TestLogHelpers:
         from claude_agent_sdk.types import ToolUseBlock
 
         block = MagicMock(spec=ToolUseBlock)
+        block.id = "tool-124"
         block.name = "TestTool"
         block.input = {"data": "x" * 2100}  # 2100 chars exceeds 2000 limit
 
@@ -106,18 +108,23 @@ class TestLogHelpers:
         from claude_agent_sdk.types import ToolResultBlock
 
         success_block = MagicMock(spec=ToolResultBlock)
+        success_block.tool_use_id = "tool-123"
         success_block.is_error = False
         success_block.content = "Success"
 
         error_block = MagicMock(spec=ToolResultBlock)
+        error_block.tool_use_id = "tool-124"
         error_block.is_error = True
         error_block.content = "Failed"
 
+        # Non-important tool results logged at DEBUG, errors at INFO
         with caplog.at_level(logging.DEBUG, logger="π.workflow"):
             _log_tool_result(success_block)
             assert "[ok]" in caplog.text
 
             caplog.clear()
+
+        with caplog.at_level(logging.INFO, logger="π.workflow"):
             _log_tool_result(error_block)
             assert "[error]" in caplog.text
 

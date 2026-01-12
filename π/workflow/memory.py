@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import os
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from mem0 import Memory, MemoryClient
@@ -17,19 +17,50 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class NoOpMemoryClient:
+    """Fallback client when memory service is unavailable.
+
+    Returns empty results instead of raising errors, allowing workflows
+    to continue without memory functionality.
+    """
+
+    def __init__(self, reason: str = "Memory service unavailable") -> None:
+        self._reason = reason
+        logger.warning("Using NoOpMemoryClient: %s", reason)
+
+    def add(self, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        """No-op add that logs but doesn't store."""
+        logger.debug("NoOp: add() called but memory unavailable")
+        return {"id": None, "status": "skipped"}
+
+    def search(self, *_args: Any, **_kwargs: Any) -> dict[str, list[Any]]:
+        """Return empty results."""
+        return {"results": []}
+
+    def get_all(self, *_args: Any, **_kwargs: Any) -> dict[str, list[Any]]:
+        """Return empty results."""
+        return {"results": []}
+
+
 @lru_cache(maxsize=1)
-def get_memory_client() -> Memory | MemoryClient:
-    """Get configured Mem0 client.
+def get_memory_client() -> Memory | MemoryClient | NoOpMemoryClient:
+    """Get configured Mem0 client with fallback on failure.
 
     Mode selection based on environment:
     - If MEM0_API_KEY is set: Use Mem0 Platform (hosted)
     - Otherwise: Use self-hosted with cliproxy + ChromaDB
+    - On any error: Return NoOpMemoryClient for graceful degradation
     """
     mem0_api_key = os.getenv("MEM0_API_KEY")
 
-    if mem0_api_key:
-        return _get_hosted_client(mem0_api_key)
-    return _get_self_hosted_client()
+    try:
+        if mem0_api_key:
+            return _get_hosted_client(mem0_api_key)
+        return _get_self_hosted_client()
+    except ImportError as e:
+        return NoOpMemoryClient(f"mem0 not installed: {e}")
+    except Exception as e:
+        return NoOpMemoryClient(f"Initialization failed: {e}")
 
 
 def _get_hosted_client(api_key: str) -> MemoryClient:

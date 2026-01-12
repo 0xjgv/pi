@@ -10,6 +10,7 @@ import logging
 import dspy
 
 from π.core import MAX_ITERS
+from π.workflow.callbacks import react_logging_callback
 from π.workflow.context import get_ctx
 from π.workflow.memory_tools import search_memories, store_memory
 from π.workflow.module import DesignSignature, ExecuteSignature, ResearchSignature
@@ -57,7 +58,7 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
         max_iters=MAX_ITERS,
     )
 
-    with dspy.context(lm=lm):
+    with dspy.context(lm=lm, callbacks=[react_logging_callback]):
         result = agent(objective=objective)
 
     # Aggregate all research from tool calls during agent execution
@@ -145,7 +146,7 @@ def stage_design(
         max_iters=MAX_ITERS,
     )
 
-    with dspy.context(lm=lm):
+    with dspy.context(lm=lm, callbacks=[react_logging_callback]):
         result = agent(
             research_doc_paths=research_doc_paths,
             research_summaries=research_summaries,
@@ -190,7 +191,7 @@ def stage_execute(
         max_iters=MAX_ITERS,
     )
 
-    with dspy.context(lm=lm):
+    with dspy.context(lm=lm, callbacks=[react_logging_callback]):
         result = agent(
             plan_doc_path=plan_doc.path,
             objective=objective,
