@@ -14,10 +14,13 @@ class TestWorkflowIntegrationNoAPI:
 
     @pytest.fixture(autouse=True)
     def isolate_logging(self, tmp_path: Path) -> Generator[None]:
-        """Redirect logging to temporary directory."""
+        """Redirect logging to temporary directory and disable checkpoints."""
         mock_logs_dir = tmp_path / ".π" / "logs"
         mock_logs_dir.mkdir(parents=True)
-        with patch("π.cli.main.get_logs_dir", return_value=mock_logs_dir):
+        with (
+            patch("π.cli.main.get_logs_dir", return_value=mock_logs_dir),
+            patch("π.workflow.checkpoint.get_project_root", return_value=tmp_path),
+        ):
             yield
 
     @pytest.fixture(autouse=True)

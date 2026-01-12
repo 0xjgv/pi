@@ -12,6 +12,9 @@ from pydantic import BaseModel, Field, field_validator
 RESEARCH_DIR = "thoughts/shared/research"
 PLANS_DIR = "thoughts/shared/plans"
 
+# Document type discriminator
+DocType = Literal["plan", "research"]
+
 # Naming pattern: YYYY-MM-DD-description.md
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}")
 

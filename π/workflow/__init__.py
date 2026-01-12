@@ -1,6 +1,7 @@
 """Core workflow execution module."""
 
 from π.state import get_current_status
+from π.workflow.checkpoint import CheckpointManager, CheckpointState, WorkflowStage
 from π.workflow.context import (
     COMMAND_MAP,
     Command,
@@ -28,10 +29,13 @@ from π.workflow.tools import (
 
 __all__ = [
     "COMMAND_MAP",
+    "CheckpointManager",
+    "CheckpointState",
     "Command",
     "ExecutionContext",
     "MemoryTools",
     "StagedWorkflow",
+    "WorkflowStage",
     "ask_questions",
     "build_command_map",
     "commit_changes",

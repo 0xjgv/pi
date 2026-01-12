@@ -26,7 +26,12 @@ from claude_agent_sdk.types import (
 from π.config import get_agent_options
 from π.console import console
 from π.core import AgentExecutionError
-from π.state import set_current_status
+from π.state import (
+    ArtifactEvent,
+    emit_artifact_event,
+    is_live_display_active,
+    set_current_status,
+)
 from π.support.directory import get_project_root
 from π.utils import speak
 from π.workflow.context import (
@@ -54,13 +59,21 @@ def timed_phase(phase_name: str) -> Generator[None]:
     """Context manager that shows spinner during execution and timing after."""
     start = time.monotonic()
     logger.info(">>> Phase started: %s", phase_name)
+    emit_artifact_event(ArtifactEvent(event_type="phase_start", phase=phase_name))
 
-    with console.status(f"[bold cyan]{phase_name}...") as status:
-        set_current_status(status)
+    # Skip spinner if live display is active (it shows phase status)
+    if is_live_display_active():
         try:
             yield
         finally:
-            set_current_status(None)
+            pass
+    else:
+        with console.status(f"[bold cyan]{phase_name}...") as status:
+            set_current_status(status)
+            try:
+                yield
+            finally:
+                set_current_status(None)
 
     elapsed = time.monotonic() - start
     if elapsed < 60:
@@ -69,6 +82,9 @@ def timed_phase(phase_name: str) -> Generator[None]:
         mins, secs = divmod(int(elapsed), 60)
         time_str = f"{mins}m {secs}s"
 
+    emit_artifact_event(
+        ArtifactEvent(event_type="phase_end", phase=phase_name, elapsed=elapsed)
+    )
     logger.info("<<< Phase complete: %s (%s)", phase_name, time_str)
     console.print(f"[green]✓[/green] {phase_name} ({time_str})")
 
@@ -178,12 +194,29 @@ def _process_assistant_message(
                 and (file_path := block.input.get("file_path"))
             ):
                 tracker.on_tool_use(block.id, file_path)
+                emit_artifact_event(
+                    ArtifactEvent(
+                        event_type="file_start",
+                        path=file_path,
+                        doc_type=SessionWriteTracker._infer_doc_type(file_path),
+                    )
+                )
         elif isinstance(block, ToolResultBlock):
             _log_tool_result(block)
             if tracker:
+                # Capture pending info before on_tool_result pops it
+                pending_info = tracker._pending.get(block.tool_use_id)
                 tracker.on_tool_result(
                     block.tool_use_id, is_error=block.is_error or False
                 )
+                if pending_info:
+                    doc_type, path = pending_info
+                    event_type = "file_failed" if block.is_error else "file_done"
+                    emit_artifact_event(
+                        ArtifactEvent(
+                            event_type=event_type, path=path, doc_type=doc_type
+                        )
+                    )
     return block_text
 
 
