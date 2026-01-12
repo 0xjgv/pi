@@ -44,6 +44,37 @@ def _get_repo_id() -> str:
         return "default_repo"
 
 
+def _has_uncommitted_changes() -> bool:
+    """Check if there are uncommitted changes in the working tree.
+
+    Checks both staged and unstaged changes. Used to gate memory storage
+    so memories are only stored when actual code changes exist.
+
+    Returns:
+        True if there are uncommitted changes, False otherwise.
+    """
+    try:
+        # Check unstaged changes
+        unstaged = subprocess.run(
+            ["git", "diff", "--stat"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        # Check staged changes
+        staged = subprocess.run(
+            ["git", "diff", "--staged", "--stat"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return bool(unstaged.stdout.strip() or staged.stdout.strip())
+    except Exception:
+        return False  # Fail closed - no changes if git fails
+
+
 class MemoryTools:
     """Tools for storing and retrieving learnings across workflow iterations.
 
@@ -82,6 +113,11 @@ class MemoryTools:
                 "caveat"
             )
         """
+        # Gate on codebase changes - only store memories when code has been modified
+        if not _has_uncommitted_changes():
+            logger.debug("Skipping memory storage: no uncommitted changes")
+            return "Skipped: no codebase changes to associate with this memory."
+
         try:
             formatted = f"[{memory_type}] {content}"
             self.memory.add(formatted, user_id=self.user_id)

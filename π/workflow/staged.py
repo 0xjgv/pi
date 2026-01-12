@@ -53,7 +53,7 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     ctx.objective = objective
 
     agent = dspy.ReAct(
-        tools=[research_codebase, ask_questions, search_memories, store_memory],
+        tools=[research_codebase, ask_questions, search_memories],
         signature=ResearchSignature,
         max_iters=MAX_ITERS,
     )
@@ -140,7 +140,6 @@ def stage_design(
             iterate_plan,
             ask_questions,
             search_memories,
-            store_memory,
         ],
         signature=DesignSignature,
         max_iters=MAX_ITERS,
