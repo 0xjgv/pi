@@ -73,7 +73,7 @@ class TestFullWorkflowIntegration:
         main(["test objective"])
         captured = capsys.readouterr()
 
-        assert "[Workflow Mode]" in captured.out
+        assert "π Workflow" in captured.out
 
     def test_agent_options_flow_to_workflow(
         self,
@@ -93,7 +93,7 @@ class TestFullWorkflowIntegration:
             main(["test"])
             captured = capsys.readouterr()
 
-            assert "Workflow Mode" in captured.out
+            assert "π Workflow" in captured.out
 
     def test_error_handling_propagates(
         self,

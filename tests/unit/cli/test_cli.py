@@ -52,7 +52,7 @@ class TestMain:
         captured = capsys.readouterr()
 
         # Should not show help, should run workflow
-        assert "Workflow Mode" in captured.out
+        assert "π Workflow" in captured.out
 
     def test_runs_workflow_mode(
         self,
@@ -63,7 +63,7 @@ class TestMain:
         main(["test objective"])
         captured = capsys.readouterr()
 
-        assert "Workflow Mode" in captured.out
+        assert "π Workflow" in captured.out
 
     def test_uses_claude_provider(
         self,

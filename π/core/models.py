@@ -25,9 +25,6 @@ PROVIDER_MODELS: dict[Provider, dict[Tier, str]] = {
     },
 }
 
-# For backwards compatibility
-DEFAULT_MODELS = PROVIDER_MODELS[Provider.Claude]
-
 # Stage → Model tier mapping (only active stages)
 STAGE_TIERS: dict[Stage, Tier] = {
     Stage.RESEARCH_CODEBASE: Tier.HIGH,

@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import dspy
-
 from π.workflow.orchestrator import StagedWorkflow
 from π.workflow.types import ResearchDocPath, ResearchResult
 
@@ -122,66 +120,3 @@ class TestStagedWorkflowEarlyExit:
         assert result.status == "failed"
         assert "Design failed" in result.reason
         assert hasattr(result, "research_doc_paths")
-
-
-class TestObjectiveLoopStagedWorkflowIntegration:
-    """Tests for ObjectiveLoop using StagedWorkflow."""
-
-    @patch("π.workflow.loop.StagedWorkflow")
-    def test_uses_staged_workflow(self, mock_staged: MagicMock) -> None:
-        """Should instantiate StagedWorkflow with lm."""
-        from π.workflow.loop import ObjectiveLoop
-
-        mock_lm = MagicMock()
-        ObjectiveLoop(lm=mock_lm)
-
-        mock_staged.assert_called_once_with(lm=mock_lm)
-
-    @patch("π.workflow.loop.StagedWorkflow")
-    @patch("π.workflow.loop.save_state")
-    @patch("π.workflow.loop.load_state")
-    def test_handles_already_complete_status(
-        self,
-        mock_load: MagicMock,
-        mock_save: MagicMock,
-        mock_staged_class: MagicMock,
-        tmp_path,
-    ) -> None:
-        """Should mark task completed when status='already_complete'."""
-        from π.workflow.loop import (
-            LoopState,
-            ObjectiveLoop,
-            Task,
-            TaskStatus,
-        )
-
-        # Setup mock workflow
-        mock_workflow = MagicMock()
-        mock_workflow.return_value = dspy.Prediction(
-            status="already_complete",
-            reason="Feature already exists",
-            research_doc_paths=["/path/research.md"],
-        )
-        mock_staged_class.return_value = mock_workflow
-
-        # Create initial state with one task
-        task = Task(id="t1", description="Add feature")
-        state = LoopState(
-            objective="test",
-            tasks=[task],
-            max_iterations=2,
-        )
-        mock_load.return_value = state
-
-        # Run one iteration
-        loop = ObjectiveLoop(checkpoint_dir=tmp_path)
-        with (
-            patch.object(loop, "_decompose", return_value=state),
-            patch.object(loop, "_evaluate_progress", return_value=state),
-        ):
-            loop._execute_task(task, state)
-            loop._update_state(state, task, mock_workflow.return_value)
-
-        assert task.status == TaskStatus.COMPLETED
-        assert task.result == "Feature already exists"
-        assert task.commit_hash is None  # No commit for early-exit

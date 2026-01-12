@@ -10,12 +10,12 @@ import logging
 import dspy
 
 from π.core import MAX_ITERS
-from π.workflow.callbacks import LoggingCallback
+from π.workflow.callbacks import react_logging_callback
 from π.workflow.context import get_ctx
 from π.workflow.memory_tools import search_memories, store_memory
 from π.workflow.module import DesignSignature, ExecuteSignature, ResearchSignature
 from π.workflow.tools import (
-    ask_user_question,
+    ask_questions,
     commit_changes,
     create_plan,
     implement_plan,
@@ -33,9 +33,6 @@ from π.workflow.types import (
 
 logger = logging.getLogger(__name__)
 
-# Register logging callback globally (idempotent - safe to import multiple times)
-dspy.configure(callbacks=[LoggingCallback()])
-
 
 def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     """Research stage using ReAct agent.
@@ -50,18 +47,18 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     Raises:
         ValueError: If research did not produce a valid document.
     """
-    # Set context for ask_user_question
+    # Set context for ask_questions
     ctx = get_ctx()
     ctx.current_stage = "research"
     ctx.objective = objective
 
     agent = dspy.ReAct(
-        tools=[research_codebase, ask_user_question, search_memories, store_memory],
+        tools=[research_codebase, ask_questions, search_memories],
         signature=ResearchSignature,
         max_iters=MAX_ITERS,
     )
 
-    with dspy.context(lm=lm):
+    with dspy.context(lm=lm, callbacks=[react_logging_callback]):
         result = agent(objective=objective)
 
     # Aggregate all research from tool calls during agent execution
@@ -123,7 +120,7 @@ def stage_design(
     Raises:
         ValueError: If design did not produce a valid plan document.
     """
-    # Set context for ask_user_question (runtime state only)
+    # Set context for ask_questions (runtime state only)
     ctx = get_ctx()
     ctx.current_stage = "design"
     ctx.objective = objective
@@ -141,15 +138,14 @@ def stage_design(
             create_plan,
             review_plan,
             iterate_plan,
-            ask_user_question,
+            ask_questions,
             search_memories,
-            store_memory,
         ],
         signature=DesignSignature,
         max_iters=MAX_ITERS,
     )
 
-    with dspy.context(lm=lm):
+    with dspy.context(lm=lm, callbacks=[react_logging_callback]):
         result = agent(
             research_doc_paths=research_doc_paths,
             research_summaries=research_summaries,
@@ -182,19 +178,19 @@ def stage_execute(
     Returns:
         ExecuteResult from signature outputs.
     """
-    # Set context for ask_user_question
+    # Set context for ask_questions
     ctx = get_ctx()
     ctx.extracted_paths.setdefault("plan", set()).add(plan_doc.path)
     ctx.current_stage = "execute"
     ctx.objective = objective
 
     agent = dspy.ReAct(
-        tools=[implement_plan, commit_changes, ask_user_question, store_memory],
+        tools=[implement_plan, commit_changes, ask_questions, store_memory],
         signature=ExecuteSignature,
         max_iters=MAX_ITERS,
     )
 
-    with dspy.context(lm=lm):
+    with dspy.context(lm=lm, callbacks=[react_logging_callback]):
         result = agent(
             plan_doc_path=plan_doc.path,
             objective=objective,

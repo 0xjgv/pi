@@ -1,32 +1,55 @@
 """Language-specific code quality checkers."""
 
 import shutil
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
+from π.console import console
 from π.hooks.registry import language_checker
-from π.hooks.utils import compact_path, console, find_project_root, run_check_command
+from π.hooks.utils import compact_path, find_project_root, run_check_command
 
 
-@language_checker([".py", ".pyx"])
-def check_python(path: Path, tool_name: str | None = None) -> int:
-    """Run Python checks using ruff."""
-    console.print(f"🐍 Running Python checks for {compact_path(path)}...")
+@dataclass
+class CheckerConfig:
+    """Configuration for a language checker."""
 
-    if shutil.which("uvx"):
-        cmd = ["uvx", "ruff", "check", str(path)]
-    elif shutil.which("ruff"):
-        cmd = ["ruff", "check", str(path)]
-    else:
-        console.print("⚠️  Ruff not found")
+    emoji: str
+    language: str
+    project_markers: list[str]
+    get_command: Callable[[Path, Path | None], tuple[list[str], str] | None]
+
+
+def _run_checker(path: Path, config: CheckerConfig) -> int:
+    """Run a checker with the given configuration.
+
+    Args:
+        path: File path to check
+        config: Checker configuration
+
+    Returns:
+        Exit code (0=success, 2=failure)
+    """
+    project_root = None
+    if config.project_markers:
+        project_root = find_project_root(path.parent, config.project_markers)
+        if not project_root:
+            markers = ", ".join(config.project_markers)
+            console.print(f"⚠️  No {markers} found for {compact_path(path)}")
+            return 0
+
+    console.print(
+        f"{config.emoji} Running {config.language} checks for {compact_path(path)}..."
+    )
+
+    cmd_result = config.get_command(path, project_root)
+    if cmd_result is None:
         return 0
 
-    exit_code, stdout, stderr = run_check_command(
-        cwd=path.parent,
-        cmd=cmd,
-        name="ruff",
-        tool_name=tool_name,
-        file_path=str(path),
-    )
+    cmd, name = cmd_result
+    cwd = project_root or path.parent
+
+    exit_code, stdout, stderr = run_check_command(cwd=cwd, cmd=cmd, name=name)
 
     if exit_code != 0:
         output = stderr or stdout
@@ -34,19 +57,30 @@ def check_python(path: Path, tool_name: str | None = None) -> int:
             console.print(output, end="")
         return 2
 
-    console.print("✅ Python checks passed")
+    console.print(f"✅ {config.language} checks passed")
     return 0
 
 
-@language_checker([".ts", ".tsx", ".js", ".jsx"])
-def check_typescript(path: Path, tool_name: str | None = None) -> int:
-    """Run TypeScript/JavaScript checks using ESLint."""
-    project_root = find_project_root(path.parent, ["package.json"])
-    if not project_root:
-        console.print(f"⚠️  No package.json found for {compact_path(path)}")
-        return 0
+# --- Command builders ---
 
-    console.print(f"📦 Running TypeScript/JS checks for {compact_path(path)}...")
+
+def _python_command(
+    path: Path, _project_root: Path | None
+) -> tuple[list[str], str] | None:
+    if shutil.which("uvx"):
+        return ["uvx", "ruff", "check", "--fix", str(path)], "ruff"
+    if shutil.which("ruff"):
+        return ["ruff", "check", "--fix", str(path)], "ruff"
+    console.print("⚠️  Ruff not found")
+    return None
+
+
+def _typescript_command(
+    path: Path,
+    project_root: Path | None,
+) -> tuple[list[str], str] | None:
+    if not project_root:
+        return None
 
     eslint_configs = [
         "eslint.config.mjs",
@@ -57,86 +91,75 @@ def check_typescript(path: Path, tool_name: str | None = None) -> int:
     ]
     if not any((project_root / config).exists() for config in eslint_configs):
         console.print("⚠️  No ESLint configuration found")
-        return 0
+        return None
 
     relative_path = path.relative_to(project_root)
-    exit_code, stdout, stderr = run_check_command(
-        cwd=project_root,
-        cmd=["npx", "eslint", str(relative_path)],
-        name="eslint",
-        tool_name=tool_name,
-        file_path=str(path),
-    )
+    return ["npx", "eslint", str(relative_path)], "eslint"
 
-    if exit_code != 0:
-        output = stderr or stdout
-        if output:
-            console.print(output, end="")
-        return 2
 
-    console.print("✅ TypeScript/JS checks passed")
-    return 0
+def _rust_command(_path: Path, _project_root: Path | None) -> tuple[list[str], str]:
+    return ["cargo", "check"], "cargo check"
+
+
+def _go_command(_path: Path, _project_root: Path | None) -> tuple[list[str], str]:
+    if shutil.which("golangci-lint"):
+        return ["golangci-lint", "run", "./..."], "golangci-lint"
+    return ["go", "vet", "./..."], "go vet"
+
+
+# --- Checker configurations ---
+
+_PYTHON = CheckerConfig(
+    get_command=_python_command,
+    project_markers=[],
+    language="Python",
+    emoji="🐍",
+)
+
+_TYPESCRIPT = CheckerConfig(
+    project_markers=["package.json"],
+    get_command=_typescript_command,
+    language="TypeScript/JS",
+    emoji="📦",
+)
+
+_RUST = CheckerConfig(
+    project_markers=["Cargo.toml"],
+    get_command=_rust_command,
+    language="Rust",
+    emoji="🦀",
+)
+
+_GO = CheckerConfig(
+    project_markers=["go.mod"],
+    get_command=_go_command,
+    language="Go",
+    emoji="🔵",
+)
+
+
+# --- Registered checkers ---
+
+
+@language_checker([".py", ".pyx"])
+def check_python(path: Path, _tool_name: str | None = None) -> int:
+    """Run Python checks using ruff."""
+    return _run_checker(path, _PYTHON)
+
+
+@language_checker([".ts", ".tsx", ".js", ".jsx"])
+def check_typescript(path: Path, _tool_name: str | None = None) -> int:
+    """Run TypeScript/JavaScript checks using ESLint."""
+    return _run_checker(path, _TYPESCRIPT)
 
 
 @language_checker([".rs"], scope="project", project_markers=["Cargo.toml"])
-def check_rust(path: Path, tool_name: str | None = None) -> int:
+def check_rust(path: Path, _tool_name: str | None = None) -> int:
     """Run Rust checks using cargo check."""
-    project_root = find_project_root(path.parent, ["Cargo.toml"])
-    if not project_root:
-        console.print(f"⚠️  No Cargo.toml found for {compact_path(path)}")
-        return 0
-
-    console.print(f"🦀 Running Rust checks for {compact_path(path)}...")
-
-    exit_code, stdout, stderr = run_check_command(
-        cwd=project_root,
-        cmd=["cargo", "check"],
-        name="cargo check",
-        tool_name=tool_name,
-        file_path=str(path),
-    )
-
-    if exit_code != 0:
-        output = stderr or stdout
-        if output:
-            console.print(output, end="")
-        return 2
-
-    console.print("✅ Rust checks passed")
-    return 0
+    return _run_checker(path, _RUST)
 
 
 @language_checker([".go"], scope="project", project_markers=["go.mod"])
-def check_go(path: Path, tool_name: str | None = None) -> int:
+def check_go(path: Path, _tool_name: str | None = None) -> int:
     """Run Go checks using golangci-lint (preferred) or go vet (fallback)."""
-    project_root = find_project_root(path.parent, ["go.mod"])
-    if not project_root:
-        console.print(f"⚠️  No go.mod found for {compact_path(path)}")
-        return 0
-
-    console.print(f"🔵 Running Go checks for {compact_path(path)}...")
-
-    # Prefer golangci-lint, fall back to go vet
-    if shutil.which("golangci-lint"):
-        cmd = ["golangci-lint", "run", "./..."]
-        name = "golangci-lint"
-    else:
-        cmd = ["go", "vet", "./..."]
-        name = "go vet"
-
-    exit_code, stdout, stderr = run_check_command(
-        cwd=project_root,
-        cmd=cmd,
-        name=name,
-        tool_name=tool_name,
-        file_path=str(path),
-    )
-
-    if exit_code != 0:
-        output = stderr or stdout
-        if output:
-            console.print(output, end="")
-        return 2
-
-    console.print("✅ Go checks passed")
-    return 0
+    return _run_checker(path, _GO)

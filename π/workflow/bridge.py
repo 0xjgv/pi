@@ -6,7 +6,6 @@ tools to invoke the async Claude Agent SDK.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import time
@@ -23,9 +22,9 @@ from claude_agent_sdk.types import (
     ToolResultBlock,
     ToolUseBlock,
 )
-from rich.console import Console
 
 from π.config import get_agent_options
+from π.console import console
 from π.core import AgentExecutionError
 from π.state import set_current_status
 from π.support.directory import get_project_root
@@ -35,6 +34,7 @@ from π.workflow.context import (
     Command,
     _ctx,
     get_ctx,
+    get_event_loop,
 )
 
 if TYPE_CHECKING:
@@ -46,9 +46,7 @@ if TYPE_CHECKING:
 # Re-export _ctx for backwards compatibility (tests import it from bridge.py)
 __all__ = ["_ctx"]
 
-# Logger and Console for the workflow
 logger = logging.getLogger(__name__)
-console = Console()
 
 
 @contextmanager
@@ -76,22 +74,63 @@ def timed_phase(phase_name: str) -> Generator[None]:
 
 
 def _log_tool_call(block: ToolUseBlock) -> None:
-    """Log tool invocation details (skips read-only tools)."""
+    """Log tool invocation details with timing start."""
+    # Start timing for all tools
+    _tool_timing.start(block.id, block.name)
+
+    # Skip logging for read-only tools (reduce noise)
     if block.name in _READ_TOOLS:
         return
+
     input_str = str(block.input)
-    input_preview = input_str[:2000] + "..." if len(input_str) > 2000 else input_str
-    logger.debug("Tool: %s | Input: %s", block.name, input_preview)
+
+    # Full logging for important tools (Skill, Task, Write, Edit)
+    if block.name in _FULL_LOG_TOOLS:
+        truncated = len(input_str) > _MAX_PAYLOAD_SIZE
+        input_preview = (
+            input_str[:_MAX_PAYLOAD_SIZE] + "..." if truncated else input_str
+        )
+        logger.info(
+            "Tool START: %s | Input (%d chars%s): %s",
+            block.name,
+            len(input_str),
+            ", truncated" if truncated else "",
+            input_preview,
+        )
+    else:
+        # Standard logging for other tools
+        input_preview = input_str[:2000] + "..." if len(input_str) > 2000 else input_str
+        logger.debug("Tool: %s | Input: %s", block.name, input_preview)
 
 
 def _log_tool_result(block: ToolResultBlock) -> None:
-    """Log tool result details."""
+    """Log tool result details with timing."""
+    duration, tool_name = _tool_timing.end(block.tool_use_id)
+    duration_str = f" ({duration:.2f}s)" if duration else ""
     status = "error" if block.is_error else "ok"
     content_str = str(block.content)
-    content_preview = (
-        content_str[:300] + "..." if len(content_str) > 300 else content_str
-    )
-    logger.debug("Tool result [%s]: %s", status, content_preview)
+
+    # Full logging for important tools or errors
+    if tool_name in _FULL_LOG_TOOLS or block.is_error:
+        truncated = len(content_str) > _MAX_PAYLOAD_SIZE
+        content_preview = (
+            content_str[:_MAX_PAYLOAD_SIZE] + "..." if truncated else content_str
+        )
+        logger.info(
+            "Tool END [%s]%s: %s (%d chars%s): %s",
+            status,
+            duration_str,
+            tool_name or "unknown",
+            len(content_str),
+            ", truncated" if truncated else "",
+            content_preview,
+        )
+    else:
+        # Standard logging for other tools
+        content_preview = (
+            content_str[:300] + "..." if len(content_str) > 300 else content_str
+        )
+        logger.debug("Tool result [%s]%s: %s", status, duration_str, content_preview)
 
 
 def _log_result_metrics(message: ResultMessage) -> None:
@@ -148,17 +187,6 @@ def _process_assistant_message(
     return block_text
 
 
-def _get_event_loop() -> asyncio.AbstractEventLoop:
-    """Get or create a reusable event loop for the current context."""
-    ctx = get_ctx()
-    if ctx.event_loop is not None and not ctx.event_loop.is_closed():
-        return ctx.event_loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    ctx.event_loop = loop
-    return loop
-
-
 def _get_agent_options() -> ClaudeAgentOptions:
     """Get agent options for the current context (evaluates cwd at runtime)."""
     ctx = get_ctx()
@@ -181,6 +209,36 @@ _FILE_WRITE_TOOLS = frozenset({"Write", "Edit"})
 # Read-only tools excluded from debug logs to reduce noise.
 # These don't mutate state, and SessionWriteTracker already captures writes explicitly.
 _READ_TOOLS = frozenset({"Read", "Glob", "LS", "Grep"})
+
+# Tools that receive full context logging (important for debugging agent decisions)
+_FULL_LOG_TOOLS = frozenset({"Skill", "Task", "Write", "Edit"})
+
+# Maximum payload size before truncation (10KB)
+_MAX_PAYLOAD_SIZE = 10 * 1024
+
+
+@dataclass
+class ToolTimingTracker:
+    """Tracks tool execution timing for duration logging."""
+
+    _start_times: dict[str, float] = field(default_factory=dict)
+    _tool_names: dict[str, str] = field(default_factory=dict)
+
+    def start(self, tool_use_id: str, tool_name: str) -> None:
+        """Record start time for a tool invocation."""
+        self._start_times[tool_use_id] = time.perf_counter()
+        self._tool_names[tool_use_id] = tool_name
+
+    def end(self, tool_use_id: str) -> tuple[float | None, str | None]:
+        """Get duration and tool name for a completed tool invocation."""
+        start = self._start_times.pop(tool_use_id, None)
+        tool_name = self._tool_names.pop(tool_use_id, None)
+        duration = time.perf_counter() - start if start else None
+        return duration, tool_name
+
+
+# Module-level timing tracker
+_tool_timing = ToolTimingTracker()
 
 
 @dataclass
@@ -262,10 +320,10 @@ def _extract_doc_path(
 
 def _format_tool_result(
     *,
-    result: str,
-    session_id: str,
     doc_path: str | None,
+    session_id: str,
     tool_name: str,
+    result: str,
 ) -> str:
     """Format tool result for DSPy ReAct.
 
@@ -273,25 +331,24 @@ def _format_tool_result(
     DSPy ReAct handles continuation from response context.
 
     Args:
-        result: Raw result from Claude agent
-        session_id: Session ID for continuation
-        doc_path: Extracted document path (if any)
         tool_name: Name of the tool (unused, kept for interface stability)
+        doc_path: Extracted document path (if any)
+        session_id: Session ID for continuation
+        result: Raw result from Claude agent
 
     Returns:
-        Formatted result with completion marker or session context
+        Formatted result with session context
     """
-    if doc_path:
-        return (
-            f"[TASK_COMPLETE] Document saved: {doc_path}\n"
-            f"Proceed to produce output fields.\n\n"
-            f"{result}"
+    return "\n".join(
+        filter(
+            bool,
+            [
+                f"<doc_path>{doc_path}</doc_path>" if doc_path else "",
+                f"<session_id>{session_id}</session_id>",
+                f"<tool_name>{tool_name}</tool_name>",
+                f"<result>{result}</result>",
+            ],
         )
-    # No heuristic - let DSPy decide from context
-    return (
-        f"Session: {session_id} | Tool: {tool_name}\n"
-        f"Continue with follow-up if needed, or proceed to outputs.\n\n"
-        f"{result}"
     )
 
 
@@ -376,9 +433,16 @@ def execute_claude_task(
         ValueError: If tool_command is not in COMMAND_MAP
         AgentExecutionError: If agent execution fails
     """
+    ctx = get_ctx()
+    # The command (slash command) could also be picked up as a skill.
+    # TODO: Identify if skills should be the fallback for slash commands.
     command = COMMAND_MAP.get(tool_command)
     if not command:
         raise ValueError(f"Invalid tool command: {tool_command}")
+
+    # Prefix command with objective from context (only on initial calls)
+    if ctx.objective and not session_id:
+        command = f"{command}\n<objective>{ctx.objective}</objective>"
 
     if path_to_documents:
         paths_str = " ".join(str(p) for p in path_to_documents)
@@ -408,20 +472,18 @@ def execute_claude_task(
     logger.debug("Tool call: %s", command)
 
     # For debugging purposes
-    get_ctx().log_session_state()
+    ctx.log_session_state()
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
-    return _get_event_loop().run_until_complete(
-        _run_claude_session(command, session_id)
-    )
+    return get_event_loop().run_until_complete(_run_claude_session(command, session_id))
 
 
 def workflow_tool(
     command: Command,
     *,
-    phase_name: str,
     doc_type: DocType | None = None,
     validate_plan: bool = False,
+    phase_name: str,
 ) -> Callable[
     [Callable[..., tuple[str, str, SessionWriteTracker]]], Callable[..., str]
 ]:

@@ -16,7 +16,7 @@ class TestCheckPython:
             patch("π.hooks.checkers.run_check_command") as mock_run,
         ):
             mock_run.return_value = (0, "All checks passed", "")
-            result = check_python(python_file, tool_name="Edit")
+            result = check_python(python_file)
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args.kwargs["cmd"]
@@ -35,7 +35,7 @@ class TestCheckPython:
             patch("π.hooks.checkers.run_check_command") as mock_run,
         ):
             mock_run.return_value = (0, "Success", "")
-            result = check_python(python_file, tool_name="Write")
+            result = check_python(python_file)
 
         cmd = mock_run.call_args.kwargs["cmd"]
         assert cmd[0] == "ruff"

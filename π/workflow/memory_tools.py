@@ -11,12 +11,20 @@ import subprocess
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from π.workflow.memory import get_memory_client
+from π.workflow.memory import NoOpMemoryClient, get_memory_client
 
 if TYPE_CHECKING:
     from mem0 import Memory, MemoryClient
 
 logger = logging.getLogger(__name__)
+
+
+def _is_hosted_client(memory: Memory | MemoryClient | NoOpMemoryClient) -> bool:
+    """Check if memory is a hosted MemoryClient.
+
+    MemoryClient (hosted) has 'api_key' attribute, Memory (self-hosted) does not.
+    """
+    return hasattr(memory, "api_key")
 
 
 @lru_cache(maxsize=1)
@@ -36,6 +44,37 @@ def _get_repo_id() -> str:
         return "default_repo"
 
 
+def _has_uncommitted_changes() -> bool:
+    """Check if there are uncommitted changes in the working tree.
+
+    Checks both staged and unstaged changes. Used to gate memory storage
+    so memories are only stored when actual code changes exist.
+
+    Returns:
+        True if there are uncommitted changes, False otherwise.
+    """
+    try:
+        # Check unstaged changes
+        unstaged = subprocess.run(
+            ["git", "diff", "--stat"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        # Check staged changes
+        staged = subprocess.run(
+            ["git", "diff", "--staged", "--stat"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return bool(unstaged.stdout.strip() or staged.stdout.strip())
+    except Exception:
+        return False  # Fail closed - no changes if git fails
+
+
 class MemoryTools:
     """Tools for storing and retrieving learnings across workflow iterations.
 
@@ -50,9 +89,10 @@ class MemoryTools:
     - caveat: Things to watch out for or keep in mind
     """
 
-    def __init__(self, memory: Memory | MemoryClient) -> None:
+    def __init__(self, memory: Memory | MemoryClient | NoOpMemoryClient) -> None:
         self.memory = memory
         self.user_id = _get_repo_id()
+        self._is_hosted = _is_hosted_client(memory)
 
     def store_memory(self, content: str, memory_type: str = "insight") -> str:
         """Store a learning or insight for future reference.
@@ -73,6 +113,11 @@ class MemoryTools:
                 "caveat"
             )
         """
+        # Gate on codebase changes - only store memories when code has been modified
+        if not _has_uncommitted_changes():
+            logger.debug("Skipping memory storage: no uncommitted changes")
+            return "Skipped: no codebase changes to associate with this memory."
+
         try:
             formatted = f"[{memory_type}] {content}"
             self.memory.add(formatted, user_id=self.user_id)
@@ -98,7 +143,14 @@ class MemoryTools:
             search_memories("database migration problems")
         """
         try:
-            results = self.memory.search(query, user_id=self.user_id, limit=limit)
+            if self._is_hosted:
+                # Hosted API: uses filters= parameter
+                results = self.memory.search(
+                    query, filters={"user_id": self.user_id}, limit=limit
+                )
+            else:
+                # Self-hosted API: uses user_id= parameter directly
+                results = self.memory.search(query, user_id=self.user_id, limit=limit)
 
             if not results or not results.get("results"):
                 return "No relevant memories found."
@@ -123,7 +175,12 @@ class MemoryTools:
             Formatted list of all memories.
         """
         try:
-            results = self.memory.get_all(user_id=self.user_id)
+            if self._is_hosted:
+                # Hosted API: uses filters= parameter
+                results = self.memory.get_all(filters={"user_id": self.user_id})
+            else:
+                # Self-hosted API: uses user_id= parameter directly
+                results = self.memory.get_all(user_id=self.user_id)
 
             if not results or not results.get("results"):
                 return "No memories stored yet."

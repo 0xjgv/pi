@@ -51,36 +51,9 @@ class TestLogCleanupIntegration:
             captured = capsys.readouterr()
 
         # Verify cleanup occurred
-        assert "Workflow Mode" in captured.out
+        assert "π Workflow" in captured.out
         assert not old_log.exists(), "Old log should be deleted"
         assert recent_log.exists(), "Recent log should be preserved"
-
-    def test_hook_logs_cleaned_on_direct_call(
-        self,
-        log_dir: Path,
-    ):
-        """Hook cleanup function should delete old logs when called directly."""
-        from datetime import datetime, timedelta
-
-        from π.hooks.logging import cleanup_old_hook_logs
-
-        # Create old hook log file (40 days ago)
-        old_date = datetime.now() - timedelta(days=40)
-        old_hook_log = log_dir / f"{old_date.strftime('%Y-%m-%d')}-hooks.log"
-        old_hook_log.write_text("old hook log content")
-
-        # Create recent hook log file (15 days ago)
-        recent_date = datetime.now() - timedelta(days=15)
-        recent_hook_log = log_dir / f"{recent_date.strftime('%Y-%m-%d')}-hooks.log"
-        recent_hook_log.write_text("recent hook log content")
-
-        # Call cleanup directly
-        deleted = cleanup_old_hook_logs(retention_days=30)
-
-        # Verify cleanup occurred
-        assert deleted == 1, "Should have deleted 1 file"
-        assert not old_hook_log.exists(), "Old hook log should be deleted"
-        assert recent_hook_log.exists(), "Recent hook log should be preserved"
 
     def test_cleanup_creates_no_errors_with_empty_dirs(
         self,
@@ -110,4 +83,4 @@ class TestLogCleanupIntegration:
             captured = capsys.readouterr()
 
         # Should complete successfully with no errors
-        assert "Workflow Mode" in captured.out
+        assert "π Workflow" in captured.out

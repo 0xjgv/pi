@@ -18,13 +18,13 @@ from π.workflow import (
 from π.workflow.bridge import (
     SessionWriteTracker,
     _get_agent_options,
-    _get_event_loop,
     _log_result_metrics,
     _log_tool_call,
     _log_tool_result,
     get_ctx,
     timed_phase,
 )
+from π.workflow.context import get_event_loop
 
 # Module-level tracker for fixture use (ensures SessionWriteTracker import is used)
 _MOCK_TRACKER = SessionWriteTracker()
@@ -75,6 +75,7 @@ class TestLogHelpers:
         from claude_agent_sdk.types import ToolUseBlock
 
         block = MagicMock(spec=ToolUseBlock)
+        block.id = "tool-123"
         block.name = "TestTool"
         block.input = {"key": "value"}
 
@@ -91,6 +92,7 @@ class TestLogHelpers:
         from claude_agent_sdk.types import ToolUseBlock
 
         block = MagicMock(spec=ToolUseBlock)
+        block.id = "tool-124"
         block.name = "TestTool"
         block.input = {"data": "x" * 2100}  # 2100 chars exceeds 2000 limit
 
@@ -106,18 +108,23 @@ class TestLogHelpers:
         from claude_agent_sdk.types import ToolResultBlock
 
         success_block = MagicMock(spec=ToolResultBlock)
+        success_block.tool_use_id = "tool-123"
         success_block.is_error = False
         success_block.content = "Success"
 
         error_block = MagicMock(spec=ToolResultBlock)
+        error_block.tool_use_id = "tool-124"
         error_block.is_error = True
         error_block.content = "Failed"
 
+        # Non-important tool results logged at DEBUG, errors at INFO
         with caplog.at_level(logging.DEBUG, logger="π.workflow"):
             _log_tool_result(success_block)
             assert "[ok]" in caplog.text
 
             caplog.clear()
+
+        with caplog.at_level(logging.INFO, logger="π.workflow"):
             _log_tool_result(error_block)
             assert "[error]" in caplog.text
 
@@ -149,7 +156,7 @@ class TestContextVarHelpers:
 
     def test_get_event_loop_creates_new_loop(self, fresh_execution_context):
         """Should create a new event loop if none exists."""
-        loop = _get_event_loop()
+        loop = get_event_loop()
 
         assert isinstance(loop, asyncio.AbstractEventLoop)
         assert not loop.is_closed()
@@ -159,8 +166,8 @@ class TestContextVarHelpers:
 
     def test_get_event_loop_reuses_existing(self, fresh_execution_context):
         """Should reuse existing loop if not closed."""
-        loop1 = _get_event_loop()
-        loop2 = _get_event_loop()
+        loop1 = get_event_loop()
+        loop2 = get_event_loop()
 
         assert loop1 is loop2
 
@@ -205,9 +212,8 @@ class TestWorkflowFunctions:
         """Should return result with session ID."""
         result = research_codebase(query="test query")
 
-        # With doc_type set, result should contain session context or TASK_COMPLETE
-        assert "Session:" in result or "[TASK_COMPLETE]" in result
-        assert "session-123" in result
+        # Result should contain session context in XML format
+        assert "<session_id>session-123</session_id>" in result
 
     def test_research_codebase_passes_query(self, mock_execute_task: MagicMock):
         """Should pass query to execute task."""

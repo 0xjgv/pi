@@ -3,31 +3,10 @@
 from pathlib import Path
 
 from π.hooks.registry import (
-    LanguageChecker,
     _registry,
     get_checker,
     language_checker,
 )
-
-
-class TestLanguageChecker:
-    """Tests for LanguageChecker dataclass."""
-
-    def test_stores_func_and_metadata(self):
-        """Should store function, scope, and project markers."""
-
-        def dummy_checker(_path: Path, _tool_name: str | None = None) -> int:
-            return 0
-
-        checker = LanguageChecker(
-            func=dummy_checker,
-            scope="project",
-            project_markers=["Cargo.toml"],
-        )
-
-        assert checker.func is dummy_checker
-        assert checker.scope == "project"
-        assert checker.project_markers == ["Cargo.toml"]
 
 
 class TestLanguageCheckerDecorator:
@@ -41,7 +20,7 @@ class TestLanguageCheckerDecorator:
             return 0
 
         assert ".test" in _registry
-        assert _registry[".test"].func is test_checker
+        assert _registry[".test"] is test_checker
 
     def test_registers_multiple_extensions(self, clean_registry: None):
         """Should register function for multiple extensions."""
@@ -53,7 +32,7 @@ class TestLanguageCheckerDecorator:
         assert ".a" in _registry
         assert ".b" in _registry
         assert ".c" in _registry
-        assert _registry[".a"].func is multi_checker
+        assert _registry[".a"] is multi_checker
 
     def test_normalizes_extensions_to_lowercase(self, clean_registry: None):
         """Should normalize extensions to lowercase."""
@@ -64,26 +43,27 @@ class TestLanguageCheckerDecorator:
 
         assert ".py" in _registry
         # All should map to same checker
-        assert _registry[".py"].func is py_checker
+        assert _registry[".py"] is py_checker
 
-    def test_default_scope_is_file(self, clean_registry: None):
-        """Default scope should be 'file'."""
+    def test_accepts_scope_parameter(self, clean_registry: None):
+        """Should accept scope parameter for API compatibility."""
 
-        @language_checker([".xyz"])
+        @language_checker([".xyz"], scope="project")
         def _file_checker(_path: Path, _tool_name: str | None = None) -> int:
             return 0
 
-        assert _registry[".xyz"].scope == "file"
+        # Scope is accepted but not stored (API compatibility)
+        assert ".xyz" in _registry
 
-    def test_custom_scope_and_markers(self, clean_registry: None):
-        """Should store custom scope and project markers."""
+    def test_accepts_project_markers_parameter(self, clean_registry: None):
+        """Should accept project_markers parameter for API compatibility."""
 
         @language_checker([".rs"], scope="project", project_markers=["Cargo.toml"])
         def _rust_checker(_path: Path, _tool_name: str | None = None) -> int:
             return 0
 
-        assert _registry[".rs"].scope == "project"
-        assert _registry[".rs"].project_markers == ["Cargo.toml"]
+        # project_markers is accepted but not stored (API compatibility)
+        assert ".rs" in _registry
 
     def test_returns_original_function(self, clean_registry: None):
         """Decorator should return the original function unchanged."""
@@ -109,7 +89,7 @@ class TestGetChecker:
         result = get_checker(".reg")
 
         assert result is not None
-        assert result.func is registered_checker
+        assert result is registered_checker
 
     def test_returns_none_for_unregistered_extension(self, clean_registry: None):
         """Should return None for unregistered extension."""

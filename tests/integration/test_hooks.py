@@ -152,7 +152,6 @@ class TestHookIntegration:
         from unittest.mock import MagicMock, patch
 
         from π.hooks import check_file_format
-        from π.hooks.registry import LanguageChecker
 
         python_file = tmp_path / "test.py"
         python_file.write_text("print('hello')\n")
@@ -166,10 +165,8 @@ class TestHookIntegration:
         )
         context = HookContext(signal=None)
 
-        # Mock get_checker to return a mock checker that succeeds
-        mock_checker = LanguageChecker(
-            func=MagicMock(return_value=0), scope="file", project_markers=[]
-        )
+        # Mock get_checker to return a checker function that succeeds
+        mock_checker = MagicMock(return_value=0)
         with patch("π.hooks.linting.get_checker", return_value=mock_checker):
             result = await check_file_format(input_data, None, context)
 
@@ -181,7 +178,6 @@ class TestHookIntegration:
         from unittest.mock import MagicMock, patch
 
         from π.hooks import check_file_format
-        from π.hooks.registry import LanguageChecker
 
         python_file = tmp_path / "test.py"
         python_file.write_text("print('hello')\n")
@@ -195,10 +191,8 @@ class TestHookIntegration:
         )
         context = HookContext(signal=None)
 
-        # Mock get_checker to return a mock checker that fails
-        mock_checker = LanguageChecker(
-            func=MagicMock(return_value=2), scope="file", project_markers=[]
-        )
+        # Mock get_checker to return a checker function that fails
+        mock_checker = MagicMock(return_value=2)
         with patch("π.hooks.linting.get_checker", return_value=mock_checker):
             result = await check_file_format(input_data, None, context)
 

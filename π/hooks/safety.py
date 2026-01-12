@@ -5,8 +5,7 @@ from typing import cast
 
 from claude_agent_sdk.types import HookContext, HookInput, HookJSONOutput
 
-from π.hooks.logging import log_event
-from π.hooks.utils import console
+from π.console import console
 
 
 def is_dangerous_command(cmd: str) -> bool:
@@ -83,13 +82,6 @@ async def check_bash_command(
 
     if is_dangerous_command(command):
         console.print(f"🚫 Blocked dangerous command: {command}")
-        log_event(
-            "[BLOCKED_COMMAND]",
-            {
-                "command": command,
-                "reason": "Dangerous pattern detected",
-            },
-        )
         return cast(
             "HookJSONOutput",
             {

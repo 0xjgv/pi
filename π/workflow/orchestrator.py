@@ -6,6 +6,8 @@ import logging
 
 import dspy
 
+from π.support.aitl import AgentQuestionAnswerer
+from π.workflow.context import get_ctx
 from π.workflow.staged import (
     stage_design,
     stage_execute,
@@ -29,6 +31,10 @@ class StagedWorkflow(dspy.Module):
         self.lm = lm
 
     def forward(self, objective: str) -> dspy.Prediction:
+        # Configure explicit agent-based question answering
+        ctx = get_ctx()
+        ctx.input_provider = AgentQuestionAnswerer()
+
         # Stage 1: Research (triage gate)
         logger.info("=== STAGE 1/3: RESEARCH ===")
         try:

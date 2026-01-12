@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from π.support.hitl import create_ask_user_question_tool
+from π.support.aitl import create_ask_questions_tool
 from π.workflow.bridge import SessionWriteTracker, execute_claude_task, workflow_tool
 from π.workflow.context import Command
 
-# DSPy-compatible ask_user_question tool for workflow stages
-# No explicit provider - uses context at runtime, falls back to Console
-ask_user_question = create_ask_user_question_tool()
+# DSPy-compatible ask_questions tool for workflow stages
+# No explicit provider - uses context at runtime, falls back to AgentQuestionAnswerer
+ask_questions = create_ask_questions_tool()
 
 
 @workflow_tool(

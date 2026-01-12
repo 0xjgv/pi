@@ -7,7 +7,6 @@ breaking potential circular dependencies.
 from π.core.enums import Provider, Stage, Tier
 from π.core.errors import AgentExecutionError
 from π.core.models import (
-    DEFAULT_MODELS,
     MAX_ITERS,
     PROVIDER_MODELS,
     STAGE_TIERS,
@@ -15,7 +14,6 @@ from π.core.models import (
 )
 
 __all__ = [
-    "DEFAULT_MODELS",
     "MAX_ITERS",
     "PROVIDER_MODELS",
     "STAGE_TIERS",
