@@ -23,6 +23,13 @@ import pytest
 # suppressed from within pytest as it occurs after the test session ends.
 warnings.filterwarnings("ignore", category=ResourceWarning, module="litellm.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="litellm.*")
+# Suppress Pydantic serialization warnings from LiteLLM (cosmetic, no data loss)
+# See: https://github.com/BerriAI/litellm/issues/11759
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=".*Pydantic serializer warnings.*",
+)
 
 # ============================================================================
 # Path Fixtures

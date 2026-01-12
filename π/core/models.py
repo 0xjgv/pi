@@ -1,12 +1,23 @@
 """LLM model configuration and factory functions."""
 
 import logging
+import warnings
 from functools import lru_cache
 from os import getenv
 
-import dspy
+# Suppress Pydantic serialization warnings from LiteLLM
+# This is a known issue where LiteLLM's Message class dynamically deletes
+# attributes, confusing Pydantic's serializer. The warning is cosmetic -
+# serialization works correctly. See: https://github.com/BerriAI/litellm/issues/11759
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=".*Pydantic serializer warnings.*",
+)
 
-from π.core.enums import Provider, Stage, Tier
+import dspy  # noqa: E402 - must import after warning filter
+
+from π.core.enums import Provider, Stage, Tier  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
