@@ -6,7 +6,7 @@ import logging
 
 import dspy
 
-from π.support.hitl import AgentQuestionAnswerer
+from π.support.aitl import AgentQuestionAnswerer
 from π.workflow.context import get_ctx
 from π.workflow.staged import (
     stage_design,

@@ -14,7 +14,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import ResultMessage
 
 from π.support.directory import get_project_root
-from π.workflow.context import get_ctx, get_event_loop
+from π.workflow.context import ExecutionContext, get_ctx, get_event_loop
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -81,6 +81,10 @@ class AgentQuestionAnswerer:
         """
         logger.debug("AgentQuestionAnswerer: %d questions", len(questions))
 
+        # Log questions
+        for i, q in enumerate(questions, 1):
+            logger.debug("AITL Q%d: %s", i, q)
+
         ctx = get_ctx()
 
         # Build context from workflow state
@@ -94,23 +98,28 @@ class AgentQuestionAnswerer:
         # Execute via async bridge
         answers = self._execute_agent(prompt, len(questions))
 
+        # Log Q&A pairs
+        for i, (q, a) in enumerate(zip(questions, answers, strict=True), 1):
+            q_preview = q[:100] + "..." if len(q) > 100 else q
+            a_preview = a[:200] + "..." if len(a) > 200 else a
+            logger.info("AITL [%d]: Q=%s | A=%s", i, q_preview, a_preview)
+
         self._answer_log.append((questions.copy(), answers.copy()))
         return answers
 
-    def _build_context(self, ctx: object) -> list[str]:
+    def _build_context(self, ctx: ExecutionContext) -> list[str]:
         """Build context parts from execution context."""
         parts = []
-        if hasattr(ctx, "objective") and ctx.objective:
+        if ctx.objective:
             parts.append(f"## Objective\n{ctx.objective}")
-        if hasattr(ctx, "current_stage") and ctx.current_stage:
+        if ctx.current_stage:
             parts.append(f"## Current Stage\n{ctx.current_stage}")
 
         # Include document paths (agent can read them if needed)
-        if hasattr(ctx, "extracted_paths"):
-            for doc_type, doc_paths in ctx.extracted_paths.items():
-                if doc_paths:
-                    paths_str = "\n".join(f"- {p}" for p in doc_paths)
-                    parts.append(f"## {doc_type.title()} Documents\n{paths_str}")
+        for doc_type, doc_paths in ctx.extracted_paths.items():
+            if doc_paths:
+                paths_str = "\n".join(f"- {p}" for p in doc_paths)
+                parts.append(f"## {doc_type.title()} Documents\n{paths_str}")
 
         return parts
 
@@ -120,37 +129,52 @@ class AgentQuestionAnswerer:
         questions_text: str,
         count: int,
     ) -> str:
-        """Build the agent prompt."""
+        """Build the agent prompt for technical decision support."""
         context = "\n\n".join(context_parts) if context_parts else "(no context)"
 
         return (
-            "You are answering questions from another agent "
-            "working on a codebase task.\n\n"
+            "You are a senior technical advisor helping a Staff Engineer make "
+            "informed decisions about a codebase. Your role is to provide "
+            "evidence-based answers that enable confident decision-making.\n\n"
             f"## Workflow Context\n{context}\n\n"
-            f"## Questions to Answer\n{questions_text}\n\n"
-            "## Instructions\n"
-            "1. Use Read, Glob, and Grep tools to explore the codebase as needed\n"
-            "2. Answer each question based on codebase evidence\n"
-            "3. Format your response as a numbered list matching the questions\n"
-            "4. Be concise but complete\n\n"
-            f"Respond with exactly {count} answer(s), one per line, "
-            "numbered to match the questions."
+            f"## Questions\n{questions_text}\n\n"
+            "## Response Framework\n"
+            "For each question, structure your answer to support decision-making:\n\n"
+            "1. **Direct Answer**: Lead with the concrete finding or recommendation\n"
+            "2. **Evidence**: Cite specific files, functions, patterns with paths "
+            "and line numbers\n"
+            "3. **Trade-offs**: When multiple valid approaches exist, compare them:\n"
+            "   - What each option optimizes for "
+            "(simplicity, performance, flexibility)\n"
+            "   - Hidden costs or downstream implications\n"
+            "   - What the codebase's existing patterns suggest\n"
+            "4. **Confidence Level**: Be explicit about certainty\n"
+            "   - HIGH: Found definitive code evidence\n"
+            "   - MEDIUM: Inferred from patterns/conventions\n"
+            "   - LOW: Educated guess, recommend verification\n\n"
+            "## Investigation Guidelines\n"
+            "- Use Read, Glob, Grep to find concrete evidence\n"
+            "- Check existing patterns before suggesting new approaches\n"
+            "- Look for prior art—how did the codebase solve similar problems?\n"
+            "- If a question cannot be answered from code, say so explicitly\n"
+            "- When uncertain between options, state the deciding factors\n\n"
+            f"Respond with exactly {count} numbered answer(s), each following "
+            "the framework above. Be concise but complete—Staff Engineers value "
+            "precision over brevity."
         )
 
     def _execute_agent(self, prompt: str, expected_count: int) -> list[str]:
         """Execute Claude agent and parse answers."""
 
         async def _run() -> str:
+            result_text = ""
             async with ClaudeSDKClient(options=self._get_agent_options()) as client:
                 await client.query(prompt)
-
-                result_text = ""
                 async for message in client.receive_response():
                     if isinstance(message, ResultMessage):
                         result_text = message.result or ""
                         break
-
-                return result_text
+            return result_text
 
         # Get or create event loop
         loop = get_event_loop()

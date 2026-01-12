@@ -19,7 +19,7 @@ from π.workflow.types import PlanDocPath
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeAgentOptions
 
-    from π.support.hitl import QuestionAnswerer
+    from π.support.aitl import QuestionAnswerer
 
 logger = logging.getLogger(__name__)
 

@@ -14,6 +14,17 @@ from dspy.utils.callback import BaseCallback
 logger = logging.getLogger(__name__)
 
 
+def _summarize_inputs(inputs: dict[str, Any]) -> str:
+    """Summarize inputs for logging (truncate long values)."""
+    parts = []
+    for k, v in inputs.items():
+        val_str = str(v)
+        if len(val_str) > 100:
+            val_str = val_str[:100] + "..."
+        parts.append(f"{k}={val_str!r}")
+    return ", ".join(parts)
+
+
 class ReActLoggingCallback(BaseCallback):
     """Callback to log ReAct thought/action/observation cycles.
 
@@ -36,7 +47,7 @@ class ReActLoggingCallback(BaseCallback):
         module_name = type(instance).__name__
 
         if module_name == "ReAct":
-            logger.info("ReAct START: inputs=%s", list(inputs.keys()))
+            logger.info("ReAct START: %s", _summarize_inputs(inputs))
         elif module_name == "Predict":
             # Track iteration count for this ReAct execution
             parent_id = call_id.rsplit(".", 1)[0] if "." in call_id else call_id
