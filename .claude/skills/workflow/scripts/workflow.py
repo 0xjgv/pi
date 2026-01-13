@@ -12,7 +12,7 @@ import logging
 import re
 import sys
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -24,15 +24,15 @@ from pydantic import BaseModel
 # =============================================================================
 
 
-class Status(str, Enum):
+class Status(StrEnum):
     """Workflow result status."""
 
+    EARLY_EXIT = "early_exit"
     SUCCESS = "success"
     ERROR = "error"
-    EARLY_EXIT = "early_exit"
 
 
-class Stage(str, Enum):
+class Stage(StrEnum):
     """Workflow stage identifier."""
 
     RESEARCH = "research"
@@ -47,7 +47,7 @@ class WorkflowResult(BaseModel):
     stage: Stage
     output_path: str | None = None
     implementation_needed: bool | None = None
-    summary: str
+    output: str
     error: str | None = None
 
 
@@ -138,14 +138,14 @@ class ClaudeSession:
 
     async def run_command(self, command: str, context: str = "") -> str:
         """Run a slash command and return the raw output."""
-        prompt = f"{command}\n\n{context}" if context else command
-        result_content = ""
+        prompt = f"{command} {context}" if context else command
         result_parts: list[str] = []
+        result_content = ""
 
         options = ClaudeAgentOptions(
             permission_mode="acceptEdits",
-            cwd=self.working_dir,
             setting_sources=["project"],
+            cwd=self.working_dir,
         )
 
         logger.info("Running command: %s", command)
@@ -181,11 +181,6 @@ def _extract_path(output: str, directory: str) -> str | None:
     return match.group(0) if match else None
 
 
-def _truncate(text: str, length: int = 500) -> str:
-    """Truncate text with ellipsis."""
-    return text[:length] + "..." if len(text) > length else text
-
-
 async def run_research(session: ClaudeSession, objective: str) -> WorkflowResult:
     """Stage 1: Research codebase."""
     logger.info("=== Stage: Research ===")
@@ -202,21 +197,23 @@ async def run_research(session: ClaudeSession, objective: str) -> WorkflowResult
         )
 
         status = Status.SUCCESS if impl_needed else Status.EARLY_EXIT
-        logger.info("Research complete: impl_needed=%s, path=%s", impl_needed, output_path)
+        logger.info(
+            "Research complete: impl_needed=%s, path=%s", impl_needed, output_path
+        )
 
         return WorkflowResult(
             status=status,
             stage=Stage.RESEARCH,
             output_path=output_path,
             implementation_needed=impl_needed,
-            summary=_truncate(result),
+            output=result,
         )
     except Exception as e:
         logger.exception("Research stage failed")
         return WorkflowResult(
             status=Status.ERROR,
             stage=Stage.RESEARCH,
-            summary="Research failed",
+            output="Research failed",
             error=str(e),
         )
 
@@ -239,14 +236,14 @@ async def run_design(
             status=Status.SUCCESS,
             stage=Stage.DESIGN,
             output_path=output_path,
-            summary=_truncate(result),
+            output=result,
         )
     except Exception as e:
         logger.exception("Design stage failed")
         return WorkflowResult(
             status=Status.ERROR,
             stage=Stage.DESIGN,
-            summary="Design failed",
+            output="Design failed",
             error=str(e),
         )
 
@@ -265,14 +262,14 @@ async def run_execute(
             status=Status.SUCCESS,
             stage=Stage.EXECUTE,
             output_path=plan_doc,
-            summary=_truncate(result),
+            output=result,
         )
     except Exception as e:
         logger.exception("Execute stage failed")
         return WorkflowResult(
             status=Status.ERROR,
             stage=Stage.EXECUTE,
-            summary="Execute failed",
+            output="Execute failed",
             error=str(e),
         )
 
@@ -309,7 +306,7 @@ async def run_all(
         return WorkflowResult(
             status=Status.ERROR,
             stage=Stage.EXECUTE,
-            summary="No plan document available",
+            output="No plan document available",
             error="Design stage did not produce a plan document",
         )
 
@@ -336,9 +333,6 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--research-doc", help="Path to existing research document")
     parser.add_argument("--plan-doc", help="Path to existing plan document")
-    parser.add_argument(
-        "--json", action="store_true", help="Output JSON instead of prose"
-    )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
     return parser
 
@@ -355,7 +349,7 @@ def print_human_readable(result: WorkflowResult) -> None:
     if result.error:
         print(f"Error: {result.error}")
     print(f"{'=' * 40}")
-    print(f"\n{result.summary}")
+    print(f"\n{result.output}")
 
 
 def main() -> None:
@@ -392,10 +386,7 @@ def main() -> None:
         )
 
     # Output
-    if args.json:
-        print(result.model_dump_json(indent=2))
-    else:
-        print_human_readable(result)
+    print_human_readable(result)
 
     # Exit code
     exit_codes = {Status.SUCCESS: 0, Status.ERROR: 1, Status.EARLY_EXIT: 2}
