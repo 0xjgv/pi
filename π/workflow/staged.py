@@ -34,6 +34,41 @@ from π.workflow.types import (
 logger = logging.getLogger(__name__)
 
 
+def with_codebase_context[T: dspy.Signature](
+    signature_class: type[T],
+    context: str,
+) -> type[T]:
+    """Wrap a signature with codebase context in its instructions.
+
+    DSPy uses signature.__doc__ as agent instructions. This factory
+    creates a subclass with context appended to the docstring.
+
+    Args:
+        signature_class: Base signature class to wrap.
+        context: Codebase context string (CLAUDE.md + deps).
+
+    Returns:
+        New signature class with context-aware instructions.
+    """
+    if not context:
+        return signature_class
+
+    class ContextAwareSignature(signature_class):
+        pass
+
+    base_doc = signature_class.__doc__ or ""
+    ContextAwareSignature.__doc__ = f"""{base_doc}
+
+## Codebase Context (use this to make targeted queries)
+{context}
+
+Strategy:
+- Use ask_questions for quick factual queries the context doesn't answer
+- Call research/design/execute tools ONCE with comprehensive, targeted queries
+"""
+    return ContextAwareSignature  # type: ignore[return-value]
+
+
 def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     """Research stage using ReAct agent.
 
@@ -52,9 +87,12 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     ctx.current_stage = "research"
     ctx.objective = objective
 
+    # Wrap signature with codebase context (from shared ExecutionContext)
+    signature = with_codebase_context(ResearchSignature, ctx.codebase_context or "")
+
     agent = dspy.ReAct(
         tools=[research_codebase, ask_questions, search_memories],
-        signature=ResearchSignature,
+        signature=signature,
         max_iters=MAX_ITERS,
     )
 
@@ -133,6 +171,9 @@ def stage_design(
     research_doc_paths = list(research_paths)
     research_summaries = research.summaries
 
+    # Wrap signature with codebase context (from shared ExecutionContext)
+    signature = with_codebase_context(DesignSignature, ctx.codebase_context or "")
+
     agent = dspy.ReAct(
         tools=[
             create_plan,
@@ -141,7 +182,7 @@ def stage_design(
             ask_questions,
             search_memories,
         ],
-        signature=DesignSignature,
+        signature=signature,
         max_iters=MAX_ITERS,
     )
 
@@ -184,9 +225,12 @@ def stage_execute(
     ctx.current_stage = "execute"
     ctx.objective = objective
 
+    # Wrap signature with codebase context (from shared ExecutionContext)
+    signature = with_codebase_context(ExecuteSignature, ctx.codebase_context or "")
+
     agent = dspy.ReAct(
         tools=[implement_plan, commit_changes, ask_questions, store_memory],
-        signature=ExecuteSignature,
+        signature=signature,
         max_iters=MAX_ITERS,
     )
 

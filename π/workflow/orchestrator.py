@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import dspy
 
 from π.support.aitl import AgentQuestionAnswerer
+from π.support.directory import load_codebase_context
 from π.workflow.checkpoint import (
     CheckpointManager,
     CheckpointState,
@@ -151,6 +152,10 @@ class StagedWorkflow(dspy.Module):
         # Configure explicit agent-based question answering
         ctx = get_ctx()
         ctx.input_provider = AgentQuestionAnswerer()
+
+        # Load codebase context ONCE for all stages
+        if ctx.codebase_context is None:
+            ctx.codebase_context = load_codebase_context()
 
         # Determine starting point
         if resume_state:

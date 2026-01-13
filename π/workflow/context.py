@@ -86,6 +86,8 @@ class ExecutionContext:
     objective: str | None = None
     current_stage: str | None = None
     input_provider: QuestionAnswerer | None = None  # type: ignore[name-defined]
+    # Codebase context (loaded once, shared across stages)
+    codebase_context: str | None = None
 
     def get_or_validate_plan_path(
         self,

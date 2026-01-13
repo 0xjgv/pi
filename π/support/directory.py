@@ -152,3 +152,37 @@ def _ensure_gitignore(root: Path) -> None:
             gitignore.write_text(content.rstrip("\n") + "\n" + PI_GITIGNORE_ENTRY)
     else:
         gitignore.write_text(PI_GITIGNORE_ENTRY)
+
+
+def load_codebase_context(*, root: Path | None = None) -> str:
+    """Load CLAUDE.md and dependencies for agent context.
+
+    Provides codebase awareness to ReAct agents via signature instructions.
+    Context is loaded once and shared across all workflow stages.
+
+    Args:
+        root: Project root path. Defaults to detected project root.
+
+    Returns:
+        Formatted context string with architecture and dependencies,
+        or empty string if no context files found.
+    """
+    root = root or get_project_root()
+    parts: list[str] = []
+
+    # Load CLAUDE.md
+    claude_md = root / "CLAUDE.md"
+    if claude_md.exists():
+        parts.append(f"## Project Overview (CLAUDE.md)\n\n{claude_md.read_text()}")
+
+    # Parse dependencies from pyproject.toml
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        content = pyproject.read_text()
+        if "dependencies = [" in content:
+            start = content.index("dependencies = [")
+            end = content.index("]", start) + 1
+            deps_block = content[start:end]
+            parts.append(f"## Dependencies\n\n```toml\n{deps_block}\n```")
+
+    return "\n\n".join(parts)
