@@ -13,9 +13,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Add script directory to path for base import
-sys.path.insert(0, str(Path(__file__).parent))
-
 from base import ClaudeSession
 
 
