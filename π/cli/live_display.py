@@ -17,6 +17,17 @@ from π.state import (
     subscribe_to_artifacts,
 )
 
+# Map granular phase names to high-level stages
+_PHASE_TO_STAGE: dict[str, str] = {
+    "Researching codebase": "Research",
+    "Creating plan": "Design",
+    "Reviewing plan": "Design",
+    "Iterating plan": "Design",
+    "Implementing plan": "Execute",
+    "Committing changes": "Execute",
+    "Updating documentation": "Execute",
+}
+
 
 @dataclass
 class TrackedArtifact:
@@ -38,6 +49,7 @@ class LiveArtifactDisplay:
     current_phase: str | None = None
     phase_elapsed: float = 0.0
     artifacts: dict[str, TrackedArtifact] = field(default_factory=dict)
+    completed_stages: set[str] = field(default_factory=set)
     _live: Live | None = None
     _unsubscribe: Callable[[], None] | None = None
 
@@ -62,6 +74,10 @@ class LiveArtifactDisplay:
             self.current_phase = event.phase
         elif event.event_type == "phase_end":
             self.phase_elapsed += event.elapsed or 0
+            # Mark stage as completed when its phase ends
+            stage = _PHASE_TO_STAGE.get(event.phase or "")
+            if stage:
+                self.completed_stages.add(stage)
         elif event.event_type == "file_start" and event.path:
             self.artifacts[event.path] = TrackedArtifact(
                 path=event.path, status=ArtifactStatus.IN_PROGRESS
@@ -74,17 +90,22 @@ class LiveArtifactDisplay:
         if self._live:
             self._live.update(self._render())
 
+    def _render_stage(self, stage: str) -> str:
+        """Render a single stage with status icon."""
+        current = _PHASE_TO_STAGE.get(self.current_phase or "")
+        if stage in self.completed_stages:
+            return f"[green]✓ {stage}[/]"
+        elif stage == current:
+            return f"[bold cyan]⟳ {stage}[/]"
+        else:
+            return f"[dim]○ {stage}[/]"
+
     def _render(self) -> Panel:
         """Render current state as Rich Panel with Tree."""
-        # Phase indicator line
-        phases = ["Research", "Design", "Execute"]
-        phase_parts = []
-        for p in phases:
-            if p == self.current_phase:
-                phase_parts.append(f"[bold cyan]{p}[/]")
-            else:
-                phase_parts.append(f"[dim]{p}[/]")
-        phase_line = Text.from_markup(" → ".join(phase_parts))
+        # Stage indicator line with status icons
+        stages = ["Research", "Design", "Execute"]
+        stage_parts = [self._render_stage(s) for s in stages]
+        phase_line = Text.from_markup(" → ".join(stage_parts))
 
         # Build artifact tree
         tree = Tree("[bold]Artifacts[/]")
