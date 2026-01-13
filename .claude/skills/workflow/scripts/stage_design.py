@@ -10,7 +10,7 @@ from pathlib import Path
 # Add script directory to path for base import
 sys.path.insert(0, str(Path(__file__).parent))
 
-from base import ClaudeSession  # noqa: E402
+from base import ClaudeSession
 
 
 async def run_design(objective: str, research_doc: str | None = None) -> str:
