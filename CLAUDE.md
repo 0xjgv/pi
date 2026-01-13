@@ -21,6 +21,7 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → desig
 - `CLIPROXY_API_BASE` — DSPy LM endpoint (default: localhost:8317)
 - `CLIPROXY_API_KEY` — API key (required)
 - `MEM0_API_KEY` — Mem0 hosted API key (optional; falls back to self-hosted)
+- `PI_LM_DEBUG` — Enable verbose LM logging: raw prompts, completions, tokens (default: off)
 
 ## Architecture
 

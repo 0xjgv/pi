@@ -6,6 +6,7 @@ Provides visibility into agent thought/action/observation cycles.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -14,6 +15,15 @@ from dspy.utils.callback import BaseCallback
 from π.utils import truncate
 
 logger = logging.getLogger(__name__)
+
+# LM debug logging configuration
+LM_PROMPT_TRUNCATE = 2000  # Max chars for prompt logging
+LM_RESPONSE_TRUNCATE = 1000  # Max chars for response logging
+
+
+def lm_debug_enabled() -> bool:
+    """Check if verbose LM debug logging is enabled at runtime."""
+    return os.getenv("PI_LM_DEBUG", "").lower() in ("1", "true", "yes")
 
 
 def _summarize_inputs(inputs: dict[str, Any]) -> str:
@@ -34,6 +44,7 @@ class ReActLoggingCallback(BaseCallback):
     def __init__(self) -> None:
         self._start_times: dict[str, float] = {}
         self._iteration_counts: dict[str, int] = {}
+        self._lm_start_times: dict[str, float] = {}  # Track LM call timing
 
     def on_module_start(
         self,
@@ -79,6 +90,85 @@ class ReActLoggingCallback(BaseCallback):
             self._log_action(outputs, duration)
         elif self._is_final_output(outputs):
             self._log_completion(outputs, duration, call_id)
+
+    def on_lm_start(
+        self,
+        call_id: str,
+        instance: Any,
+        inputs: dict[str, Any],
+    ) -> None:
+        """Log when an LM call starts (captures raw prompt)."""
+        self._lm_start_times[call_id] = time.perf_counter()
+
+        # Defensive model attribute access - try multiple locations
+        model = (
+            getattr(instance, "model", None)
+            or getattr(instance, "model_name", None)
+            or getattr(getattr(instance, "kwargs", {}), "model", None)
+            or "unknown"
+        )
+        logger.debug("LM CALL START [%s]: model=%s", call_id[:8], model)
+
+        # Verbose prompt logging when PI_LM_DEBUG=1
+        if lm_debug_enabled():
+            messages = inputs.get("messages", [])
+            prompt_str = str(messages)
+            total_len = len(prompt_str)
+            prompt_str = truncate(
+                prompt_str,
+                LM_PROMPT_TRUNCATE,
+                f"... [truncated, {total_len} total chars]",
+            )
+            logger.debug("LM PROMPT [%s]: %s", call_id[:8], prompt_str)
+
+    def on_lm_end(
+        self,
+        call_id: str,
+        outputs: dict[str, Any] | None,
+        exception: Exception | None,
+    ) -> None:
+        """Log LM call completion with timing, tokens, and response."""
+        start_time = self._lm_start_times.pop(call_id, None)
+        latency_ms = int((time.perf_counter() - start_time) * 1000) if start_time else 0
+        cid = call_id[:8]
+
+        if exception:
+            logger.error(
+                "LM CALL FAILED [%s]: %s (latency=%dms)", cid, exception, latency_ms
+            )
+            return
+
+        if not outputs:
+            logger.debug("LM CALL END [%s]: no outputs (latency=%dms)", cid, latency_ms)
+            return
+
+        # Defensive fallback: check multiple possible locations for usage data
+        response = outputs.get("response", {})
+        response_usage = response.get("usage") if isinstance(response, dict) else None
+        usage = outputs.get("usage") or response_usage or {}
+        if not usage:
+            logger.debug(
+                "LM COMPLETE [%s]: latency=%dms, tokens=unavailable", cid, latency_ms
+            )
+        else:
+            in_tok = usage.get("prompt_tokens", 0)
+            out_tok = usage.get("completion_tokens", 0)
+            cached = usage.get("cache_read_input_tokens", 0)
+            tokens_str = f"tokens={{in={in_tok}, out={out_tok}, cached={cached}}}"
+            logger.debug(
+                "LM COMPLETE [%s]: latency=%dms, %s", cid, latency_ms, tokens_str
+            )
+
+        # Verbose response logging when PI_LM_DEBUG=1
+        if lm_debug_enabled():
+            response_str = str(outputs.get("response", outputs))
+            total_len = len(response_str)
+            response_str = truncate(
+                response_str,
+                LM_RESPONSE_TRUNCATE,
+                f"... [truncated, {total_len} total chars]",
+            )
+            logger.debug("LM RESPONSE [%s]: %s", cid, response_str)
 
     def _is_thought_output(self, outputs: dict[str, Any]) -> bool:
         """Check if outputs contain a thought/reasoning step."""
