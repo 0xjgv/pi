@@ -116,16 +116,16 @@ def run_workflow_mode(
 
     # Build summary content
     lines = [f"[success]Status:[/success] {result.status}"]
-    if hasattr(result, "reason") and result.reason:
-        lines.append(f"[muted]Reason:[/muted] {result.reason}")
-    if hasattr(result, "research_doc_path"):
-        lines.append(f"[muted]Research:[/muted] [path]{result.research_doc_path}[/]")
-    if hasattr(result, "plan_doc_path"):
-        lines.append(f"[muted]Plan:[/muted] [path]{result.plan_doc_path}[/]")
-    if hasattr(result, "files_changed") and result.files_changed:
-        lines.append(f"[muted]Files:[/muted] {result.files_changed}")
-    if hasattr(result, "commit_hash") and result.commit_hash:
-        lines.append(f"[muted]Commit:[/muted] [path]{result.commit_hash}[/]")
+    if reason := getattr(result, "reason", None):
+        lines.append(f"[muted]Reason:[/muted] {reason}")
+    if research := getattr(result, "research_doc_path", None):
+        lines.append(f"[muted]Research:[/muted] [path]{research}[/]")
+    if plan := getattr(result, "plan_doc_path", None):
+        lines.append(f"[muted]Plan:[/muted] [path]{plan}[/]")
+    if files := getattr(result, "files_changed", None):
+        lines.append(f"[muted]Files:[/muted] {files}")
+    if commit := getattr(result, "commit_hash", None):
+        lines.append(f"[muted]Commit:[/muted] [path]{commit}[/]")
 
     console.print(
         Panel(

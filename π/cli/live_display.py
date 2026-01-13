@@ -28,6 +28,20 @@ _PHASE_TO_STAGE: dict[str, str] = {
     "Updating documentation": "Execute",
 }
 
+# Define phases per stage for progress tracking
+_STAGE_PHASES: dict[str, list[str]] = {
+    "Research": ["Researching codebase"],
+    "Design": ["Creating plan", "Reviewing plan", "Iterating plan"],
+    "Execute": ["Implementing plan", "Committing changes", "Updating documentation"],
+}
+
+_STATUS_ICONS: dict[ArtifactStatus, str] = {
+    ArtifactStatus.PENDING: "[dim]○[/]",
+    ArtifactStatus.IN_PROGRESS: "[cyan]⠋[/]",
+    ArtifactStatus.DONE: "[green]✓[/]",
+    ArtifactStatus.FAILED: "[red]✗[/]",
+}
+
 
 @dataclass
 class TrackedArtifact:
@@ -35,7 +49,6 @@ class TrackedArtifact:
 
     path: str
     status: ArtifactStatus = ArtifactStatus.PENDING
-    elapsed: float | None = None
 
 
 @dataclass
@@ -50,6 +63,7 @@ class LiveArtifactDisplay:
     phase_elapsed: float = 0.0
     artifacts: dict[str, TrackedArtifact] = field(default_factory=dict)
     completed_stages: set[str] = field(default_factory=set)
+    completed_phases: dict[str, set[str]] = field(default_factory=dict)
     _live: Live | None = None
     _unsubscribe: Callable[[], None] | None = None
 
@@ -74,10 +88,11 @@ class LiveArtifactDisplay:
             self.current_phase = event.phase
         elif event.event_type == "phase_end":
             self.phase_elapsed += event.elapsed or 0
-            # Mark stage as completed when its phase ends
+            # Track completed phases per stage
             stage = _PHASE_TO_STAGE.get(event.phase or "")
-            if stage:
+            if stage and event.phase:
                 self.completed_stages.add(stage)
+                self.completed_phases.setdefault(stage, set()).add(event.phase)
         elif event.event_type == "file_start" and event.path:
             self.artifacts[event.path] = TrackedArtifact(
                 path=event.path, status=ArtifactStatus.IN_PROGRESS
@@ -91,12 +106,18 @@ class LiveArtifactDisplay:
             self._live.update(self._render())
 
     def _render_stage(self, stage: str) -> str:
-        """Render a single stage with status icon."""
+        """Render a single stage with status icon, sub-phase name, and progress."""
         current = _PHASE_TO_STAGE.get(self.current_phase or "")
-        if stage in self.completed_stages:
-            return f"[green]✓ {stage}[/]"
-        elif stage == current:
-            return f"[bold cyan]⟳ {stage}[/]"
+        total = len(_STAGE_PHASES.get(stage, []))
+        done = len(self.completed_phases.get(stage, set()))
+        progress = f" ({done}/{total})" if total > 1 else ""
+
+        # Active stage takes priority over completed status
+        if stage == current:
+            phase_suffix = f": {self.current_phase}" if self.current_phase else ""
+            return f"[bold cyan]⟳ {stage}{phase_suffix}{progress}[/]"
+        elif stage in self.completed_stages:
+            return f"[green]✓ {stage}{progress}[/]"
         else:
             return f"[dim]○ {stage}[/]"
 
@@ -124,11 +145,3 @@ class LiveArtifactDisplay:
             title="[heading]π Workflow[/heading]",
             border_style="cyan",
         )
-
-
-_STATUS_ICONS: dict[ArtifactStatus, str] = {
-    ArtifactStatus.PENDING: "[dim]○[/]",
-    ArtifactStatus.IN_PROGRESS: "[cyan]⠋[/]",
-    ArtifactStatus.DONE: "[green]✓[/]",
-    ArtifactStatus.FAILED: "[red]✗[/]",
-}

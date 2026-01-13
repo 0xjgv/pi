@@ -28,10 +28,7 @@ def lm_debug_enabled() -> bool:
 
 def _summarize_inputs(inputs: dict[str, Any]) -> str:
     """Summarize inputs for logging (truncate long values)."""
-    parts = []
-    for k, v in inputs.items():
-        parts.append(f"{k}={truncate(str(v))!r}")
-    return ", ".join(parts)
+    return ", ".join(f"{k}={truncate(str(v))!r}" for k, v in inputs.items())
 
 
 class ReActLoggingCallback(BaseCallback):

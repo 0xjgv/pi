@@ -256,13 +256,13 @@ class CheckpointManager:
         )
         state.last_completed_stage = stage
 
-        # Store typed result
-        if stage == WorkflowStage.RESEARCH:
-            state.research_result = result  # type: ignore[assignment]
-        elif stage == WorkflowStage.DESIGN:
-            state.design_result = result  # type: ignore[assignment]
-        elif stage == WorkflowStage.EXECUTE:
-            state.execute_result = result  # type: ignore[assignment]
+        # Store typed result via attribute mapping
+        result_attrs = {
+            WorkflowStage.RESEARCH: "research_result",
+            WorkflowStage.DESIGN: "design_result",
+            WorkflowStage.EXECUTE: "execute_result",
+        }
+        setattr(state, result_attrs[stage], result)
 
         self.save(state)
 
