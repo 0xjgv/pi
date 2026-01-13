@@ -5,62 +5,97 @@ description: Orchestrate autonomous research -> design -> execute workflows. Use
 
 # Autonomous Development Workflow
 
-Run stages in isolated SDK sessions with logging.
+Run workflow stages in isolated SDK sessions. Each stage runs in its own context, keeping your main context clean.
 
-**Prerequisite**: Project must have `/1_research_codebase`, `/2_create_plan`, and `/5_implement_plan` commands.
+**Prerequisite**: Project must have `/1_research_codebase`, `/2_create_plan`, `/3_review_plan`, `/4_iterate_plan`, `/5_implement_plan`, and `/6_commit` commands.
 
-## Usage
-
-```bash
-python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" [OPTIONS]
-```
-
-## Options
-
-| Option | Description |
-|--------|-------------|
-| `--stage` | `research`, `design`, `execute`, or `all` (default: all) |
-| `--research-doc PATH` | Skip research, use existing document |
-| `--plan-doc PATH` | Skip design, use existing plan |
-| `-v` | Verbose logging to console |
-
-## Examples
+## Stage 1: Research
 
 ```bash
-# Full workflow
-python ~/.claude/skills/workflow/scripts/workflow.py "Add dark mode"
-
-# Research only
-python ~/.claude/skills/workflow/scripts/workflow.py "Investigate bug" --stage research
-
-# Skip to execute with existing plan
-python ~/.claude/skills/workflow/scripts/workflow.py "Add feature" --stage execute --plan-doc thoughts/shared/plans/2024-01-13-feature.md
+python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage research
 ```
 
-## Exit Codes
+Read the output. Look for:
 
-- `0` - SUCCESS: Stage(s) completed
-- `1` - ERROR: Stage failed with exception
-- `2` - EARLY_EXIT: Research determined no implementation needed
+- The research document path (e.g., `thoughts/shared/research/YYYY-MM-DD-*.md`)
+- Whether implementation is needed (look for "no implementation needed" or similar)
 
-## Logs
+If no implementation needed, stop and report findings to user.
 
-Logs written to `.π/logs/workflow-*.log` (7-day retention).
+## Stage 2: Design
+
+Run these sequentially, checking output between each step.
+
+### 2a. Create Plan
+
+```bash
+python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage create_plan --research-doc "RESEARCH_PATH"
+```
+
+Look for the plan document path (e.g., `thoughts/shared/plans/YYYY-MM-DD-*.md`).
+
+### 2b. Review Plan
+
+```bash
+python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage review_plan --plan-doc "PLAN_PATH"
+```
+
+### 2c. Iterate Plan
+
+```bash
+python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage iterate_plan --plan-doc "PLAN_PATH"
+```
+
+**Between each step:** If output contains questions, answer them and re-run that step.
+
+## Stage 3: Execute
+
+### 3a. Implement
+
+```bash
+python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage implement --plan-doc "PLAN_PATH"
+```
+
+Look for files changed and any errors.
+
+### 3b. Commit
+
+```bash
+python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage commit
+```
 
 ## Progress Reporting
 
-After running, report:
+After each step, report progress:
 
 ```markdown
 === Workflow Progress ===
 Objective: {objective}
 
-[✓] Research - {output_path or "skipped"}
-[✓] Design - {output_path or "skipped"}
-[→] Execute - {status}
+[✓] Research - {research_doc}
+[✓] Create Plan - {plan_doc}
+[✓] Review Plan
+[✓] Iterate Plan
+[→] Implement - in progress...
+[ ] Commit
 =========================
 ```
 
 ## Error Handling
 
-If the script returns `status: "error"`, report the error message and ask the user how to proceed.
+- If a step fails (exit code 1), report the error and ask user how to proceed
+- If output contains clarifying questions, answer the question and re-run that step
+- Keyboard interrupt (exit code 130) means user cancelled
+
+## Logs
+
+Logs written to `.π/logs/workflow-*.log` (7-day retention).
+
+## Options Reference
+
+| Option | Description |
+|--------|-------------|
+| `--stage` | `research`, `create_plan`, `review_plan`, `iterate_plan`, `implement`, `commit` |
+| `--research-doc PATH` | Path to research document |
+| `--plan-doc PATH` | Path to plan document |
+| `-v` | Verbose logging to console |

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Workflow orchestrator - autonomous research -> design -> execute pipeline.
+"""Workflow orchestrator - runs stages in isolated SDK sessions.
 
-Consolidates isolated SDK sessions with structured JSON output and logging.
+Each stage runs a slash command and prints the raw output.
+The main agent reads output, finds paths, and makes decisions.
 """
 
 from __future__ import annotations
@@ -9,50 +10,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import re
 import sys
 from datetime import datetime, timedelta
-from enum import StrEnum
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import AssistantMessage, ResultMessage, TextBlock
-from pydantic import BaseModel
 
 # =============================================================================
-# MODELS
-# =============================================================================
-
-
-class Status(StrEnum):
-    """Workflow result status."""
-
-    EARLY_EXIT = "early_exit"
-    SUCCESS = "success"
-    ERROR = "error"
-
-
-class Stage(StrEnum):
-    """Workflow stage identifier."""
-
-    RESEARCH = "research"
-    DESIGN = "design"
-    EXECUTE = "execute"
-
-
-class WorkflowResult(BaseModel):
-    """Structured output for workflow stages."""
-
-    status: Status
-    stage: Stage
-    output_path: str | None = None
-    implementation_needed: bool | None = None
-    output: str
-    error: str | None = None
-
-
-# =============================================================================
-# LOGGING (copied from pi for portability)
+# LOGGING
 # =============================================================================
 
 DEFAULT_LOG_RETENTION_DAYS = 7
@@ -79,8 +45,7 @@ def cleanup_old_logs(
 
     for log_file in logs_dir.glob("workflow-*.log"):
         try:
-            # Parse date from filename: workflow-YYYY-MM-DD-HH:MM.log
-            date_str = log_file.stem[9:19]  # Extract YYYY-MM-DD after "workflow-"
+            date_str = log_file.stem[9:19]
             file_date = datetime.strptime(date_str, "%Y-%m-%d")
             if file_date < cutoff:
                 log_file.unlink()
@@ -92,7 +57,7 @@ def cleanup_old_logs(
 
 
 def setup_logging(log_dir: Path, *, verbose: bool = False) -> Path:
-    """Configure logging - same format as pi CLI."""
+    """Configure logging."""
     logger.handlers.clear()
 
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
@@ -118,7 +83,6 @@ def setup_logging(log_dir: Path, *, verbose: bool = False) -> Path:
 
     logger.setLevel(logging.DEBUG)
 
-    # Silence noisy third-party loggers
     for name in ("httpcore", "httpx", "claude_agent_sdk"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
@@ -170,147 +134,24 @@ class ClaudeSession:
 
 
 # =============================================================================
-# STAGE RUNNERS
+# STAGES
 # =============================================================================
 
-
-def _extract_path(output: str, directory: str) -> str | None:
-    """Extract document path from SDK output."""
-    pattern = rf"{re.escape(directory)}/\d{{4}}-\d{{2}}-\d{{2}}-[^\s\"')\]]+\.md"
-    match = re.search(pattern, output)
-    return match.group(0) if match else None
-
-
-async def run_research(session: ClaudeSession, objective: str) -> WorkflowResult:
-    """Stage 1: Research codebase."""
-    logger.info("=== Stage: Research ===")
-    try:
-        result = await session.run_command("/1_research_codebase", objective)
-        output_path = _extract_path(result, "thoughts/shared/research")
-
-        # Check for early exit signals
-        result_lower = result.lower()
-        impl_needed = not (
-            "no implementation" in result_lower
-            or "no changes" in result_lower
-            or "nothing to implement" in result_lower
-        )
-
-        status = Status.SUCCESS if impl_needed else Status.EARLY_EXIT
-        logger.info(
-            "Research complete: impl_needed=%s, path=%s", impl_needed, output_path
-        )
-
-        return WorkflowResult(
-            status=status,
-            stage=Stage.RESEARCH,
-            output_path=output_path,
-            implementation_needed=impl_needed,
-            output=result,
-        )
-    except Exception as e:
-        logger.exception("Research stage failed")
-        return WorkflowResult(
-            status=Status.ERROR,
-            stage=Stage.RESEARCH,
-            output="Research failed",
-            error=str(e),
-        )
+STAGE_COMMANDS: dict[str, str] = {
+    "research": "/1_research_codebase",
+    "create_plan": "/2_create_plan",
+    "review_plan": "/3_review_plan",
+    "iterate_plan": "/4_iterate_plan",
+    "implement": "/5_implement_plan",
+    "commit": "/6_commit",
+}
 
 
-async def run_design(
-    session: ClaudeSession, objective: str, research_doc: str | None
-) -> WorkflowResult:
-    """Stage 2: Create implementation plan."""
-    logger.info("=== Stage: Design ===")
-    try:
-        context = f"Objective: {objective}"
-        if research_doc:
-            context += f"\n\nResearch document: {research_doc}"
-
-        result = await session.run_command("/2_create_plan", context)
-        output_path = _extract_path(result, "thoughts/shared/plans")
-        logger.info("Design complete: path=%s", output_path)
-
-        return WorkflowResult(
-            status=Status.SUCCESS,
-            stage=Stage.DESIGN,
-            output_path=output_path,
-            output=result,
-        )
-    except Exception as e:
-        logger.exception("Design stage failed")
-        return WorkflowResult(
-            status=Status.ERROR,
-            stage=Stage.DESIGN,
-            output="Design failed",
-            error=str(e),
-        )
-
-
-async def run_execute(
-    session: ClaudeSession, objective: str, plan_doc: str
-) -> WorkflowResult:
-    """Stage 3: Implement plan."""
-    logger.info("=== Stage: Execute ===")
-    try:
-        context = f"Objective: {objective}\n\nPlan document: {plan_doc}"
-        result = await session.run_command("/5_implement_plan", context)
-        logger.info("Execute complete")
-
-        return WorkflowResult(
-            status=Status.SUCCESS,
-            stage=Stage.EXECUTE,
-            output_path=plan_doc,
-            output=result,
-        )
-    except Exception as e:
-        logger.exception("Execute stage failed")
-        return WorkflowResult(
-            status=Status.ERROR,
-            stage=Stage.EXECUTE,
-            output="Execute failed",
-            error=str(e),
-        )
-
-
-async def run_all(
-    objective: str,
-    *,
-    research_doc: str | None = None,
-    plan_doc: str | None = None,
-) -> WorkflowResult:
-    """Run all stages sequentially with early exit."""
-    session = ClaudeSession()
-    logger.info("Starting full workflow: %s", objective)
-
-    # Stage 1: Research (unless research_doc provided)
-    if not research_doc:
-        result = await run_research(session, objective)
-        if result.status == Status.ERROR:
-            return result
-        if not result.implementation_needed:
-            logger.info("Early exit: no implementation needed")
-            return result
-        research_doc = result.output_path
-
-    # Stage 2: Design (unless plan_doc provided)
-    if not plan_doc:
-        result = await run_design(session, objective, research_doc)
-        if result.status == Status.ERROR:
-            return result
-        plan_doc = result.output_path
-
-    # Stage 3: Execute
-    if not plan_doc:
-        return WorkflowResult(
-            status=Status.ERROR,
-            stage=Stage.EXECUTE,
-            output="No plan document available",
-            error="Design stage did not produce a plan document",
-        )
-
-    return await run_execute(session, objective, plan_doc)
+async def run_stage(session: ClaudeSession, stage: str, context: str) -> str:
+    """Run a single stage command."""
+    command = STAGE_COMMANDS[stage]
+    logger.info("=== Stage: %s (%s) ===", stage, command)
+    return await session.run_command(command, context)
 
 
 # =============================================================================
@@ -322,14 +163,14 @@ def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
         prog="workflow",
-        description="Autonomous research -> design -> execute workflow",
+        description="Run workflow stages in isolated SDK sessions",
     )
     parser.add_argument("objective", help="The development objective")
     parser.add_argument(
         "--stage",
-        choices=["research", "design", "execute", "all"],
-        default="all",
-        help="Stage to run (default: all)",
+        choices=list(STAGE_COMMANDS.keys()),
+        default="research",
+        help="Stage to run (default: research)",
     )
     parser.add_argument("--research-doc", help="Path to existing research document")
     parser.add_argument("--plan-doc", help="Path to existing plan document")
@@ -337,60 +178,34 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def print_human_readable(result: WorkflowResult) -> None:
-    """Print result in human-readable format."""
-    print(f"\n{'=' * 40}")
-    print(f"Status: {result.status.value}")
-    print(f"Stage: {result.stage.value}")
-    if result.output_path:
-        print(f"Output: {result.output_path}")
-    if result.implementation_needed is not None:
-        print(f"Implementation needed: {result.implementation_needed}")
-    if result.error:
-        print(f"Error: {result.error}")
-    print(f"{'=' * 40}")
-    print(f"\n{result.output}")
-
-
 def main() -> None:
     """Main entry point."""
     parser = create_parser()
     args = parser.parse_args()
 
-    # Setup logging
     logs_dir = get_logs_dir()
     cleanup_old_logs(logs_dir)
-    log_path = setup_logging(logs_dir, verbose=args.verbose)
-    logger.info("Workflow started: %s (log: %s)", args.objective, log_path)
+    setup_logging(logs_dir, verbose=args.verbose)
 
-    # Dispatch to appropriate stage
     session = ClaudeSession()
 
-    if args.stage == "research":
-        result = asyncio.run(run_research(session, args.objective))
-    elif args.stage == "design":
-        if not args.research_doc:
-            parser.error("--research-doc required for design stage")
-        result = asyncio.run(run_design(session, args.objective, args.research_doc))
-    elif args.stage == "execute":
-        if not args.plan_doc:
-            parser.error("--plan-doc required for execute stage")
-        result = asyncio.run(run_execute(session, args.objective, args.plan_doc))
-    else:  # all
-        result = asyncio.run(
-            run_all(
-                args.objective,
-                research_doc=args.research_doc,
-                plan_doc=args.plan_doc,
-            )
-        )
+    try:
+        context = args.objective
+        if args.research_doc:
+            context += f"\n\nResearch document: {args.research_doc}"
+        if args.plan_doc:
+            context += f"\n\nPlan document: {args.plan_doc}"
 
-    # Output
-    print_human_readable(result)
+        result = asyncio.run(run_stage(session, args.stage, context))
+        print(result)
 
-    # Exit code
-    exit_codes = {Status.SUCCESS: 0, Status.ERROR: 1, Status.EARLY_EXIT: 2}
-    sys.exit(exit_codes[result.status])
+    except KeyboardInterrupt:
+        print("\nInterrupted", file=sys.stderr)
+        sys.exit(130)
+    except Exception as e:
+        logger.exception("Stage failed")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
