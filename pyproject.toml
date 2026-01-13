@@ -130,6 +130,7 @@ known-first-party = ["π"]
 [tool.coverage.run]
 source = ["π"]
 branch = true
+omit = ["π/workflow/sdk_orchestrator.py"]  # Prototype, not production code
 
 [tool.coverage.report]
 fail_under = 80
