@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import os
 import sys
 from importlib.metadata import version as get_version
 
@@ -42,6 +43,12 @@ def _create_parser() -> argparse.ArgumentParser:
         "--clear-checkpoint",
         action="store_true",
         help="Delete existing checkpoint and exit (does not run workflow)",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging to console",
     )
     return parser
 
@@ -173,7 +180,12 @@ def main(argv: list[str] | None = None) -> None:
     logs_dir = get_logs_dir()
     cleanup_old_logs(logs_dir)  # Clean old logs first
     archive_old_documents()  # Archive old research/plan documents
-    log_path = setup_logging(logs_dir)
+
+    # Enable verbose LM logging when --verbose flag set
+    if args.verbose:
+        os.environ["PI_LM_DEBUG"] = "1"
+
+    log_path = setup_logging(logs_dir, verbose=args.verbose)
 
     logger.info("Objective: %s", objective)
 

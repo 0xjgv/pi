@@ -92,3 +92,20 @@ class TestMain:
 
         assert "Workflow Complete" in captured.out
         assert "Status: success" in captured.out
+
+    def test_verbose_flag_sets_pi_lm_debug(
+        self,
+        mock_staged_workflow: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """--verbose flag should set PI_LM_DEBUG env var."""
+        # Clear any existing value
+        monkeypatch.delenv("PI_LM_DEBUG", raising=False)
+
+        import os
+
+        main(["--verbose", "test objective"])
+
+        # Fixture used to allow workflow to run
+        assert mock_staged_workflow is not None
+        assert os.environ.get("PI_LM_DEBUG") == "1"

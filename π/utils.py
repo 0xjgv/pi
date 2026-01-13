@@ -9,13 +9,14 @@ from pathlib import Path
 from typing import Any
 
 
-def setup_logging(log_dir: Path) -> Path:
+def setup_logging(log_dir: Path, *, verbose: bool = False) -> Path:
     """Configure logging for the π CLI.
 
     Uses delayed file creation - log file only created when first message written.
 
     Args:
         log_dir: Directory to store log files.
+        verbose: If True, also log DEBUG messages to console.
 
     Returns:
         Path to the log file (may not exist until first log message).
@@ -35,6 +36,15 @@ def setup_logging(log_dir: Path) -> Path:
         )
     )
     logger.addHandler(file_handler)
+
+    # Add console handler when verbose
+    if verbose:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.DEBUG)
+        console_handler.setFormatter(
+            logging.Formatter("[%(levelname)s] %(name)s: %(message)s")
+        )
+        logger.addHandler(console_handler)
 
     # Always capture DEBUG to file; logger must allow messages through
     logger.setLevel(logging.DEBUG)
