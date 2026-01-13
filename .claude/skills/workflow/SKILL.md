@@ -57,4 +57,27 @@ Objective: {objective}
 
 ## Error Handling
 
+Scripts include validation and error handling:
+
+- `--help` flag shows usage
+- Invalid paths are rejected before execution
+- Errors are reported to stderr with exit code 1
+- Keyboard interrupt exits cleanly with code 130
+
 If a script fails, report the error and ask the user how to proceed.
+
+## Limitations
+
+This skill provides simplified workflow orchestration for Claude Code sessions.
+For production use with full features, use the π CLI directly:
+
+| Feature | Skill | π CLI |
+|---------|-------|-------|
+| Safety hooks | ✅ | ✅ |
+| Retry logic | ❌ | ✅ |
+| Checkpoints | ❌ | ✅ |
+| AITL | ❌ | ✅ |
+| Memory | ❌ | ✅ |
+| Session continuity | ❌ | ✅ |
+
+For critical workflows, prefer: `π "objective"`
