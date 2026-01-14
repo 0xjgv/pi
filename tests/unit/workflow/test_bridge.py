@@ -112,47 +112,29 @@ class TestSessionWriteTracker:
 class TestDocPathExtractionWithTracker:
     """Tests for _extract_doc_path with tracker."""
 
-    def test_tracker_preferred_over_regex(self, tmp_path):
-        """Tracker path preferred over regex match."""
+    def test_returns_tracked_path(self, tmp_path):
+        """Returns most recent tracked path for doc_type."""
         with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
             (tmp_path / "thoughts/shared/research").mkdir(parents=True)
-            (tmp_path / "thoughts/shared/research/old.md").write_text("old")
             (tmp_path / "thoughts/shared/research/new.md").write_text("new")
 
             tracker = SessionWriteTracker()
             tracker.writes["research"] = ["thoughts/shared/research/new.md"]
 
-            # Result mentions old doc first - tracker should win
-            result = "Reviewed thoughts/shared/research/old.md, created new.md"
-            extracted = _extract_doc_path(result, "research", tracker)
+            extracted = _extract_doc_path("research", tracker)
 
             assert extracted == str(tmp_path / "thoughts/shared/research/new.md")
 
-    def test_regex_fallback_when_no_tracker(self, tmp_path):
-        """Falls back to regex when tracker is None."""
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            doc = tmp_path / "thoughts/shared/research/doc.md"
-            doc.parent.mkdir(parents=True)
-            doc.write_text("content")
+    def test_returns_none_when_no_tracker(self):
+        """Returns None when tracker is None."""
+        extracted = _extract_doc_path("research", tracker=None)
+        assert extracted is None
 
-            result = "Created thoughts/shared/research/doc.md"
-            extracted = _extract_doc_path(result, "research", tracker=None)
-
-            assert extracted == str(doc)
-
-    def test_regex_fallback_when_tracker_empty(self, tmp_path):
-        """Falls back to regex when tracker has no writes for doc_type."""
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            doc = tmp_path / "thoughts/shared/research/doc.md"
-            doc.parent.mkdir(parents=True)
-            doc.write_text("content")
-
-            tracker = SessionWriteTracker()  # Empty tracker
-
-            result = "Created thoughts/shared/research/doc.md"
-            extracted = _extract_doc_path(result, "research", tracker)
-
-            assert extracted == str(doc)
+    def test_returns_none_when_tracker_empty(self):
+        """Returns None when tracker has no writes for doc_type."""
+        tracker = SessionWriteTracker()  # Empty tracker
+        extracted = _extract_doc_path("research", tracker)
+        assert extracted is None
 
 
 class TestProcessAssistantMessageWithTracker:
@@ -385,64 +367,6 @@ class TestGetEventLoop:
                 assert result == new_loop
 
 
-class TestExtractDocPath:
-    """Tests for _extract_doc_path() function."""
-
-    def test_extracts_research_path(self, tmp_path):
-        """Should extract research doc path from result text."""
-        research_dir = tmp_path / "thoughts" / "shared" / "research"
-        research_dir.mkdir(parents=True)
-        doc = research_dir / "2026-01-05-test.md"
-        doc.write_text("# Test")
-
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            result = _extract_doc_path(
-                "Created document at thoughts/shared/research/2026-01-05-test.md",
-                "research",
-            )
-
-        assert result is not None
-        assert "research" in result
-
-    def test_extracts_plan_path(self, tmp_path):
-        """Should extract plan doc path from result text."""
-        plan_dir = tmp_path / "thoughts" / "shared" / "plans"
-        plan_dir.mkdir(parents=True)
-        doc = plan_dir / "2026-01-05-plan.md"
-        doc.write_text("# Plan")
-
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            result = _extract_doc_path(
-                "Plan saved to thoughts/shared/plans/2026-01-05-plan.md",
-                "plan",
-            )
-
-        assert result is not None
-        assert "plans" in result
-
-    def test_returns_none_for_unknown_doc_type(self):
-        """Should return None and log warning for unknown doc_type."""
-        result = _extract_doc_path("some text", "unknown_type")
-
-        assert result is None
-
-    def test_returns_none_when_no_match(self):
-        """Should return None when pattern doesn't match."""
-        result = _extract_doc_path("No path here", "research")
-
-        assert result is None
-
-    def test_returns_none_when_path_not_exists(self, tmp_path):
-        """Should return None when extracted path doesn't exist."""
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            result = _extract_doc_path(
-                "Created thoughts/shared/research/2026-01-05-missing.md",
-                "research",
-            )
-
-        assert result is None
-
-
 class TestFormatToolResult:
     """Tests for _format_tool_result() function."""
 
@@ -629,14 +553,18 @@ class TestWorkflowToolDecorator:
         doc = research_dir / "2026-01-05-test.md"
         doc.write_text("# Test")
 
+        # Create tracker with tracked write
+        tracker = SessionWriteTracker()
+        tracker.writes["research"] = ["thoughts/shared/research/2026-01-05-test.md"]
+
         @workflow_tool(
             Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
         )
         def research_tool(**kwargs):
             return (
-                "Done. Created thoughts/shared/research/2026-01-05-test.md",
+                "Done.",
                 "sess-1",
-                SessionWriteTracker(),
+                tracker,
             )
 
         with (
@@ -755,14 +683,18 @@ class TestSessionClearingOnDocExtraction:
         doc = research_dir / "2026-01-05-test.md"
         doc.write_text("# Test")
 
+        # Create tracker with tracked write
+        tracker = SessionWriteTracker()
+        tracker.writes["research"] = ["thoughts/shared/research/2026-01-05-test.md"]
+
         @workflow_tool(
             Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
         )
         def research_tool(**kwargs):
             return (
-                "Done. Created thoughts/shared/research/2026-01-05-test.md",
+                "Done.",
                 "new-session",
-                SessionWriteTracker(),
+                tracker,
             )
 
         with (
@@ -804,15 +736,18 @@ class TestSessionClearingOnDocExtraction:
         doc = research_dir / "2026-01-05-test.md"
         doc.write_text("# Test")
 
+        # Create tracker with tracked write
+        tracker = SessionWriteTracker()
+        tracker.writes["research"] = ["thoughts/shared/research/2026-01-05-test.md"]
+
         @workflow_tool(
             Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
         )
         def research_tool(**kwargs):
             return (
-                "Research complete. "
-                "Created thoughts/shared/research/2026-01-05-test.md",
+                "Research complete.",
                 "sess-1",
-                SessionWriteTracker(),
+                tracker,
             )
 
         with (

@@ -22,7 +22,6 @@ _PHASE_TO_STAGE: dict[str, str] = {
     "Researching codebase": "Research",
     "Creating plan": "Design",
     "Reviewing plan": "Design",
-    "Iterating plan": "Design",
     "Implementing plan": "Execute",
     "Committing changes": "Execute",
     "Updating documentation": "Execute",
@@ -31,7 +30,7 @@ _PHASE_TO_STAGE: dict[str, str] = {
 # Define phases per stage for progress tracking
 _STAGE_PHASES: dict[str, list[str]] = {
     "Research": ["Researching codebase"],
-    "Design": ["Creating plan", "Reviewing plan", "Iterating plan"],
+    "Design": ["Creating plan", "Reviewing plan"],
     "Execute": ["Implementing plan", "Committing changes", "Updating documentation"],
 }
 

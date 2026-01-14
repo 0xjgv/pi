@@ -311,38 +311,25 @@ class SessionWriteTracker:
 
 
 def _extract_doc_path(
-    result: str,
     doc_type: DocType,
     tracker: SessionWriteTracker | None = None,
 ) -> str | None:
-    """Extract document path. Tracker path preferred, regex fallback.
+    """Extract document path from tracker.
 
     Args:
-        result: Claude agent response text
         doc_type: Type of document ("research" or "plan")
-        tracker: Optional write tracker with captured file paths
+        tracker: Write tracker with captured file paths
 
     Returns:
         Absolute path if found and exists, None otherwise
     """
-    pattern = _DOC_PATH_PATTERNS.get(doc_type)
-    if not pattern:
-        logger.warning("Unknown doc_type: %s", doc_type)
+    if not tracker:
         return None
 
-    # Priority 1: Most recent tracked write
-    if tracker:
-        paths = tracker.get_paths(doc_type)
-        if paths:
-            logger.debug("Using tracked path: %s", paths[-1])
-            return paths[-1]
-
-    # Priority 2: Regex fallback
-    if match := re.search(pattern, result):
-        path = get_project_root() / match.group(1)
-        if path.exists():
-            logger.debug("Using regex path: %s", path)
-            return str(path)
+    paths = tracker.get_paths(doc_type)
+    if paths:
+        logger.debug("Using tracked path: %s", paths[-1])
+        return paths[-1]
 
     return None
 
@@ -565,10 +552,9 @@ def workflow_tool(
                         for p in tracked_paths:
                             session.extracted_results[p] = result
 
-                    # Primary doc_path for completion marker (latest or regex fallback)
-                    doc_path = _extract_doc_path(result, doc_type, tracker)
+                    # Primary doc_path for completion marker
+                    doc_path = _extract_doc_path(doc_type, tracker)
                     if doc_path:
-                        # Also add regex-fallback path if not already tracked
                         paths = session.extracted_paths.setdefault(doc_type, set())
                         paths.add(doc_path)
                         session.extracted_results[doc_path] = result
