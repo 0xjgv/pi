@@ -121,6 +121,9 @@ class AgentQuestionAnswerer:
         }
         logger.info("AITL_JSON: %s", json.dumps(aitl_data, ensure_ascii=False))
 
+        for i, a in enumerate(answers, 1):
+            logger.debug("AITL A%d: %s", i, a)
+
         self._answer_log.append((questions.copy(), answers.copy()))
         return answers
 
