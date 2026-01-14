@@ -26,7 +26,7 @@ from π.workflow.bridge import (
 from π.workflow.context import get_event_loop
 
 # Module-level tracker for fixture use (ensures SessionWriteTracker import is used)
-_MOCK_TRACKER = SessionWriteTracker()
+_MOCK_TRACKER = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
 
 
 class TestTimedPhase:

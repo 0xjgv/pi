@@ -7,7 +7,6 @@ tools to invoke the async Claude Agent SDK.
 from __future__ import annotations
 
 import logging
-import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -45,7 +44,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
     from pathlib import Path
 
-    from π.workflow.types import DocType
+# Command → DocType mapping (only commands that produce tracked documents)
+COMMAND_DOC_TYPE: dict[Command, str] = {
+    Command.RESEARCH_CODEBASE: "research",
+    Command.CREATE_PLAN: "plan",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -191,23 +194,24 @@ def _process_assistant_message(
                     ArtifactEvent(
                         event_type="file_start",
                         path=file_path,
-                        doc_type=SessionWriteTracker._infer_doc_type(file_path),
+                        doc_type=tracker.doc_type,
                     )
                 )
         elif isinstance(block, ToolResultBlock):
             _log_tool_result(block)
             if tracker:
-                # Capture pending info before on_tool_result pops it
-                pending_info = tracker._pending.get(block.tool_use_id)
+                # Capture pending path before on_tool_result pops it
+                pending_path = tracker._pending.get(block.tool_use_id)
                 tracker.on_tool_result(
                     block.tool_use_id, is_error=block.is_error or False
                 )
-                if pending_info:
-                    doc_type, path = pending_info
+                if pending_path:
                     event_type = "file_failed" if block.is_error else "file_done"
                     emit_artifact_event(
                         ArtifactEvent(
-                            event_type=event_type, path=path, doc_type=doc_type
+                            event_type=event_type,
+                            path=pending_path,
+                            doc_type=tracker.doc_type,
                         )
                     )
     return block_text
@@ -222,12 +226,6 @@ def _get_agent_options() -> ClaudeAgentOptions:
     ctx.agent_options = options
     return options
 
-
-# Document path patterns for extraction
-_DOC_PATH_PATTERNS: dict[str, str] = {
-    "research": r"(thoughts/shared/research/[\w\-]+\.md)",
-    "plan": r"(thoughts/shared/plans/[\w\-]+\.md)",
-}
 
 # Tools that create/modify files
 _FILE_WRITE_TOOLS = frozenset({"Write", "Edit"})
@@ -274,64 +272,41 @@ _tool_timing = ToolTimingTracker()
 class SessionWriteTracker:
     """Tracks file writes during a single SDK session.
 
-    Captures all writes per doc_type. Pending/confirm pattern excludes failed writes.
+    Command-based tracking: doc_type is determined by the command at creation,
+    not inferred from file paths. Pending/confirm pattern excludes failed writes.
     """
 
-    writes: dict[str, list[str]] = field(default_factory=dict)  # doc_type -> [paths]
-    _pending: dict[str, tuple[str, str]] = field(
-        default_factory=dict
-    )  # tool_use_id -> (doc_type, path)
+    command: Command
+    writes: list[str] = field(default_factory=list)
+    _pending: dict[str, str] = field(default_factory=dict)  # tool_use_id -> path
+
+    @property
+    def doc_type(self) -> str | None:
+        """Get doc_type for this command (if any)."""
+        return COMMAND_DOC_TYPE.get(self.command)
 
     def on_tool_use(self, tool_use_id: str, file_path: str) -> None:
         """Record pending write from ToolUseBlock."""
-        if doc_type := self._infer_doc_type(file_path):
-            self._pending[tool_use_id] = (doc_type, file_path)
+        if self.doc_type and self._is_thoughts_path(file_path):
+            self._pending[tool_use_id] = file_path
 
     def on_tool_result(self, tool_use_id: str, *, is_error: bool) -> None:
         """Confirm or reject write based on ToolResultBlock."""
-        if (pending := self._pending.pop(tool_use_id, None)) and not is_error:
-            doc_type, path = pending
-            self.writes.setdefault(doc_type, []).append(path)
+        if (path := self._pending.pop(tool_use_id, None)) and not is_error:
+            self.writes.append(path)
 
-    def get_paths(self, doc_type: str) -> list[str]:
-        """Get all tracked paths for doc_type that exist on disk."""
+    def get_paths(self) -> list[str]:
+        """Get all tracked paths that exist on disk."""
         return [
             str(get_project_root() / p)
-            for p in self.writes.get(doc_type, [])
+            for p in self.writes
             if (get_project_root() / p).exists()
         ]
 
     @staticmethod
-    def _infer_doc_type(file_path: str) -> str | None:
-        """Infer doc_type from file path pattern."""
-        for doc_type, pattern in _DOC_PATH_PATTERNS.items():
-            if re.search(pattern, file_path):
-                return doc_type
-        return None
-
-
-def _extract_doc_path(
-    doc_type: DocType,
-    tracker: SessionWriteTracker | None = None,
-) -> str | None:
-    """Extract document path from tracker.
-
-    Args:
-        doc_type: Type of document ("research" or "plan")
-        tracker: Write tracker with captured file paths
-
-    Returns:
-        Absolute path if found and exists, None otherwise
-    """
-    if not tracker:
-        return None
-
-    paths = tracker.get_paths(doc_type)
-    if paths:
-        logger.debug("Using tracked path: %s", paths[-1])
-        return paths[-1]
-
-    return None
+    def _is_thoughts_path(file_path: str) -> bool:
+        """Check if path is in thoughts/shared/."""
+        return "thoughts/shared/" in file_path
 
 
 def _format_tool_result(
@@ -369,8 +344,9 @@ def _format_tool_result(
 
 
 async def _run_claude_session(
-    command: str,
+    command_str: str,
     session_id: str | None,
+    tool_command: Command,
 ) -> tuple[str, str, SessionWriteTracker]:
     """Execute a Claude agent session asynchronously.
 
@@ -378,8 +354,9 @@ async def _run_claude_session(
     reduce function complexity.
 
     Args:
-        command: The command string to execute
+        command_str: The command string to execute
         session_id: Optional session ID for resumption
+        tool_command: The Command enum for tracking writes
 
     Returns:
         Tuple of (result content, new session ID, write tracker)
@@ -387,7 +364,7 @@ async def _run_claude_session(
     Raises:
         AgentExecutionError: If agent execution fails
     """
-    tracker = SessionWriteTracker()
+    tracker = SessionWriteTracker(command=tool_command)
     last_text_content = ""
     result_content = ""
     new_session_id = ""
@@ -397,7 +374,7 @@ async def _run_claude_session(
             logger.debug(
                 "%s session", "Using existing" if session_id else "Starting new"
             )
-            await client.query(command, session_id=session_id or "default")
+            await client.query(command_str, session_id=session_id or "default")
 
             async for message in client.receive_response():
                 if isinstance(message, ResultMessage):
@@ -482,13 +459,14 @@ def execute_claude_task(
     ctx.log_session_state()
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
-    return get_event_loop().run_until_complete(_run_claude_session(command, session_id))
+    return get_event_loop().run_until_complete(
+        _run_claude_session(command, session_id, tool_command)
+    )
 
 
 def workflow_tool(
     command: Command,
     *,
-    doc_type: DocType | None = None,
     validate_plan: bool = False,
     phase_name: str,
 ) -> Callable[
@@ -502,14 +480,15 @@ def workflow_tool(
         continue the conversation or produce output fields.
 
     Args:
-        command: The workflow command for session tracking.
+        command: The workflow command for session tracking (also determines doc_type).
         phase_name: Display name for the timed phase spinner.
-        doc_type: If set, extract doc path from result (DocType: "plan" | "research").
         validate_plan: If True, validate that plan_document_path is not a research doc.
 
     Returns:
         Decorated function that handles all workflow boilerplate.
     """
+    # Get doc_type from command mapping (None for commands that don't produce docs)
+    doc_type = COMMAND_DOC_TYPE.get(command)
 
     def decorator(
         func: Callable[..., tuple[str, str, SessionWriteTracker]],
@@ -544,21 +523,14 @@ def workflow_tool(
                 speak(f"{phase_name.lower()} complete")
 
                 if doc_type:
-                    # Add ALL tracked paths to extracted_paths
-                    tracked_paths = tracker.get_paths(doc_type)
+                    tracked_paths = tracker.get_paths()
+                    doc_path = tracked_paths[-1] if tracked_paths else None
                     if tracked_paths:
                         paths = session.extracted_paths.setdefault(doc_type, set())
                         paths.update(tracked_paths)
                         for p in tracked_paths:
                             session.extracted_results[p] = result
-
-                    # Primary doc_path for completion marker
-                    doc_path = _extract_doc_path(doc_type, tracker)
-                    if doc_path:
-                        paths = session.extracted_paths.setdefault(doc_type, set())
-                        paths.add(doc_path)
-                        session.extracted_results[doc_path] = result
-                        # Document created = research complete, clear session
+                        # Document created = complete, clear session
                         session.session_ids.pop(command, None)
                     return _format_tool_result(
                         session_id=last_session_id,

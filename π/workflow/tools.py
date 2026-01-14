@@ -17,9 +17,7 @@ from π.workflow.context import Command
 ask_questions = create_ask_questions_tool()
 
 
-@workflow_tool(
-    Command.RESEARCH_CODEBASE, phase_name="Researching codebase", doc_type="research"
-)
+@workflow_tool(Command.RESEARCH_CODEBASE, phase_name="Researching codebase")
 def research_codebase(
     *,
     session_id: str | None = None,
@@ -41,7 +39,7 @@ def research_codebase(
     )
 
 
-@workflow_tool(Command.CREATE_PLAN, phase_name="Creating plan", doc_type="plan")
+@workflow_tool(Command.CREATE_PLAN, phase_name="Creating plan")
 def create_plan(
     *,
     research_document_paths: list[Path | str],
