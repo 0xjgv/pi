@@ -193,16 +193,10 @@ class MemoryTools:
             return f"Error retrieving memories: {e}"
 
 
-# Module-level instance for DSPy tool registration
-_memory_tools: MemoryTools | None = None
-
-
+@lru_cache(maxsize=1)
 def get_memory_tools() -> MemoryTools:
-    """Get or create the MemoryTools instance."""
-    global _memory_tools  # noqa: PLW0603
-    if _memory_tools is None:
-        _memory_tools = MemoryTools(get_memory_client())
-    return _memory_tools
+    """Get or create the MemoryTools singleton."""
+    return MemoryTools(get_memory_client())
 
 
 # DSPy-compatible tool functions (delegate to class methods)

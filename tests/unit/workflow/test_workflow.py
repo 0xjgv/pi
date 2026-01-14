@@ -243,8 +243,7 @@ class TestWorkflowFunctions:
 
     def test_auto_resumes_existing_session(self, mock_execute_task: MagicMock):
         """Should automatically resume when session exists."""
-        from π.workflow.bridge import _ctx
-        from π.workflow.context import ExecutionContext
+        from π.workflow.context import ExecutionContext, _ctx
 
         ctx = ExecutionContext()
         ctx.session_ids[Command.RESEARCH_CODEBASE] = "auto-resume-session"
@@ -257,8 +256,7 @@ class TestWorkflowFunctions:
 
     def test_starts_new_session_when_none_exists(self, mock_execute_task: MagicMock):
         """Should start new session when no prior session exists."""
-        from π.workflow.bridge import _ctx
-        from π.workflow.context import ExecutionContext
+        from π.workflow.context import ExecutionContext, _ctx
 
         ctx = ExecutionContext()  # Fresh context, no IDs
         _ctx.set(ctx)
@@ -270,8 +268,7 @@ class TestWorkflowFunctions:
 
     def test_stores_session_for_future_resumption(self, mock_execute_task: MagicMock):
         """Should store session ID for future auto-resumption."""
-        from π.workflow.bridge import _ctx
-        from π.workflow.context import ExecutionContext
+        from π.workflow.context import ExecutionContext, _ctx
 
         mock_execute_task.return_value = ("Result", "new-session-xyz", _MOCK_TRACKER)
         ctx = ExecutionContext()

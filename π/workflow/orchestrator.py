@@ -82,18 +82,7 @@ def _run_with_retry[T: (ResearchResult, DesignResult, ExecuteResult)](
             )
             return result
 
-        except ValueError as e:
-            # User input errors - log and retry
-            last_error = e
-            logger.warning(
-                "Stage %s attempt %d failed (ValueError): %s",
-                stage.value,
-                attempt,
-                e,
-            )
-
         except Exception as e:
-            # Transient failures - log type and retry
             last_error = e
             logger.warning(
                 "Stage %s attempt %d failed (%s): %s",
@@ -182,7 +171,6 @@ class StagedWorkflow(dspy.Module):
                 logger.error("Research failed: %s", e)
                 return dspy.Prediction(status="failed", reason=str(e))
 
-        # Ensure research is not None at this point
         assert research is not None, "Research result required"
 
         # Helper to get research paths as list
@@ -225,7 +213,6 @@ class StagedWorkflow(dspy.Module):
                     reason=str(e),
                 )
 
-        # Ensure design is not None at this point
         assert design is not None, "Design result required"
 
         # Stage 3: Execute (implement + commit)

@@ -442,7 +442,7 @@ def fresh_execution_context():
     - Cleans up after the test (including closing event loop)
     """
     from π.workflow import ExecutionContext
-    from π.workflow.bridge import _ctx
+    from π.workflow.context import _ctx
 
     ctx = ExecutionContext()
     token = _ctx.set(ctx)

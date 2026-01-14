@@ -37,7 +37,6 @@ from π.utils import speak
 from π.workflow.context import (
     COMMAND_MAP,
     Command,
-    _ctx,
     get_ctx,
     get_event_loop,
 )
@@ -47,9 +46,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from π.workflow.types import DocType
-
-# Re-export _ctx for backwards compatibility (tests import it from bridge.py)
-__all__ = ["_ctx"]
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +59,7 @@ def timed_phase(phase_name: str) -> Generator[None]:
 
     # Skip spinner if live display is active (it shows phase status)
     if is_live_display_active():
-        try:
-            yield
-        finally:
-            pass
+        yield
     else:
         with console.status(f"[bold cyan]{phase_name}...") as status:
             set_current_status(status)
@@ -249,6 +242,9 @@ _FULL_LOG_TOOLS = frozenset({"Skill", "Task", "Write", "Edit"})
 # Maximum payload size before truncation (10KB)
 _MAX_PAYLOAD_SIZE = 10 * 1024
 
+# Commands that involve planning (not execution)
+_PLANNING_COMMANDS = frozenset({Command.CREATE_PLAN, Command.REVIEW_PLAN})
+
 
 @dataclass
 class ToolTimingTracker:
@@ -364,9 +360,9 @@ def _format_tool_result(
     DSPy ReAct handles continuation from response context.
 
     Args:
-        tool_name: Name of the tool (unused, kept for interface stability)
         doc_path: Extracted document path (if any)
         session_id: Session ID for continuation
+        tool_name: Name of the tool for context
         result: Raw result from Claude agent
 
     Returns:
@@ -435,11 +431,7 @@ async def _run_claude_session(
 
     logger.debug("Session writes: %s", tracker.writes)
 
-    return (
-        result_content if result_content else last_text_content,
-        new_session_id,
-        tracker,
-    )
+    return (result_content or last_text_content, new_session_id, tracker)
 
 
 def execute_claude_task(
@@ -489,11 +481,7 @@ def execute_claude_task(
         #
         # For planning commands, prefix with explicit instruction to prevent the agent
         # from jumping straight to implementation when given user feedback.
-        planning_commands = {
-            Command.CREATE_PLAN,
-            Command.REVIEW_PLAN,
-        }
-        if tool_command in planning_commands:
+        if tool_command in _PLANNING_COMMANDS:
             command = (
                 f"Based on this feedback, continue with your planning task "
                 f"(write or update the plan document, do NOT implement): {query}"
