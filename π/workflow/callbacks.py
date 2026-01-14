@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 LM_PROMPT_TRUNCATE = 2000  # Max chars for prompt logging
 LM_RESPONSE_TRUNCATE = 1000  # Max chars for response logging
 
+# Stage values from DSPy signatures (for final output detection)
+_FINAL_STAGES = frozenset({"research", "design", "execute"})
+
 
 def lm_debug_enabled() -> bool:
     """Check if verbose LM debug logging is enabled at runtime."""
@@ -179,9 +182,7 @@ class ReActLoggingCallback(BaseCallback):
 
     def _is_final_output(self, outputs: dict[str, Any]) -> bool:
         """Check if outputs are the final result."""
-        return "trajectory" in outputs or any(
-            k in ("research_doc_paths", "plan_doc_path", "status") for k in outputs
-        )
+        return "trajectory" in outputs or outputs.get("stage") in _FINAL_STAGES
 
     def _log_thought(self, outputs: dict[str, Any], duration: float) -> None:
         """Log a reasoning step."""

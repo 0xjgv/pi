@@ -213,3 +213,49 @@ class TestLMLogging:
 
         assert "LM PROMPT" not in caplog.text
         assert "secret prompt" not in caplog.text
+
+
+class TestStageDetection:
+    """Tests for stage detection methods."""
+
+    def test_is_final_output_with_stage_research(self) -> None:
+        """Detects research stage from stage field."""
+        callback = ReActLoggingCallback()
+        assert callback._is_final_output({"stage": "research", "other": "value"})
+
+    def test_is_final_output_with_stage_design(self) -> None:
+        """Detects design stage from stage field."""
+        callback = ReActLoggingCallback()
+        assert callback._is_final_output({"stage": "design"})
+
+    def test_is_final_output_with_stage_execute(self) -> None:
+        """Detects execute stage from stage field."""
+        callback = ReActLoggingCallback()
+        assert callback._is_final_output({"stage": "execute"})
+
+    def test_is_final_output_with_trajectory(self) -> None:
+        """Detects final output from trajectory key (backwards compat)."""
+        callback = ReActLoggingCallback()
+        assert callback._is_final_output({"trajectory": {"thought_1": "..."}})
+
+    def test_is_final_output_rejects_intermediate(self) -> None:
+        """Does not detect intermediate outputs as final."""
+        callback = ReActLoggingCallback()
+        assert not callback._is_final_output({"next_thought": "reasoning"})
+        assert not callback._is_final_output({"next_tool_name": "Read"})
+        assert not callback._is_final_output({"unknown_key": "value"})
+
+    def test_is_thought_output(self) -> None:
+        """Detects thought outputs correctly."""
+        callback = ReActLoggingCallback()
+        assert callback._is_thought_output({"Thought_1": "reasoning"})
+        assert callback._is_thought_output({"next_thought": "more reasoning"})
+        assert not callback._is_thought_output({"stage": "research"})
+
+    def test_is_action_output(self) -> None:
+        """Detects action outputs correctly."""
+        callback = ReActLoggingCallback()
+        assert callback._is_action_output({"next_tool_name": "Read"})
+        assert callback._is_action_output({"next_tool_args": {}})
+        assert callback._is_action_output({"tool_name": "Write"})
+        assert not callback._is_action_output({"stage": "research"})

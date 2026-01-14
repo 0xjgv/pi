@@ -99,6 +99,21 @@ class TestSessionWriteTracker:
             assert paths[0].endswith("a.md")
             assert paths[1].endswith("b.md")  # Last = most recent
 
+    def test_get_paths_handles_absolute_paths(self, tmp_path):
+        """get_paths handles absolute paths without mangling them."""
+        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
+            (tmp_path / "thoughts/shared/plans").mkdir(parents=True)
+            doc = tmp_path / "thoughts/shared/plans/test.md"
+            doc.write_text("# Plan")
+
+            tracker = SessionWriteTracker(command=Command.CREATE_PLAN)
+            # Write tool sends absolute paths
+            tracker.writes = [str(doc)]
+
+            paths = tracker.get_paths()
+            assert len(paths) == 1
+            assert paths[0] == str(doc)
+
     def test_pending_cleared_after_result(self):
         """Pending write should be cleared after tool result."""
         tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)

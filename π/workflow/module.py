@@ -17,6 +17,7 @@ class ResearchSignature(dspy.Signature):
 
     objective: str = dspy.InputField(desc="The clarified objective to research")
 
+    stage: str = dspy.OutputField(desc="Always 'research'")
     research_summaries: list[str] = dspy.OutputField(
         desc="Summaries of research findings about the codebase"
     )
@@ -45,6 +46,7 @@ class DesignSignature(dspy.Signature):
         desc="Summaries of the research findings"
     )
 
+    stage: str = dspy.OutputField(desc="Always 'design'")
     plan_doc_path: str = dspy.OutputField(desc="Path to the final plan document")
     plan_summary: str = dspy.OutputField(desc="Summary of the design and iterations")
 
@@ -58,6 +60,7 @@ class ExecuteSignature(dspy.Signature):
     plan_doc_path: str = dspy.InputField(desc="Path to the plan document")
     objective: str = dspy.InputField(desc="The original objective for context")
 
+    stage: str = dspy.OutputField(desc="Always 'execute'")
     status: str = dspy.OutputField(desc="Status: success, partial, or failed")
     files_changed: str = dspy.OutputField(desc="Comma-separated list of files changed")
     commit_hash: str = dspy.OutputField(desc="Git commit hash or 'none' if no commit")

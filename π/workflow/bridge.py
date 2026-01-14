@@ -11,6 +11,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import wraps
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -42,7 +43,6 @@ from π.workflow.context import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
-    from pathlib import Path
 
 # Command → DocType mapping (only commands that produce tracked documents)
 COMMAND_DOC_TYPE: dict[Command, str] = {
@@ -297,11 +297,14 @@ class SessionWriteTracker:
 
     def get_paths(self) -> list[str]:
         """Get all tracked paths that exist on disk."""
-        return [
-            str(get_project_root() / p)
-            for p in self.writes
-            if (get_project_root() / p).exists()
-        ]
+        result = []
+        for p in self.writes:
+            path = Path(p)
+            # Handle both absolute and relative paths
+            full_path = path if path.is_absolute() else get_project_root() / p
+            if full_path.exists():
+                result.append(str(full_path))
+        return result
 
     @staticmethod
     def _is_thoughts_path(file_path: str) -> bool:

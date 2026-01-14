@@ -6,10 +6,13 @@ These functions use DSPy ReAct agents with signature-driven outputs.
 from __future__ import annotations
 
 import logging
+import subprocess
+from pathlib import Path
 
 import dspy
 
 from π.core import MAX_ITERS
+from π.support.directory import get_project_root
 from π.workflow.callbacks import react_logging_callback
 from π.workflow.context import get_ctx
 from π.workflow.memory_tools import search_memories, store_memory
@@ -98,21 +101,17 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
         result = agent(objective=objective)
 
-    # Aggregate all research from tool calls during agent execution
+    # Use only tracked paths from tool calls (ignore LM output - may hallucinate)
     all_paths = ctx.extracted_paths.get("research", set())
     all_results = ctx.extracted_results
-
-    # Include agent's final output docs (may already be in extracted_paths)
-    all_paths.update(result.research_doc_paths)
 
     # Build list of validated ResearchDocPath objects
     research_docs = [ResearchDocPath(path=p) for p in sorted(all_paths)]
 
-    # Build list of summaries: agent summaries first, then context-tracked ones
-    summaries = list(result.research_summaries)
-    for doc in research_docs:
-        if doc.path in all_results and all_results[doc.path] not in summaries:
-            summaries.append(all_results[doc.path])
+    # Use only context-tracked summaries from actual tool calls
+    summaries = [
+        all_results[doc.path] for doc in research_docs if doc.path in all_results
+    ]
 
     # Determine reason based on agent's explicit task_status and needs_implementation
     if not result.needs_implementation:
@@ -191,7 +190,14 @@ def stage_design(
             objective=objective,
         )
 
-    plan_doc = PlanDocPath(path=result.plan_doc_path)
+    # Use tracked plan path from tool calls (ignore LM output - may hallucinate)
+    plan_paths = ctx.extracted_paths.get("plan", set())
+    if not plan_paths:
+        msg = "Design did not produce a plan document"
+        raise ValueError(msg)
+    # Use most recent plan if multiple were created
+    plan_path = max(plan_paths, key=lambda p: Path(p).stat().st_mtime)
+    plan_doc = PlanDocPath(path=plan_path)
 
     logger.info("Design complete: plan=%s", plan_doc.path)
 
@@ -199,6 +205,46 @@ def stage_design(
         summary=result.plan_summary,
         plan_doc=plan_doc,
     )
+
+
+def _get_git_changed_files(*, cwd: Path) -> list[str]:
+    """Get changed files from git.
+
+    Args:
+        cwd: Working directory for git command.
+
+    Returns:
+        List of changed file paths (empty if none or git fails).
+    """
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "HEAD~1"],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    return [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
+
+
+def _get_git_commit_hash(*, cwd: Path) -> str | None:
+    """Get latest commit hash from git.
+
+    Args:
+        cwd: Working directory for git command.
+
+    Returns:
+        Short commit hash or None if git fails.
+    """
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 def stage_execute(
@@ -238,11 +284,10 @@ def stage_execute(
             objective=objective,
         )
 
-    # Parse files_changed from comma-separated string
-    files_changed = [f.strip() for f in result.files_changed.split(",") if f.strip()]
-
-    # Handle commit_hash
-    commit_hash = result.commit_hash if result.commit_hash != "none" else None
+    # Get files_changed and commit_hash from git (ignore LM output - may hallucinate)
+    cwd = get_project_root()
+    files_changed = _get_git_changed_files(cwd=cwd)
+    commit_hash = _get_git_commit_hash(cwd=cwd)
 
     logger.info("Execute complete: status=%s, commit=%s", result.status, commit_hash)
 
