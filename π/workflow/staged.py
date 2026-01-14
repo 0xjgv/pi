@@ -71,12 +71,15 @@ Strategy:
     return ContextAwareSignature  # type: ignore[return-value]
 
 
-def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
+def stage_research(
+    *, objective: str, lm: dspy.LM, max_iters: int = MAX_ITERS
+) -> ResearchResult:
     """Research stage using ReAct agent.
 
     Args:
         objective: The objective to research.
         lm: DSPy language model for ReAct agent.
+        max_iters: Maximum ReAct iterations.
 
     Returns:
         ResearchResult with aggregated docs and summaries from all tool calls.
@@ -93,9 +96,9 @@ def stage_research(*, objective: str, lm: dspy.LM) -> ResearchResult:
     signature = with_codebase_context(ResearchSignature, ctx.codebase_context or "")
 
     agent = dspy.ReAct(
-        tools=[research_codebase, ask_questions, search_memories],
+        tools=[research_codebase, ask_questions, search_memories, store_memory],
         signature=signature,
-        max_iters=MAX_ITERS,
+        max_iters=max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
@@ -142,6 +145,7 @@ def stage_design(
     research: ResearchResult,
     objective: str,
     lm: dspy.LM,
+    max_iters: int = MAX_ITERS,
 ) -> DesignResult:
     """Design stage using ReAct agent.
 
@@ -149,6 +153,7 @@ def stage_design(
         research: Complete result from research stage with all docs and summaries.
         objective: The original objective.
         lm: DSPy language model for ReAct agent.
+        max_iters: Maximum ReAct iterations.
 
     Returns:
         DesignResult from signature outputs.
@@ -178,9 +183,10 @@ def stage_design(
             review_plan,
             ask_questions,
             search_memories,
+            store_memory,
         ],
         signature=signature,
-        max_iters=MAX_ITERS,
+        max_iters=max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
@@ -252,6 +258,7 @@ def stage_execute(
     plan_doc: PlanDocPath,
     objective: str,
     lm: dspy.LM,
+    max_iters: int = MAX_ITERS,
 ) -> ExecuteResult:
     """Execute stage using ReAct agent.
 
@@ -259,6 +266,7 @@ def stage_execute(
         plan_doc: Validated PlanDocPath from design stage.
         objective: The original objective.
         lm: DSPy language model for ReAct agent.
+        max_iters: Maximum ReAct iterations.
 
     Returns:
         ExecuteResult from signature outputs.
@@ -273,9 +281,15 @@ def stage_execute(
     signature = with_codebase_context(ExecuteSignature, ctx.codebase_context or "")
 
     agent = dspy.ReAct(
-        tools=[implement_plan, commit_changes, ask_questions, store_memory],
+        tools=[
+            implement_plan,
+            commit_changes,
+            ask_questions,
+            search_memories,
+            store_memory,
+        ],
         signature=signature,
-        max_iters=MAX_ITERS,
+        max_iters=max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):

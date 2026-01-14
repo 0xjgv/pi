@@ -4,7 +4,8 @@ import sys
 
 import pytest
 
-from π.doc_sync.core import DEFAULT_FILES_THRESHOLD, DocSyncState
+from π.core.constants import DOC_SYNC
+from π.doc_sync.core import DocSyncState
 
 
 class TestDocSyncState:
@@ -37,7 +38,7 @@ class TestDocSyncState:
 
     def test_should_trigger_at_threshold(self):
         """should_trigger returns True at threshold."""
-        state = DocSyncState(files_changed_since_sync=DEFAULT_FILES_THRESHOLD)
+        state = DocSyncState(files_changed_since_sync=DOC_SYNC.files_threshold)
         assert state.should_trigger()
 
     def test_mark_synced_resets_counter(self, tmp_path, monkeypatch):

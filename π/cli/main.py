@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 from importlib.metadata import version as get_version
+from pathlib import Path
 
 from dotenv import load_dotenv
 from rich.panel import Panel
@@ -16,6 +17,7 @@ from π.core import Provider, Tier, get_lm
 from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import CheckpointManager, CheckpointState, StagedWorkflow
+from π.workflow.memory import cleanup_chroma_store
 
 logger = logging.getLogger(__name__)
 VERSION = get_version("pi-rpi")
@@ -29,10 +31,33 @@ def _create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("objective", nargs="?", help="The objective for the agent")
     parser.add_argument(
+        "--provider",
+        choices=["claude", "antigravity"],
+        default="claude",
+        help="LLM provider (default: claude)",
+    )
+    parser.add_argument(
+        "--tier",
+        choices=["low", "med", "high", "ultra"],
+        default="high",
+        help="Model tier (default: high)",
+    )
+    parser.add_argument(
+        "--max-iters",
+        type=int,
+        default=5,
+        help="Maximum ReAct iterations per stage (default: 5)",
+    )
+    parser.add_argument(
         "--max-retries",
         type=int,
         default=3,
         help="Maximum retry attempts per stage (default: 3)",
+    )
+    parser.add_argument(
+        "--checkpoint-path",
+        type=Path,
+        help="Custom checkpoint file path (default: .π/checkpoint.json)",
     )
     parser.add_argument(
         "--no-resume",
@@ -53,8 +78,12 @@ def _create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# Load environment variables
+# Load environment variables and validate
 load_dotenv()
+
+from π.core.env import validate_required_env  # noqa: E402
+
+validate_required_env()
 
 
 def _check_resume(
@@ -100,19 +129,26 @@ def _check_resume(
 def run_workflow_mode(
     objective: str,
     *,
+    provider: Provider = Provider.Claude,
+    tier: Tier = Tier.HIGH,
+    max_iters: int = 5,
     max_retries: int = 3,
+    checkpoint_path: Path | None = None,
     no_resume: bool = False,
 ) -> None:
     """Execute objective using StagedWorkflow pipeline."""
-    checkpoint = CheckpointManager(max_retries=max_retries)
+    checkpoint = CheckpointManager(
+        max_retries=max_retries,
+        checkpoint_path=checkpoint_path,
+    )
     resume_state = None
 
     # Check for existing checkpoint
     if not no_resume and checkpoint.has_checkpoint():
         resume_state = _check_resume(checkpoint, objective)
 
-    lm = get_lm(Provider.Claude, Tier.HIGH)
-    workflow = StagedWorkflow(lm=lm, checkpoint=checkpoint)
+    lm = get_lm(provider, tier)
+    workflow = StagedWorkflow(lm=lm, checkpoint=checkpoint, max_iters=max_iters)
 
     display = LiveArtifactDisplay()
     display.start()
@@ -180,6 +216,7 @@ def main(argv: list[str] | None = None) -> None:
     logs_dir = get_logs_dir()
     cleanup_old_logs(logs_dir)  # Clean old logs first
     archive_old_documents()  # Archive old research/plan documents
+    cleanup_chroma_store()  # Archive stale memory stores
 
     # Enable verbose LM logging when --verbose flag set
     if args.verbose:
@@ -193,7 +230,11 @@ def main(argv: list[str] | None = None) -> None:
 
     run_workflow_mode(
         objective,
+        provider=Provider(args.provider),
+        tier=Tier(args.tier),
+        max_iters=args.max_iters,
         max_retries=args.max_retries,
+        checkpoint_path=args.checkpoint_path,
         no_resume=args.no_resume,
     )
 

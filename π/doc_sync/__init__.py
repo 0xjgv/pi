@@ -3,8 +3,8 @@
 Evaluates codebase changes and updates CLAUDE.md when warranted.
 """
 
+from π.core.constants import DOC_SYNC
 from π.doc_sync.core import (
-    DEFAULT_FILES_THRESHOLD,
     DocSyncResult,
     DocSyncSignature,
     DocSyncState,
@@ -12,7 +12,7 @@ from π.doc_sync.core import (
 )
 
 __all__ = [
-    "DEFAULT_FILES_THRESHOLD",
+    "DOC_SYNC",
     "DocSyncResult",
     "DocSyncSignature",
     "DocSyncState",

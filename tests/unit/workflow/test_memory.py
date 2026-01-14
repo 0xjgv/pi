@@ -73,3 +73,65 @@ class TestGetMemoryClient:
             client = get_memory_client()
             # Should return NoOp because hosted client failed
             assert isinstance(client, NoOpMemoryClient)
+
+
+class TestCleanupChromaStore:
+    """Tests for ChromaDB store cleanup function."""
+
+    def test_returns_false_when_path_not_exists(self, tmp_path):
+        """Should return False if chroma path doesn't exist."""
+        from π.workflow.memory import cleanup_chroma_store
+
+        nonexistent = tmp_path / "nonexistent"
+        result = cleanup_chroma_store(chroma_path=str(nonexistent))
+        assert result is False
+
+    def test_returns_false_when_store_is_fresh(self, tmp_path):
+        """Should return False if store is newer than retention period."""
+        from π.workflow.memory import cleanup_chroma_store
+
+        chroma_dir = tmp_path / "chroma"
+        chroma_dir.mkdir()
+        (chroma_dir / "test.db").touch()
+
+        # Fresh store should not be archived
+        result = cleanup_chroma_store(chroma_path=str(chroma_dir), retention_days=30)
+        assert result is False
+        assert chroma_dir.exists()  # Still exists
+
+    def test_archives_old_store(self, tmp_path):
+        """Should archive store older than retention period."""
+        import os
+        from datetime import datetime, timedelta
+
+        from π.workflow.memory import cleanup_chroma_store
+
+        # Create chroma directory structure
+        chroma_dir = tmp_path / "chroma"
+        chroma_dir.mkdir()
+        test_file = chroma_dir / "test.db"
+        test_file.touch()
+
+        # Set modification time to 40 days ago
+        old_time = datetime.now() - timedelta(days=40)
+        old_timestamp = old_time.timestamp()
+        os.utime(chroma_dir, (old_timestamp, old_timestamp))
+
+        # Should archive the old store
+        result = cleanup_chroma_store(chroma_path=str(chroma_dir), retention_days=30)
+        assert result is True
+        assert not chroma_dir.exists()  # Original moved
+        # Archived directory should exist
+        archived_dirs = list((tmp_path / "archived").glob("*/chroma"))
+        assert len(archived_dirs) == 1
+
+    def test_uses_default_retention_from_constants(self, tmp_path):
+        """Should use RETENTION.memory_store_days as default."""
+        from π.workflow.memory import cleanup_chroma_store
+
+        chroma_dir = tmp_path / "chroma"
+        chroma_dir.mkdir()
+
+        # With default retention (30 days), fresh store should not be archived
+        result = cleanup_chroma_store(chroma_path=str(chroma_dir))
+        assert result is False

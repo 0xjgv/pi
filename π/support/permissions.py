@@ -12,6 +12,7 @@ from claude_agent_sdk.types import (
 )
 
 from π.console import console
+from π.core.constants import TIMEOUTS
 from π.state import get_current_status
 from π.utils import speak, truncate
 from π.workflow.context import get_ctx
@@ -21,20 +22,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Default timeout for user input (5 minutes)
-USER_INPUT_TIMEOUT = 300.0
-
 
 async def _get_input_with_timeout(prompt: str) -> str:
     """Get user input with timeout, returning placeholder on timeout/empty."""
     try:
         response = await wait_for(
             asyncio.to_thread(console.input, prompt),
-            timeout=USER_INPUT_TIMEOUT,
+            timeout=TIMEOUTS.user_input,
         )
         return response.strip() or "[No response provided]"
     except TimeoutError:
-        logger.warning("User input timed out after %s seconds", USER_INPUT_TIMEOUT)
+        logger.warning("User input timed out after %s seconds", TIMEOUTS.user_input)
         return "[No response - timed out]"
 
 

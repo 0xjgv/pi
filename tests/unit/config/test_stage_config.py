@@ -1,56 +1,53 @@
 """Tests for π.config.stages module."""
 
-from π.config import MAX_ITERS, STAGE_TIERS, Stage
+from π.config import MAX_ITERS, STAGE_TIERS, WorkflowStage
+from π.core.enums import Tier
 
 
-class TestStage:
-    """Tests for Stage enum."""
+class TestWorkflowStage:
+    """Tests for WorkflowStage enum."""
 
     def test_has_all_workflow_stages(self):
         """Should define all workflow stages."""
-        assert Stage.RESEARCH_CODEBASE == "research_codebase"
-        assert Stage.PLAN == "plan"
-        assert Stage.REVIEW_PLAN == "review_plan"
-        assert Stage.IMPLEMENT_PLAN == "implement_plan"
-        assert Stage.COMMIT == "commit"
+        assert WorkflowStage.RESEARCH == "research"
+        assert WorkflowStage.DESIGN == "design"
+        assert WorkflowStage.EXECUTE == "execute"
 
     def test_stage_count(self):
-        """Should have exactly 5 stages."""
-        assert len(Stage) == 5
+        """Should have exactly 3 stages."""
+        assert len(WorkflowStage) == 3
 
     def test_stages_are_strings(self):
         """Stage values should be strings for serialization."""
-        for stage in Stage:
+        for stage in WorkflowStage:
             assert isinstance(stage.value, str)
 
 
 class TestStageTiers:
     """Tests for STAGE_TIERS configuration."""
 
-    def test_has_active_stages(self):
-        """Should have configuration for active workflow stages."""
-        # Only RESEARCH, PLAN, REVIEW_PLAN are currently active in workflow
-        assert Stage.RESEARCH_CODEBASE in STAGE_TIERS
-        assert Stage.PLAN in STAGE_TIERS
-        assert Stage.REVIEW_PLAN in STAGE_TIERS
+    def test_has_all_stages(self):
+        """Should have configuration for all workflow stages."""
+        assert WorkflowStage.RESEARCH in STAGE_TIERS
+        assert WorkflowStage.DESIGN in STAGE_TIERS
+        assert WorkflowStage.EXECUTE in STAGE_TIERS
 
     def test_research_uses_high_tier(self):
         """Research stage should use high tier for deep understanding."""
-        assert STAGE_TIERS[Stage.RESEARCH_CODEBASE] == "high"
+        assert STAGE_TIERS[WorkflowStage.RESEARCH] == Tier.HIGH
 
-    def test_plan_uses_high_tier(self):
-        """Plan stage should use high tier for complex reasoning."""
-        assert STAGE_TIERS[Stage.PLAN] == "high"
+    def test_design_uses_high_tier(self):
+        """Design stage should use high tier for complex reasoning."""
+        assert STAGE_TIERS[WorkflowStage.DESIGN] == Tier.HIGH
 
-    def test_review_plan_uses_high_tier(self):
-        """Review plan stage should use high tier for thorough review."""
-        assert STAGE_TIERS[Stage.REVIEW_PLAN] == "high"
+    def test_execute_uses_high_tier(self):
+        """Execute stage should use high tier for thorough implementation."""
+        assert STAGE_TIERS[WorkflowStage.EXECUTE] == Tier.HIGH
 
     def test_all_tiers_are_valid(self):
-        """All tier values should be valid tier strings."""
-        valid_tiers = {"low", "med", "high"}
+        """All tier values should be valid Tier enum members."""
         for stage, tier in STAGE_TIERS.items():
-            assert tier in valid_tiers, f"{stage} has invalid tier: {tier}"
+            assert isinstance(tier, Tier), f"{stage} has invalid tier: {tier}"
 
 
 class TestMaxIters:

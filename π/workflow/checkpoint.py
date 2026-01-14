@@ -10,27 +10,19 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
+from π.core.constants import WORKFLOW
+from π.core.enums import WorkflowStage
 from π.support.directory import get_project_root
 from π.workflow.types import DesignResult, ExecuteResult, ResearchResult
 
 logger = logging.getLogger(__name__)
 
 CHECKPOINT_FILE = ".π/checkpoint.json"
-DEFAULT_MAX_RETRIES = 3
-
-
-class WorkflowStage(StrEnum):
-    """Workflow stages for checkpoint tracking."""
-
-    RESEARCH = "research"
-    DESIGN = "design"
-    EXECUTE = "execute"
 
 
 class StageCheckpoint(BaseModel):
@@ -106,12 +98,14 @@ class CheckpointManager:
     Follows the DocSyncState pattern from π/doc_sync/core.py.
     """
 
-    max_retries: int = DEFAULT_MAX_RETRIES
+    max_retries: int = WORKFLOW.max_retries
+    checkpoint_path: Path | None = None
     _state: CheckpointState | None = field(default=None, repr=False)
 
-    @property
-    def checkpoint_path(self) -> Path:
+    def _get_checkpoint_path(self) -> Path:
         """Get the checkpoint file path."""
+        if self.checkpoint_path:
+            return self.checkpoint_path
         return get_project_root() / CHECKPOINT_FILE
 
     def load(self) -> CheckpointState | None:
@@ -123,11 +117,12 @@ class CheckpointManager:
         Returns:
             CheckpointState if file exists and is valid, None otherwise.
         """
-        if not self.checkpoint_path.exists():
+        path = self._get_checkpoint_path()
+        if not path.exists():
             return None
 
         try:
-            data = json.loads(self.checkpoint_path.read_text())
+            data = json.loads(path.read_text())
 
             # Check paths exist before running validators
             missing = CheckpointState.validate_paths(data)
@@ -167,27 +162,29 @@ class CheckpointManager:
 
         Uses write-to-temp-then-rename pattern to prevent corruption.
         """
+        path = self._get_checkpoint_path()
         state.updated_at = datetime.now(UTC).isoformat()
-        self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
 
         # Atomic write: temp file then rename
-        temp_path = self.checkpoint_path.with_suffix(".tmp")
+        temp_path = path.with_suffix(".tmp")
         temp_path.write_text(json.dumps(state.model_dump(mode="json"), indent=2))
-        temp_path.rename(self.checkpoint_path)
+        temp_path.rename(path)
 
         self._state = state
         logger.info("Saved checkpoint: last_stage=%s", state.last_completed_stage)
 
     def clear(self) -> None:
         """Delete checkpoint file."""
-        if self.checkpoint_path.exists():
-            self.checkpoint_path.unlink()
+        path = self._get_checkpoint_path()
+        if path.exists():
+            path.unlink()
             logger.info("Cleared checkpoint")
         self._state = None
 
     def has_checkpoint(self) -> bool:
         """Check if a checkpoint file exists."""
-        return self.checkpoint_path.exists()
+        return self._get_checkpoint_path().exists()
 
     def get_resume_stage(self) -> WorkflowStage | None:
         """Get the next stage to execute after resume.

@@ -13,13 +13,13 @@ from datetime import UTC, datetime
 import dspy
 
 from π.core import MAX_ITERS
+from π.core.constants import DOC_SYNC
 from π.support.directory import get_project_root
 from π.workflow.tools import ask_questions, write_claude_md
 
 logger = logging.getLogger(__name__)
 
 DOC_SYNC_STATE_FILE = ".π/doc-sync-state.json"
-DEFAULT_FILES_THRESHOLD = 10
 
 
 class DocSyncSignature(dspy.Signature):
@@ -62,7 +62,7 @@ class DocSyncState:
     last_sync_commit: str | None = None
     last_sync_timestamp: str | None = None
     files_changed_since_sync: int = 0
-    files_threshold: int = DEFAULT_FILES_THRESHOLD
+    files_threshold: int = DOC_SYNC.files_threshold
 
     @classmethod
     def load(cls) -> DocSyncState:

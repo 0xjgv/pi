@@ -19,11 +19,9 @@ class Tier(StrEnum):
     ULTRA = "ultra"
 
 
-class Stage(StrEnum):
-    """Workflow stages."""
+class WorkflowStage(StrEnum):
+    """Workflow stages for checkpoint tracking and tier mapping."""
 
-    RESEARCH_CODEBASE = "research_codebase"
-    PLAN = "plan"
-    REVIEW_PLAN = "review_plan"
-    IMPLEMENT_PLAN = "implement_plan"
-    COMMIT = "commit"
+    RESEARCH = "research"
+    DESIGN = "design"
+    EXECUTE = "execute"

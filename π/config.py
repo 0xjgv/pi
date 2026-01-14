@@ -13,8 +13,8 @@ from π.core import (
     PROVIDER_MODELS,
     STAGE_TIERS,
     Provider,
-    Stage,
     Tier,
+    WorkflowStage,
     get_lm,
 )
 from π.hooks import check_bash_command, check_file_format
@@ -74,8 +74,8 @@ __all__ = [
     "PROVIDER_MODELS",
     "STAGE_TIERS",
     "Provider",
-    "Stage",
     "Tier",
+    "WorkflowStage",
     "get_agent_options",
     "get_lm",
 ]

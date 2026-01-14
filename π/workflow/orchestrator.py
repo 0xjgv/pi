@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import dspy
 
+from π.core.constants import WORKFLOW
 from π.support.aitl import AgentQuestionAnswerer
 from π.support.directory import load_codebase_context
 from π.workflow.checkpoint import (
@@ -27,9 +28,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
-
-# Retry configuration
-BASE_RETRY_DELAY = 1.0  # seconds
 
 
 def _run_with_retry[T: (ResearchResult, DesignResult, ExecuteResult)](
@@ -94,7 +92,7 @@ def _run_with_retry[T: (ResearchResult, DesignResult, ExecuteResult)](
 
         # Exponential backoff before next attempt
         if attempt < checkpoint.max_retries:
-            delay = BASE_RETRY_DELAY * (2 ** (attempt - 1))  # 1s, 2s, 4s
+            delay = WORKFLOW.base_retry_delay * (2 ** (attempt - 1))  # 1s, 2s, 4s
             logger.info("Retrying in %.1fs...", delay)
             time.sleep(delay)
 
@@ -118,10 +116,12 @@ class StagedWorkflow(dspy.Module):
         lm: dspy.LM,
         *,
         checkpoint: CheckpointManager | None = None,
+        max_iters: int = 5,
     ) -> None:
         super().__init__()
         self.lm = lm
         self.checkpoint = checkpoint or CheckpointManager()
+        self.max_iters = max_iters
 
     def forward(
         self,
@@ -162,7 +162,9 @@ class StagedWorkflow(dspy.Module):
             logger.info("=== STAGE 1/3: RESEARCH ===")
             try:
                 research = _run_with_retry(
-                    stage_fn=lambda: stage_research(objective=objective, lm=self.lm),
+                    stage_fn=lambda: stage_research(
+                        objective=objective, lm=self.lm, max_iters=self.max_iters
+                    ),
                     stage=WorkflowStage.RESEARCH,
                     checkpoint=self.checkpoint,
                     objective=objective,
@@ -200,6 +202,7 @@ class StagedWorkflow(dspy.Module):
                         research=research,
                         objective=objective,
                         lm=self.lm,
+                        max_iters=self.max_iters,
                     ),
                     stage=WorkflowStage.DESIGN,
                     checkpoint=self.checkpoint,
@@ -223,6 +226,7 @@ class StagedWorkflow(dspy.Module):
                     plan_doc=design.plan_doc,
                     objective=objective,
                     lm=self.lm,
+                    max_iters=self.max_iters,
                 ),
                 stage=WorkflowStage.EXECUTE,
                 checkpoint=self.checkpoint,

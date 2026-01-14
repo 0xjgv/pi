@@ -17,7 +17,7 @@ warnings.filterwarnings(
 
 import dspy  # noqa: E402 - must import after warning filter
 
-from π.core.enums import Provider, Stage, Tier  # noqa: E402
+from π.core.enums import Provider, Tier, WorkflowStage  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +36,11 @@ PROVIDER_MODELS: dict[Provider, dict[Tier, str]] = {
     },
 }
 
-# Stage → Model tier mapping (only active stages)
-STAGE_TIERS: dict[Stage, Tier] = {
-    Stage.RESEARCH_CODEBASE: Tier.HIGH,
-    Stage.PLAN: Tier.HIGH,
-    Stage.REVIEW_PLAN: Tier.HIGH,
-    Stage.IMPLEMENT_PLAN: Tier.HIGH,
-    Stage.COMMIT: Tier.LOW,
+# WorkflowStage → Model tier mapping
+STAGE_TIERS: dict[WorkflowStage, Tier] = {
+    WorkflowStage.RESEARCH: Tier.HIGH,
+    WorkflowStage.DESIGN: Tier.HIGH,
+    WorkflowStage.EXECUTE: Tier.HIGH,
 }
 
 # Maximum ReAct iterations (same for all stages)

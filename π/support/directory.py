@@ -4,9 +4,9 @@ import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from π.core.constants import RETENTION
+
 PI_GITIGNORE_ENTRY = ".π/\n"
-DEFAULT_LOG_RETENTION_DAYS = 7
-DEFAULT_DOCUMENT_RETENTION_DAYS = 5
 ARCHIVED_BASE_DIR = "thoughts/shared/archived"
 PROJECT_MARKERS = {
     ".git",
@@ -69,9 +69,7 @@ def get_logs_dir(root: Path | None = None) -> Path:
     return logs_dir
 
 
-def cleanup_old_logs(
-    logs_dir: Path, retention_days: int = DEFAULT_LOG_RETENTION_DAYS
-) -> int:
+def cleanup_old_logs(logs_dir: Path, retention_days: int = RETENTION.logs_days) -> int:
     """Remove log files older than retention_days.
 
     Args:
@@ -104,7 +102,7 @@ def cleanup_old_logs(
 def archive_old_documents(
     *,
     root: Path | None = None,
-    retention_days: int = DEFAULT_DOCUMENT_RETENTION_DAYS,
+    retention_days: int = RETENTION.documents_days,
 ) -> dict[str, int]:
     """Archive research and plan documents older than retention_days.
 

@@ -75,14 +75,18 @@ def _get_self_hosted_client() -> Memory:
     """Get self-hosted Mem0 client using cliproxy + ChromaDB."""
     from mem0 import Memory
 
+    from π.core.enums import Provider, Tier
+    from π.core.models import PROVIDER_MODELS
+
     api_base = os.getenv("CLIPROXY_API_BASE", "http://localhost:8317")
     api_key = os.getenv("CLIPROXY_API_KEY", "")
+    model = PROVIDER_MODELS[Provider.Claude][Tier.MED]
 
     config = {
         "llm": {
             "provider": "openai",
             "config": {
-                "model": "claude-sonnet-4-20250514",
+                "model": model,
                 "openai_base_url": api_base,
                 "api_key": api_key,
             },
@@ -106,3 +110,46 @@ def _get_self_hosted_client() -> Memory:
 
     logger.debug("Initializing Mem0 client (self-hosted) with api_base=%s", api_base)
     return Memory.from_config(config)
+
+
+def cleanup_chroma_store(
+    *,
+    chroma_path: str | None = None,
+    retention_days: int | None = None,
+) -> bool:
+    """Archive ChromaDB store if older than retention period.
+
+    Moves entire chroma directory to .π/memory/archived/{timestamp}/
+    when store age exceeds retention_days.
+
+    Args:
+        chroma_path: Path to chroma store. Defaults to .π/memory/chroma.
+        retention_days: Days before archiving. Defaults to RETENTION.memory_store_days.
+
+    Returns:
+        True if archived, False otherwise.
+    """
+    import shutil
+    from datetime import datetime, timedelta
+    from pathlib import Path
+
+    from π.core.constants import RETENTION
+
+    path = Path(chroma_path) if chroma_path else Path(".π/memory/chroma")
+    days = retention_days if retention_days is not None else RETENTION.memory_store_days
+
+    if not path.exists():
+        return False
+
+    # Check modification time of store
+    mtime = datetime.fromtimestamp(path.stat().st_mtime)
+    if datetime.now() - mtime < timedelta(days=days):
+        return False
+
+    # Archive to timestamped directory
+    archive_dir = path.parent / "archived" / mtime.strftime("%Y-%m-%d")
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(path), str(archive_dir / "chroma"))
+
+    logger.info("Archived ChromaDB store to %s", archive_dir)
+    return True

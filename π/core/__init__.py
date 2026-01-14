@@ -4,7 +4,7 @@ This module is a leaf layer with no imports from other π modules,
 breaking potential circular dependencies.
 """
 
-from π.core.enums import Provider, Stage, Tier
+from π.core.enums import Provider, Tier, WorkflowStage
 from π.core.errors import AgentExecutionError
 from π.core.models import (
     MAX_ITERS,
@@ -19,7 +19,7 @@ __all__ = [
     "STAGE_TIERS",
     "AgentExecutionError",
     "Provider",
-    "Stage",
     "Tier",
+    "WorkflowStage",
     "get_lm",
 ]

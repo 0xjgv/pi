@@ -12,10 +12,11 @@ import re
 import time
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import ResultMessage
+from pydantic import BaseModel
 
 from π.support.directory import get_project_root
 from π.workflow.context import ExecutionContext, get_ctx, get_event_loop
@@ -25,6 +26,54 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+class Question(BaseModel):
+    """A question with response format hint for AITL agent."""
+
+    text: str
+    response_type: Literal["brief", "detailed", "yes_no"] = "brief"
+    context: str | None = None
+
+
+class Answer(BaseModel):
+    """Structured answer from AITL agent."""
+
+    content: str
+    evidence: str | None = None
+    confidence: Literal["HIGH", "MEDIUM", "LOW"] = "MEDIUM"
+
+
+def _normalize_questions(
+    questions: list[Question] | list[str] | list[dict],
+) -> list[Question]:
+    """Normalize various question formats to list[Question].
+
+    Supports:
+    - list[Question]: Pass through (new format)
+    - list[str]: Convert to Question(text=str) (legacy format)
+    - list[dict]: Convert via Question(**dict) (dict format)
+
+    Args:
+        questions: Questions in any supported format
+
+    Returns:
+        Normalized list of Question objects
+    """
+    if not questions:
+        return []
+
+    first = questions[0]
+    if isinstance(first, Question):
+        return questions  # type: ignore[return-value]
+    if isinstance(first, str):
+        return [Question(text=q) for q in questions]  # type: ignore[arg-type]
+    if isinstance(first, dict):
+        return [Question(**q) for q in questions]  # type: ignore[arg-type]
+
+    msg = f"Unsupported question format: {type(first)}"
+    raise TypeError(msg)
+
 
 # Read-only tools for the answerer agent
 _ANSWERER_TOOLS = ["Read", "Glob", "Grep"]
@@ -37,11 +86,11 @@ class QuestionAnswerer(Protocol):
     interfaces (agent, CLI, web, Slack, etc.).
     """
 
-    def ask(self, questions: list[str]) -> list[str]:
+    def ask(self, questions: list[Question]) -> list[str]:
         """Answer one or more questions.
 
         Args:
-            questions: List of questions to answer
+            questions: List of Question objects to answer
 
         Returns:
             List of answers (same order as questions)
@@ -74,11 +123,11 @@ class AgentQuestionAnswerer:
             cwd=cwd,
         )
 
-    def ask(self, questions: list[str]) -> list[str]:
+    def ask(self, questions: list[Question]) -> list[str]:
         """Answer questions using Claude agent with codebase access.
 
         Args:
-            questions: List of questions from the workflow agent
+            questions: List of Question objects from the workflow agent
 
         Returns:
             List of answers (same length as questions)
@@ -92,17 +141,10 @@ class AgentQuestionAnswerer:
 
         # Log questions at DEBUG level for verbose mode
         for i, q in enumerate(questions, 1):
-            logger.debug("AITL Q%d: %s", i, q)
+            logger.debug("AITL Q%d: %s", i, q.text)
 
-        ctx = get_ctx()
-
-        # Build context from workflow state
-        context_parts = self._build_context(ctx)
-
-        # Format questions for the agent
-        questions_text = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(questions))
-
-        prompt = self._build_prompt(context_parts, questions_text, len(questions))
+        # Build prompt with structured questions (context built internally)
+        prompt = self._build_prompt(questions)
 
         # Execute via async bridge
         answers = self._execute_agent(prompt, len(questions))
@@ -115,7 +157,7 @@ class AgentQuestionAnswerer:
             "batch_id": batch_id,
             "timestamp": datetime.now().isoformat(),
             "count": len(questions),
-            "questions": questions,
+            "questions": [q.model_dump() for q in questions],
             "answers": answers,
             "duration_ms": duration_ms,
         }
@@ -124,7 +166,9 @@ class AgentQuestionAnswerer:
         for i, a in enumerate(answers, 1):
             logger.debug("AITL A%d: %s", i, a)
 
-        self._answer_log.append((questions.copy(), answers.copy()))
+        self._answer_log.append(
+            ([q.text for q in questions], answers.copy()),
+        )
         return answers
 
     def _build_context(self, ctx: ExecutionContext) -> list[str]:
@@ -143,45 +187,60 @@ class AgentQuestionAnswerer:
 
         return parts
 
-    def _build_prompt(
-        self,
-        context_parts: list[str],
-        questions_text: str,
-        count: int,
-    ) -> str:
-        """Build the agent prompt for technical decision support."""
+    def _build_prompt(self, questions: list[Question]) -> str:
+        """Build the agent prompt with structured question format."""
+        ctx = get_ctx()
+        context_parts = self._build_context(ctx)
         context = "\n\n".join(context_parts) if context_parts else "(no context)"
 
-        return (
-            "You are a senior technical advisor helping a Staff Engineer make "
-            "informed decisions about a codebase. Your role is to provide "
-            "evidence-based answers that enable confident decision-making.\n\n"
-            f"## Workflow Context\n{context}\n\n"
-            f"## Questions\n{questions_text}\n\n"
-            "## Response Framework\n"
-            "For each question, structure your answer to support decision-making:\n\n"
-            "1. **Direct Answer**: Lead with the concrete finding or recommendation\n"
-            "2. **Evidence**: Cite specific files, functions, patterns with paths "
-            "and line numbers\n"
-            "3. **Trade-offs**: When multiple valid approaches exist, compare them:\n"
-            "   - What each option optimizes for "
-            "(simplicity, performance, flexibility)\n"
-            "   - Hidden costs or downstream implications\n"
-            "   - What the codebase's existing patterns suggest\n"
-            "4. **Confidence Level**: Be explicit about certainty\n"
-            "   - HIGH: Found definitive code evidence\n"
-            "   - MEDIUM: Inferred from patterns/conventions\n"
-            "   - LOW: Educated guess, recommend verification\n\n"
-            "## Investigation Guidelines\n"
-            "- Use Read, Glob, Grep to find concrete evidence\n"
-            "- Check existing patterns before suggesting new approaches\n"
-            "- Look for prior art—how did the codebase solve similar problems?\n"
-            "- If a question cannot be answered from code, say so explicitly\n"
-            "- When uncertain between options, state the deciding factors\n\n"
-            f"Respond with exactly {count} numbered answer(s), each following "
-            "the framework above. Be concise but complete—Staff Engineers value "
-            "precision over brevity."
-        )
+        # Format questions with delimiters and response hints
+        response_hints = {
+            "brief": "1-2 sentences with key evidence",
+            "detailed": "Full analysis with file paths, reasoning, and trade-offs",
+            "yes_no": "Yes or No, followed by brief explanation",
+        }
+
+        question_blocks = []
+        for i, q in enumerate(questions, 1):
+            hint = response_hints[q.response_type]
+            block = f"=== QUESTION {i} ===\n{q.text}\n[Expected: {hint}]"
+            if q.context:
+                block += f"\n[Context: {q.context}]"
+            question_blocks.append(block)
+
+        questions_text = "\n\n".join(question_blocks)
+
+        return f"""You are a senior technical advisor answering codebase questions.
+
+## Workflow Context
+{context}
+
+## Questions
+{questions_text}
+
+## Response Format
+You MUST respond with valid JSON in this exact structure:
+
+```json
+{{
+  "answers": [
+    {{
+      "content": "Your answer here",
+      "evidence": "file/path:line or null if none",
+      "confidence": "HIGH or MEDIUM or LOW"
+    }}
+  ]
+}}
+```
+
+Guidelines:
+- Provide exactly {len(questions)} answer(s) in the "answers" array
+- "content": The direct answer to the question
+- "evidence": File paths with line numbers, or null if not applicable
+- "confidence": HIGH (found code evidence), MEDIUM (inferred), LOW (uncertain)
+- Use Read, Glob, Grep to find concrete evidence before answering
+- If a question cannot be answered from code, say so in "content" with confidence LOW
+"""
 
     def _execute_agent(self, prompt: str, expected_count: int) -> list[str]:
         """Execute Claude agent and parse answers."""
@@ -203,7 +262,95 @@ class AgentQuestionAnswerer:
         return self._parse_answers(result, expected_count)
 
     def _parse_answers(self, result: str, expected_count: int) -> list[str]:
-        """Parse numbered answers from agent response."""
+        """Parse answers from agent response.
+
+        Attempts JSON extraction first, falls back to delimiter parsing.
+        """
+        # Attempt 1: JSON extraction
+        answers = self._parse_json_answers(result, expected_count)
+        if answers:
+            return answers
+
+        # Attempt 2: Delimiter-based parsing
+        answers = self._parse_delimiter_answers(result, expected_count)
+        if answers:
+            return answers
+
+        # Attempt 3: Legacy line-by-line parsing (backward compatibility)
+        return self._parse_legacy_answers(result, expected_count)
+
+    def _parse_json_answers(
+        self,
+        result: str,
+        expected_count: int,
+    ) -> list[str] | None:
+        """Extract answers from JSON response."""
+        # Try to find JSON block in markdown code fence
+        json_match = re.search(r"```json\s*(.*?)\s*```", result, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # Try to find raw JSON object
+            json_match = re.search(r"\{.*\"answers\".*\}", result, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                return None
+
+        try:
+            data = json.loads(json_str)
+            if "answers" not in data:
+                return None
+
+            answers = []
+            for item in data["answers"][:expected_count]:
+                if isinstance(item, dict):
+                    content = item.get("content", "(no content)")
+                    evidence = item.get("evidence")
+                    confidence = item.get("confidence", "MEDIUM")
+                    # Format as single string with metadata
+                    answer = content
+                    if evidence:
+                        answer += f" [evidence: {evidence}]"
+                    answer += f" [confidence: {confidence}]"
+                    answers.append(answer)
+                else:
+                    answers.append(str(item))
+
+            # Pad if needed
+            while len(answers) < expected_count:
+                answers.append("(no answer)")
+
+            return answers
+        except json.JSONDecodeError:
+            logger.debug("JSON parsing failed, falling back to delimiter parsing")
+            return None
+
+    def _parse_delimiter_answers(
+        self,
+        result: str,
+        expected_count: int,
+    ) -> list[str] | None:
+        """Extract answers using delimiter markers."""
+        pattern = r"===\s*ANSWER\s*(\d+)\s*===\s*(.*?)(?====\s*ANSWER|\Z)"
+        matches = re.findall(pattern, result, re.DOTALL | re.IGNORECASE)
+
+        if not matches:
+            return None
+
+        answer_map = {}
+        for num_str, content in matches:
+            num = int(num_str)
+            answer_map[num] = content.strip()
+
+        answers = []
+        for i in range(1, expected_count + 1):
+            answers.append(answer_map.get(i, "(no answer)"))
+
+        return answers
+
+    def _parse_legacy_answers(self, result: str, expected_count: int) -> list[str]:
+        """Legacy line-by-line parsing for backward compatibility."""
         lines = result.strip().split("\n")
         answers = []
 
@@ -211,15 +358,12 @@ class AgentQuestionAnswerer:
             stripped = raw_line.strip()
             if not stripped:
                 continue
-            # Match "1. answer" or "1) answer" or "1: answer" patterns
             match = re.match(r"^\d+[.):\s]+(.+)$", stripped)
             if match:
                 answers.append(match.group(1).strip())
             elif stripped.startswith("-"):
-                # Handle bullet point format
                 answers.append(stripped[1:].strip())
 
-        # Pad with placeholder if fewer answers than expected
         while len(answers) < expected_count:
             answers.append("(no answer)")
 
@@ -233,7 +377,7 @@ class AgentQuestionAnswerer:
 
 def create_ask_questions_tool(
     default_answerer: QuestionAnswerer | None = None,
-) -> Callable[[list[str]], list[str]]:
+) -> Callable[[list[Question]], list[str]]:
     """Create a DSPy-compatible ask_questions tool.
 
     Factory function that creates a callable that:
@@ -249,7 +393,7 @@ def create_ask_questions_tool(
     """
     fallback = default_answerer or AgentQuestionAnswerer()
 
-    def ask_questions(questions: list[str]) -> list[str]:
+    def ask_questions(questions: list[Question]) -> list[str]:
         """Ask questions and get answers from codebase-aware agent.
 
         Use this tool when:
@@ -259,13 +403,25 @@ def create_ask_questions_tool(
         - You need information from the codebase to decide
 
         Args:
-            questions: List of clear, specific questions
+            questions: List of Question objects with fields:
+                - text (str, required): The question to ask
+                - response_type (str, optional): "brief", "detailed", or "yes_no"
+                - context (str, optional): Additional context for this question
 
         Returns:
             List of answers (same length as questions)
+
+        Example:
+            ask_questions([
+                Question(text="Does the project have CI/CD?", response_type="brief"),
+                Question(text="What testing patterns exist?", response_type="detailed")
+            ])
         """
         ctx = get_ctx()
         answerer = ctx.input_provider or fallback
-        return answerer.ask(questions)
+
+        # Normalize input (handles legacy list[str] and dict formats)
+        normalized = _normalize_questions(questions)
+        return answerer.ask(normalized)
 
     return ask_questions
