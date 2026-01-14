@@ -6,8 +6,12 @@ agents using autonomous (agent-based) mode.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+import time
+import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -79,9 +83,14 @@ class AgentQuestionAnswerer:
         Returns:
             List of answers (same length as questions)
         """
-        logger.debug("AgentQuestionAnswerer: %d questions", len(questions))
+        batch_id = uuid.uuid4().hex[:8]
+        start_time = time.perf_counter()
 
-        # Log questions
+        logger.debug(
+            "AgentQuestionAnswerer: %d questions (batch=%s)", len(questions), batch_id
+        )
+
+        # Log questions at DEBUG level for verbose mode
         for i, q in enumerate(questions, 1):
             logger.debug("AITL Q%d: %s", i, q)
 
@@ -98,11 +107,19 @@ class AgentQuestionAnswerer:
         # Execute via async bridge
         answers = self._execute_agent(prompt, len(questions))
 
-        # Log Q&A pairs
-        for i, (q, a) in enumerate(zip(questions, answers, strict=True), 1):
-            q_preview = q[:100] + "..." if len(q) > 100 else q
-            a_preview = a[:200] + "..." if len(a) > 200 else a
-            logger.info("AITL [%d]: Q=%s | A=%s", i, q_preview, a_preview)
+        # Calculate duration
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+        # Emit JSON line for programmatic analysis
+        aitl_data = {
+            "batch_id": batch_id,
+            "timestamp": datetime.now().isoformat(),
+            "count": len(questions),
+            "questions": questions,
+            "answers": answers,
+            "duration_ms": duration_ms,
+        }
+        logger.info("AITL_JSON: %s", json.dumps(aitl_data, ensure_ascii=False))
 
         self._answer_log.append((questions.copy(), answers.copy()))
         return answers

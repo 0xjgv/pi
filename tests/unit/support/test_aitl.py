@@ -1,6 +1,10 @@
 """Tests for π.support.hitl module (Question Answering)."""
 
+import json
+import logging
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from π.support import AgentQuestionAnswerer, create_ask_questions_tool
 
@@ -176,3 +180,73 @@ class TestLazyAnswererResolution:
         result = tool(["test question"])
 
         assert result == ["default answer"]
+
+
+class TestAITLJSONLogging:
+    """Tests for AITL JSON line logging."""
+
+    def test_ask_emits_json_line(self, caplog: pytest.LogCaptureFixture) -> None:
+        """ask() emits a JSON line with full Q&A content."""
+        answerer = AgentQuestionAnswerer()
+        # Long question to verify no truncation
+        questions = ["What is X?" * 50, "Where is Y?"]
+
+        with patch.object(answerer, "_execute_agent") as mock_exec:
+            mock_exec.return_value = ["Answer 1", "Answer 2"]
+            with caplog.at_level(logging.INFO, logger="π.support.aitl"):
+                answerer.ask(questions)
+
+        # Find the JSON line
+        json_lines = [r for r in caplog.records if "AITL_JSON:" in r.message]
+        assert len(json_lines) == 1
+
+        # Parse and validate
+        json_str = json_lines[0].message.split("AITL_JSON: ", 1)[1]
+        data = json.loads(json_str)
+
+        assert data["count"] == 2
+        assert data["questions"] == questions  # Full, untruncated
+        assert data["answers"] == ["Answer 1", "Answer 2"]
+        assert data["duration_ms"] >= 0
+        assert "batch_id" in data
+        assert len(data["batch_id"]) == 8
+        assert "timestamp" in data
+
+    def test_json_line_handles_unicode(self, caplog: pytest.LogCaptureFixture) -> None:
+        """JSON line handles unicode content correctly."""
+        answerer = AgentQuestionAnswerer()
+        questions = ["What is π?", "日本語の質問"]
+
+        with patch.object(answerer, "_execute_agent") as mock_exec:
+            mock_exec.return_value = ["Pi is a constant", "Japanese answer"]
+            with caplog.at_level(logging.INFO, logger="π.support.aitl"):
+                answerer.ask(questions)
+
+        json_lines = [r for r in caplog.records if "AITL_JSON:" in r.message]
+        json_str = json_lines[0].message.split("AITL_JSON: ", 1)[1]
+        data = json.loads(json_str)
+
+        assert "π" in data["questions"][0]
+        assert "日本語" in data["questions"][1]
+
+    def test_json_line_no_truncation(self, caplog: pytest.LogCaptureFixture) -> None:
+        """JSON line contains full untruncated Q&A content."""
+        answerer = AgentQuestionAnswerer()
+        # Create content longer than old truncation limits (100 chars Q, 200 chars A)
+        long_question = "Q" * 200
+        long_answer = "A" * 400
+
+        with patch.object(answerer, "_execute_agent") as mock_exec:
+            mock_exec.return_value = [long_answer]
+            with caplog.at_level(logging.INFO, logger="π.support.aitl"):
+                answerer.ask([long_question])
+
+        json_lines = [r for r in caplog.records if "AITL_JSON:" in r.message]
+        json_str = json_lines[0].message.split("AITL_JSON: ", 1)[1]
+        data = json.loads(json_str)
+
+        # Verify no truncation occurred
+        assert data["questions"][0] == long_question
+        assert len(data["questions"][0]) == 200
+        assert data["answers"][0] == long_answer
+        assert len(data["answers"][0]) == 400

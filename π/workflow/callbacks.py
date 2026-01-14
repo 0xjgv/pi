@@ -77,7 +77,7 @@ class ReActLoggingCallback(BaseCallback):
             logger.error("ReAct FAILED (%.2fs): %s", duration, exception)
             return
 
-        if not outputs:
+        if not isinstance(outputs, dict):
             return
 
         # Log based on output type
@@ -135,7 +135,7 @@ class ReActLoggingCallback(BaseCallback):
             )
             return
 
-        if not outputs:
+        if not isinstance(outputs, dict):
             logger.debug("LM CALL END [%s]: no outputs (latency=%dms)", cid, latency_ms)
             return
 

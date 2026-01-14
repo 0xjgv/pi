@@ -1,101 +1,177 @@
 ---
-name: workflow (π)
-description: Orchestrate autonomous research -> design -> execute workflows. Use when given a development task that requires understanding the codebase, planning, and implementing changes.
+name: workflow
+description: Orchestrate autonomous research → design → execute workflows. Use when given a development task that requires understanding the codebase, planning, and implementing changes.
 ---
 
 # Autonomous Development Workflow
 
-Run workflow stages in isolated SDK sessions. Each stage runs in its own context, keeping your main context clean.
+Run a multi-stage workflow using isolated SDK sessions. Each stage runs in its own context, keeping your main context clean.
 
-**Prerequisite**: Project must have `/1_research_codebase`, `/2_create_plan`, `/3_review_plan`, `/4_iterate_plan`, `/5_implement_plan`, and `/6_commit` commands.
+```
+Research → Design → [Review → Iterate]* → Execute → Commit
+```
+
+## Session Resumption
+
+Each stage outputs a `SESSION_ID` that can be used to resume the conversation if needed (e.g., to provide corrections or additional context). Extract and store the session ID from each stage's output.
+
+**Format**: `SESSION_ID: <id>` appears at the end of output after `---` separator.
 
 ## Stage 1: Research
 
 ```bash
-python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage research
+python .claude/skills/workflow/scripts/stage_1_research_codebase.py "OBJECTIVE"
 ```
 
 Read the output. Look for:
 
 - The research document path (e.g., `thoughts/shared/research/YYYY-MM-DD-*.md`)
-- Whether implementation is needed (look for "no implementation needed" or similar)
+- `SESSION_ID: <id>` at end of output
+- Whether implementation is needed
 
-If no implementation needed, stop and report findings to user.
+If no implementation needed, stop and report findings.
+
+**To resume** (e.g., if research needs refinement):
+```bash
+python .claude/skills/workflow/scripts/stage_1_research_codebase.py "additional context" --session-id "ID"
+```
 
 ## Stage 2: Design
 
-Run these sequentially, checking output between each step.
-
-### 2a. Create Plan
-
 ```bash
-python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage create_plan --research-doc "RESEARCH_PATH"
+python .claude/skills/workflow/scripts/stage_2_create_plan.py "OBJECTIVE" --research-doc "PATH"
 ```
 
-Look for the plan document path (e.g., `thoughts/shared/plans/YYYY-MM-DD-*.md`).
+Read the output. Look for:
 
-### 2b. Review Plan
+- The plan document path (e.g., `thoughts/shared/plans/YYYY-MM-DD-*.md`)
+- `SESSION_ID: <id>` at end of output
 
+**To resume**:
 ```bash
-python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage review_plan --plan-doc "PLAN_PATH"
+python .claude/skills/workflow/scripts/stage_2_create_plan.py "refinements" --research-doc "PATH" --session-id "ID"
 ```
 
-### 2c. Iterate Plan
+## Stage 3: Review Plan
 
 ```bash
-python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage iterate_plan --plan-doc "PLAN_PATH"
+python .claude/skills/workflow/scripts/stage_3_review_plan.py --plan-doc "PATH"
 ```
 
-**Between each step:** If output contains questions, answer them and re-run that step.
+Read the output. Look for:
 
-## Stage 3: Execute
+- Review findings (blocking, high-priority, optional)
+- `SESSION_ID: <id>` at end of output
 
-### 3a. Implement
+Use after design to validate plan completeness before implementation.
 
+**To resume**:
 ```bash
-python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage implement --plan-doc "PLAN_PATH"
+python .claude/skills/workflow/scripts/stage_3_review_plan.py --plan-doc "PATH" --session-id "ID"
 ```
 
-Look for files changed and any errors.
-
-### 3b. Commit
+## Stage 4: Iterate Plan
 
 ```bash
-python ~/.claude/skills/workflow/scripts/workflow.py "OBJECTIVE" --stage commit
+python .claude/skills/workflow/scripts/stage_4_iterate_plan.py --plan-doc "PATH" --feedback "changes needed"
+```
+
+Read the output. Look for:
+
+- Updated plan confirmation
+- `SESSION_ID: <id>` at end of output
+
+Use when plan needs refinement based on review findings or new requirements.
+
+**To resume**:
+```bash
+python .claude/skills/workflow/scripts/stage_4_iterate_plan.py --plan-doc "PATH" --session-id "ID"
+```
+
+## Stage 5: Implement
+
+```bash
+python .claude/skills/workflow/scripts/stage_5_implement_plan.py "OBJECTIVE" --plan-doc "PATH"
+```
+
+Read the output. Look for:
+
+- Files changed
+- Commit hash (if committed)
+- `SESSION_ID: <id>` at end of output
+
+**To resume**:
+```bash
+python .claude/skills/workflow/scripts/stage_5_implement_plan.py "fix this" --plan-doc "PATH" --session-id "ID"
+```
+
+## Stage 6: Commit
+
+```bash
+python .claude/skills/workflow/scripts/stage_6_commit.py
+```
+
+Or with a commit message hint:
+```bash
+python .claude/skills/workflow/scripts/stage_6_commit.py "add feature X"
+```
+
+Read the output. Look for:
+
+- Commit hash
+- Files committed
+- `SESSION_ID: <id>` at end of output
+
+Use after implementation to finalize changes.
+
+**To resume**:
+```bash
+python .claude/skills/workflow/scripts/stage_6_commit.py --session-id "ID"
 ```
 
 ## Progress Reporting
 
-After each step, report progress:
+After each stage:
 
 ```markdown
 === Workflow Progress ===
 Objective: {objective}
 
-[✓] Research - {research_doc}
-[✓] Create Plan - {plan_doc}
-[✓] Review Plan
-[✓] Iterate Plan
-[→] Implement - in progress...
-[ ] Commit
+[✓] Stage 1: Research - {research_doc}
+    Session: {research_session_id}
+[✓] Stage 2: Design - {plan_doc}
+    Session: {design_session_id}
+[✓] Stage 3: Review - findings addressed
+    Session: {review_session_id}
+[✓] Stage 4: Iterate - plan refined
+    Session: {iterate_session_id}
+[✓] Stage 5: Implement - {files_changed} files
+    Session: {implement_session_id}
+[→] Stage 6: Commit - in progress...
 =========================
 ```
 
 ## Error Handling
 
-- If a step fails (exit code 1), report the error and ask user how to proceed
-- If output contains clarifying questions, answer the question and re-run that step
-- Keyboard interrupt (exit code 130) means user cancelled
+Scripts include validation and error handling:
 
-## Logs
+- `--help` flag shows usage
+- Invalid paths are rejected before execution
+- Errors are reported to stderr with exit code 1
+- Keyboard interrupt exits cleanly with code 130
 
-Logs written to `.π/logs/workflow-*.log` (7-day retention).
+If a script fails, you can resume the session with `--session-id` to continue from where it left off.
 
-## Options Reference
+## Limitations
 
-| Option | Description |
-|--------|-------------|
-| `--stage` | `research`, `create_plan`, `review_plan`, `iterate_plan`, `implement`, `commit` |
-| `--research-doc PATH` | Path to research document |
-| `--plan-doc PATH` | Path to plan document |
-| `-v` | Verbose logging to console |
+This skill provides simplified workflow orchestration for Claude Code sessions.
+For production use with full features, use the π CLI directly:
+
+| Feature | Skill | π CLI |
+|---------|-------|-------|
+| Safety hooks | ✓ | ✓ |
+| Retry logic | ✗ | ✓ |
+| Checkpoints | ✗ | ✓ |
+| AITL | ✗ | ✓ |
+| Memory | ✗ | ✓ |
+| Session continuity | ✓ | ✓ |
