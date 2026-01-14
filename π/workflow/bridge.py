@@ -88,8 +88,11 @@ def timed_phase(phase_name: str) -> Generator[None]:
 
 def _log_tool_call(block: ToolUseBlock) -> None:
     """Log tool invocation details with timing start."""
-    # Start timing for all tools
-    _tool_timing.start(block.id, block.name)
+    # Extract file_path for write tools (used for completion events)
+    file_path = (
+        block.input.get("file_path") if block.name in _FILE_WRITE_TOOLS else None
+    )
+    _tool_timing.start(block.id, block.name, file_path=file_path)
 
     # Skip logging for read-only tools (reduce noise)
     if block.name in _READ_TOOLS:
@@ -118,10 +121,15 @@ def _log_tool_call(block: ToolUseBlock) -> None:
 
 def _log_tool_result(block: ToolResultBlock) -> None:
     """Log tool result details with timing."""
-    duration, tool_name = _tool_timing.end(block.tool_use_id)
+    duration, tool_name, file_path = _tool_timing.end(block.tool_use_id)
     duration_str = f" ({duration:.2f}s)" if duration else ""
     status = "error" if block.is_error else "ok"
     content_str = str(block.content)
+
+    # Note: file_done/file_failed events are emitted at session end in
+    # _run_claude_session since the SDK doesn't stream ToolResultBlock.
+    # The file_path is still tracked here for potential future use.
+    _ = file_path  # Unused but kept for consistency with end() return type
 
     # Full logging for important tools or errors
     if tool_name in _FULL_LOG_TOOLS or block.is_error:
@@ -232,22 +240,38 @@ _PLANNING_COMMANDS = frozenset({Command.CREATE_PLAN, Command.REVIEW_PLAN})
 
 @dataclass
 class ToolTimingTracker:
-    """Tracks tool execution timing for duration logging."""
+    """Tracks tool execution timing and file paths for duration logging and events."""
 
     _start_times: dict[str, float] = field(default_factory=dict)
     _tool_names: dict[str, str] = field(default_factory=dict)
+    _file_paths: dict[str, str] = field(default_factory=dict)
 
-    def start(self, tool_use_id: str, tool_name: str) -> None:
+    def start(
+        self, tool_use_id: str, tool_name: str, *, file_path: str | None = None
+    ) -> None:
         """Record start time for a tool invocation."""
         self._start_times[tool_use_id] = time.perf_counter()
         self._tool_names[tool_use_id] = tool_name
+        if file_path:
+            self._file_paths[tool_use_id] = file_path
 
-    def end(self, tool_use_id: str) -> tuple[float | None, str | None]:
-        """Get duration and tool name for a completed tool invocation."""
+    def end(self, tool_use_id: str) -> tuple[float | None, str | None, str | None]:
+        """Get duration, tool name, and file path for a completed tool invocation."""
         start = self._start_times.pop(tool_use_id, None)
         tool_name = self._tool_names.pop(tool_use_id, None)
+        file_path = self._file_paths.pop(tool_use_id, None)
         duration = time.perf_counter() - start if start else None
-        return duration, tool_name
+        return duration, tool_name, file_path
+
+    def flush_file_paths(self) -> list[str]:
+        """Return and clear all pending file paths.
+
+        Used to emit file_done events at session end since the SDK doesn't
+        stream ToolResultBlock messages.
+        """
+        paths = list(self._file_paths.values())
+        self._file_paths.clear()
+        return paths
 
 
 # Module-level timing tracker
@@ -368,12 +392,21 @@ async def _run_claude_session(
                     console.print(
                         f"\n[bold cyan]Result:[/bold cyan] {result_content}\n"
                     )
+                    # Emit file_done events for all tracked file writes
+                    # SDK doesn't stream ToolResultBlock, so we emit on session end
+                    for path in _tool_timing.flush_file_paths():
+                        emit_artifact_event(
+                            ArtifactEvent(event_type="file_done", path=path)
+                        )
                     break
                 elif isinstance(message, AssistantMessage):
                     block_text = _process_assistant_message(message, tracker)
                     if block_text:
                         last_text_content = block_text
         except Exception as e:
+            # Emit file_failed events on error
+            for path in _tool_timing.flush_file_paths():
+                emit_artifact_event(ArtifactEvent(event_type="file_failed", path=path))
             raise AgentExecutionError(f"Agent execution failed: {e}") from e
 
     logger.debug("Session writes: %s", tracker.writes)

@@ -14,6 +14,7 @@ from π.core import AgentExecutionError
 from π.workflow.bridge import (
     COMMAND_DOC_TYPE,
     SessionWriteTracker,
+    ToolTimingTracker,
     _format_tool_result,
     _log_tool_call,
     _log_tool_result,
@@ -116,6 +117,50 @@ class TestSessionWriteTracker:
         tracker = SessionWriteTracker(command=Command.COMMIT)
         tracker.on_tool_use("thoughts/shared/research/doc.md")
         assert tracker.writes == []
+
+
+class TestToolTimingTracker:
+    """Tests for ToolTimingTracker."""
+
+    def test_returns_duration_and_tool_name(self):
+        """Should return duration and tool name on end()."""
+        tracker = ToolTimingTracker()
+        tracker.start("tool-1", "Write")
+        duration, tool_name, file_path = tracker.end("tool-1")
+        assert duration is not None
+        assert tool_name == "Write"
+        assert file_path is None
+
+    def test_returns_file_path_when_provided(self):
+        """Should return file_path when provided to start()."""
+        tracker = ToolTimingTracker()
+        tracker.start("tool-1", "Write", file_path="/path/to/file.md")
+        _duration, _tool_name, file_path = tracker.end("tool-1")
+        assert file_path == "/path/to/file.md"
+
+    def test_cleans_up_after_end(self):
+        """Should remove all tracking data after end()."""
+        tracker = ToolTimingTracker()
+        tracker.start("tool-1", "Write", file_path="/path/to/file.md")
+        tracker.end("tool-1")
+        # Second call returns None for everything
+        duration, tool_name, file_path = tracker.end("tool-1")
+        assert duration is None
+        assert tool_name is None
+        assert file_path is None
+
+    def test_flush_file_paths_returns_all_pending(self):
+        """Should return all pending file paths and clear them."""
+        tracker = ToolTimingTracker()
+        tracker.start("tool-1", "Write", file_path="/path/a.md")
+        tracker.start("tool-2", "Edit", file_path="/path/b.md")
+        tracker.start("tool-3", "Read")  # No file_path
+
+        paths = tracker.flush_file_paths()
+        assert set(paths) == {"/path/a.md", "/path/b.md"}
+
+        # Subsequent flush returns empty
+        assert tracker.flush_file_paths() == []
 
 
 class TestCommandDocTypeMapping:
