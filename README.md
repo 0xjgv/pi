@@ -1,5 +1,10 @@
 # π
 
+[![Build](https://github.com/0xjgv/pi/actions/workflows/test.yml/badge.svg)](https://github.com/0xjgv/pi/actions/workflows/test.yml)
+[![Coverage](https://codecov.io/gh/0xjgv/pi/branch/main/graph/badge.svg)](https://codecov.io/gh/0xjgv/pi)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+
 CLI orchestrating Claude agents via DSPy ReAct for autonomous research → design → execute workflows.
 
 ## Highlights
