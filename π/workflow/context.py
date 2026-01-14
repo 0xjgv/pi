@@ -33,7 +33,6 @@ class Command(StrEnum):
     RESEARCH_CODEBASE = "research_codebase"
     REVIEW_PLAN = "review_plan"
     CREATE_PLAN = "create_plan"
-    ITERATE_PLAN = "iterate_plan"
     IMPLEMENT_PLAN = "implement_plan"
     COMMIT = "commit"
     WRITE_CLAUDE_MD = "write_claude_md"  # Non-numbered command

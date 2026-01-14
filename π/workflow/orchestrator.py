@@ -109,10 +109,10 @@ def _run_with_retry[T: (ResearchResult, DesignResult, ExecuteResult)](
             logger.info("Retrying in %.1fs...", delay)
             time.sleep(delay)
 
-    # All retries exhausted - re-raise with context
+    # All retries exhausted - re-raise (context already logged)
     msg = f"Stage {stage.value} failed after {checkpoint.max_retries} attempts"
     logger.error("%s: %s", msg, last_error)
-    raise type(last_error)(f"{msg}: {last_error}") from last_error
+    raise last_error
 
 
 class StagedWorkflow(dspy.Module):

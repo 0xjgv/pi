@@ -19,7 +19,6 @@ from π.workflow.tools import (
     commit_changes,
     create_plan,
     implement_plan,
-    iterate_plan,
     research_codebase,
     review_plan,
 )
@@ -178,7 +177,6 @@ def stage_design(
         tools=[
             create_plan,
             review_plan,
-            iterate_plan,
             ask_questions,
             search_memories,
         ],

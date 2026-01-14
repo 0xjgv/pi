@@ -492,7 +492,6 @@ def execute_claude_task(
         planning_commands = {
             Command.CREATE_PLAN,
             Command.REVIEW_PLAN,
-            Command.ITERATE_PLAN,
         }
         if tool_command in planning_commands:
             command = (

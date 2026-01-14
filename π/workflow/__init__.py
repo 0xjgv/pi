@@ -22,7 +22,6 @@ from π.workflow.tools import (
     commit_changes,
     create_plan,
     implement_plan,
-    iterate_plan,
     research_codebase,
     review_plan,
 )
@@ -45,7 +44,6 @@ __all__ = [
     "get_memory_client",
     "get_memory_tools",
     "implement_plan",
-    "iterate_plan",
     "research_codebase",
     "review_plan",
     "search_memories",

@@ -25,6 +25,5 @@ class Stage(StrEnum):
     RESEARCH_CODEBASE = "research_codebase"
     PLAN = "plan"
     REVIEW_PLAN = "review_plan"
-    ITERATE_PLAN = "iterate_plan"
     IMPLEMENT_PLAN = "implement_plan"
     COMMIT = "commit"

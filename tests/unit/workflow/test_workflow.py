@@ -12,7 +12,6 @@ from π.core import AgentExecutionError
 from π.workflow import (
     Command,
     create_plan,
-    iterate_plan,
     research_codebase,
 )
 from π.workflow.bridge import (
@@ -232,29 +231,6 @@ class TestWorkflowFunctions:
 
         call_kwargs = mock_execute_task.call_args.kwargs
         assert call_kwargs["path_to_documents"] == [Path("/path/to/research.md")]
-
-    def test_iterate_plan_validates_plan_doc(self, mock_execute_task: MagicMock):
-        """Should validate plan document via PlanDocPath.
-
-        Note: The actual validation logic is tested in test_bridge.py. This test
-        verifies the tool integration uses get_or_validate_plan_path which
-        validates via PlanDocPath (directory, extension, existence, date prefix).
-        """
-        from π.workflow.bridge import _ctx
-        from π.workflow.context import ExecutionContext
-
-        ctx = ExecutionContext()
-        _ctx.set(ctx)
-
-        # Should raise when plan path is not in correct directory
-        with pytest.raises(ValueError) as exc_info:
-            iterate_plan(
-                review_feedback="implement",
-                plan_document_path="/invalid/path.md",
-            )
-
-        # PlanDocPath validates directory first
-        assert "must be in thoughts/shared/plans" in str(exc_info.value)
 
     def test_workflow_handles_agent_error(self, mock_execute_task: MagicMock):
         """Should return error message on AgentExecutionError."""

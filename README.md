@@ -173,9 +173,8 @@ Specialized agents spawned in parallel for codebase exploration:
 | `/1_research_codebase` | Research codebase patterns and architecture |
 | `/2_create_plan` | Create implementation plan from research |
 | `/3_review_plan` | Review plan for completeness |
-| `/4_iterate_plan` | Incorporate feedback into plan |
-| `/5_implement_plan` | Execute implementation from plan |
-| `/6_commit` | Create git commit with changes |
+| `/4_implement_plan` | Execute implementation from plan |
+| `/5_commit` | Create git commit with changes |
 | `/write-claude-md` | Create or update CLAUDE.md |
 
 ## Safety & Quality Hooks

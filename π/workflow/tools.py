@@ -91,31 +91,6 @@ def review_plan(
     )
 
 
-@workflow_tool(Command.ITERATE_PLAN, phase_name="Iterating plan", validate_plan=True)
-def iterate_plan(
-    *,
-    plan_document_path: Path | str,
-    session_id: str | None = None,
-    review_feedback: str,
-) -> tuple[str, str, SessionWriteTracker]:
-    """Iterate the plan for the codebase.
-
-    Args:
-        review_feedback: The review feedback to iterate the plan.
-        plan_document_path: Required path to the plan document.
-        session_id: Session ID for resumption (injected by decorator).
-
-    Returns:
-        Tuple of (result text, session ID, write tracker).
-    """
-    return execute_claude_task(
-        path_to_documents=[Path(plan_document_path)],
-        tool_command=Command.ITERATE_PLAN,
-        session_id=session_id,
-        query=review_feedback,
-    )
-
-
 @workflow_tool(
     Command.IMPLEMENT_PLAN, phase_name="Implementing plan", validate_plan=True
 )

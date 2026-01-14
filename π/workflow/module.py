@@ -32,9 +32,9 @@ class ResearchSignature(dspy.Signature):
 
 
 class DesignSignature(dspy.Signature):
-    """Design stage: create, review, and iterate on an implementation plan.
+    """Design stage: create and review an implementation plan.
 
-    Call create_plan, review_plan, and iterate_plan tools to complete this stage.
+    Call create_plan and review_plan tools to complete this stage.
     """
 
     objective: str = dspy.InputField(desc="The clarified objective to design for")

@@ -521,7 +521,6 @@ def mock_workflow_stages():
         "research": "π.workflow.tools.research_codebase",
         "plan": "π.workflow.tools.create_plan",
         "review": "π.workflow.tools.review_plan",
-        "iterate": "π.workflow.tools.iterate_plan",
         "implement": "π.workflow.tools.implement_plan",
         "commit": "π.workflow.tools.commit_changes",
     }

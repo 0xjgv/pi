@@ -458,8 +458,7 @@ Assistant: Plan approved. Ready for implementation!
 ## Related Commands
 
 - **`2_create_plan.md`**: Create new implementation plans from scratch
-- **`2.7.5_iterate_plan.md`**: Iterate on plans based on user-requested changes
-- **`3_implement_plan.md`**: Execute the implementation of a reviewed plan
+- **`4_implement_plan.md`**: Execute the implementation of a reviewed plan
 - **`5_validate_plan.md`**: Validate plan assumptions against codebase
 
 ## References

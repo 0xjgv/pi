@@ -41,7 +41,6 @@ STAGE_TIERS: dict[Stage, Tier] = {
     Stage.RESEARCH_CODEBASE: Tier.HIGH,
     Stage.PLAN: Tier.HIGH,
     Stage.REVIEW_PLAN: Tier.HIGH,
-    Stage.ITERATE_PLAN: Tier.HIGH,
     Stage.IMPLEMENT_PLAN: Tier.HIGH,
     Stage.COMMIT: Tier.LOW,
 }
