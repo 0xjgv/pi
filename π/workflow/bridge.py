@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 COMMAND_DOC_TYPE: dict[Command, str] = {
     Command.RESEARCH_CODEBASE: "research",
     Command.CREATE_PLAN: "plan",
+    Command.REVIEW_PLAN: "plan",
 }
 
 logger = logging.getLogger(__name__)
@@ -189,7 +190,7 @@ def _process_assistant_message(
                 and block.name in _FILE_WRITE_TOOLS
                 and (file_path := block.input.get("file_path"))
             ):
-                tracker.on_tool_use(block.id, file_path)
+                tracker.on_tool_use(file_path)
                 emit_artifact_event(
                     ArtifactEvent(
                         event_type="file_start",
@@ -199,21 +200,6 @@ def _process_assistant_message(
                 )
         elif isinstance(block, ToolResultBlock):
             _log_tool_result(block)
-            if tracker:
-                # Capture pending path before on_tool_result pops it
-                pending_path = tracker._pending.get(block.tool_use_id)
-                tracker.on_tool_result(
-                    block.tool_use_id, is_error=block.is_error or False
-                )
-                if pending_path:
-                    event_type = "file_failed" if block.is_error else "file_done"
-                    emit_artifact_event(
-                        ArtifactEvent(
-                            event_type=event_type,
-                            path=pending_path,
-                            doc_type=tracker.doc_type,
-                        )
-                    )
     return block_text
 
 
@@ -272,28 +258,22 @@ _tool_timing = ToolTimingTracker()
 class SessionWriteTracker:
     """Tracks file writes during a single SDK session.
 
-    Command-based tracking: doc_type is determined by the command at creation,
-    not inferred from file paths. Pending/confirm pattern excludes failed writes.
+    Command-based tracking: doc_type is determined by the command at creation.
+    Paths are validated via get_paths() which checks files exist on disk.
     """
 
     command: Command
     writes: list[str] = field(default_factory=list)
-    _pending: dict[str, str] = field(default_factory=dict)  # tool_use_id -> path
 
     @property
     def doc_type(self) -> str | None:
         """Get doc_type for this command (if any)."""
         return COMMAND_DOC_TYPE.get(self.command)
 
-    def on_tool_use(self, tool_use_id: str, file_path: str) -> None:
-        """Record pending write from ToolUseBlock."""
+    def on_tool_use(self, file_path: str) -> None:
+        """Record write from ToolUseBlock."""
         if self.doc_type and self._is_thoughts_path(file_path):
-            self._pending[tool_use_id] = file_path
-
-    def on_tool_result(self, tool_use_id: str, *, is_error: bool) -> None:
-        """Confirm or reject write based on ToolResultBlock."""
-        if (path := self._pending.pop(tool_use_id, None)) and not is_error:
-            self.writes.append(path)
+            self.writes.append(file_path)
 
     def get_paths(self) -> list[str]:
         """Get all tracked paths that exist on disk."""
@@ -462,9 +442,11 @@ def execute_claude_task(
     ctx.log_session_state()
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
-    return get_event_loop().run_until_complete(
+    result = get_event_loop().run_until_complete(
         _run_claude_session(command, session_id, tool_command)
     )
+    logger.debug("Tool call complete: %s", COMMAND_MAP.get(tool_command))
+    return result
 
 
 def workflow_tool(

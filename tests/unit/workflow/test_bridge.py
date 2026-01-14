@@ -27,29 +27,26 @@ from π.workflow.context import Command, get_event_loop
 class TestSessionWriteTracker:
     """Tests for SessionWriteTracker."""
 
-    def test_confirmed_write_stored(self):
-        """Confirmed writes stored in list."""
+    def test_write_tracked(self):
+        """Writes are tracked in list."""
         tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
-        tracker.on_tool_use("tool_1", "thoughts/shared/research/doc.md")
-        tracker.on_tool_result("tool_1", is_error=False)
+        tracker.on_tool_use("thoughts/shared/research/doc.md")
 
         assert tracker.writes == ["thoughts/shared/research/doc.md"]
 
-    def test_failed_write_excluded(self):
-        """Failed writes not stored."""
+    def test_nonexistent_file_excluded_from_get_paths(self):
+        """Nonexistent files filtered by get_paths()."""
         tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
-        tracker.on_tool_use("tool_1", "thoughts/shared/research/doc.md")
-        tracker.on_tool_result("tool_1", is_error=True)
+        tracker.on_tool_use("thoughts/shared/research/nonexistent.md")
 
-        assert tracker.writes == []
+        assert tracker.writes == ["thoughts/shared/research/nonexistent.md"]
+        assert tracker.get_paths() == []
 
     def test_multiple_writes_all_tracked(self):
         """Multiple writes: all tracked in order."""
         tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
-        tracker.on_tool_use("t1", "thoughts/shared/research/first.md")
-        tracker.on_tool_result("t1", is_error=False)
-        tracker.on_tool_use("t2", "thoughts/shared/research/second.md")
-        tracker.on_tool_result("t2", is_error=False)
+        tracker.on_tool_use("thoughts/shared/research/first.md")
+        tracker.on_tool_use("thoughts/shared/research/second.md")
 
         assert tracker.writes == [
             "thoughts/shared/research/first.md",
@@ -114,28 +111,11 @@ class TestSessionWriteTracker:
             assert len(paths) == 1
             assert paths[0] == str(doc)
 
-    def test_pending_cleared_after_result(self):
-        """Pending write should be cleared after tool result."""
-        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
-        tracker.on_tool_use("tool_1", "thoughts/shared/research/doc.md")
-        assert "tool_1" in tracker._pending
-
-        tracker.on_tool_result("tool_1", is_error=False)
-        assert "tool_1" not in tracker._pending
-
-    def test_unknown_tool_result_ignored(self):
-        """Tool result for unknown tool_use_id should be ignored."""
-        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
-        # No on_tool_use called, so this should not raise
-        tracker.on_tool_result("unknown_id", is_error=False)
-        assert tracker.writes == []
-
     def test_ignores_writes_for_non_doc_commands(self):
         """Should not track writes for commands without doc_type."""
         tracker = SessionWriteTracker(command=Command.COMMIT)
-        tracker.on_tool_use("tool_1", "thoughts/shared/research/doc.md")
-        # Should not be pending because doc_type is None
-        assert "tool_1" not in tracker._pending
+        tracker.on_tool_use("thoughts/shared/research/doc.md")
+        assert tracker.writes == []
 
 
 class TestCommandDocTypeMapping:
@@ -172,8 +152,7 @@ class TestProcessAssistantMessageWithTracker:
 
         _process_assistant_message(message, tracker)
 
-        assert "tool_123" in tracker._pending
-        assert tracker._pending["tool_123"] == "thoughts/shared/research/doc.md"
+        assert tracker.writes == ["thoughts/shared/research/doc.md"]
 
     def test_tracks_edit_tool_use(self):
         """Should track Edit tool file_path in tracker."""
@@ -189,41 +168,7 @@ class TestProcessAssistantMessageWithTracker:
 
         _process_assistant_message(message, tracker)
 
-        assert "tool_456" in tracker._pending
-
-    def test_confirms_write_on_success_result(self):
-        """Should confirm write when tool result is success."""
-        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
-        tracker._pending["tool_123"] = "thoughts/shared/research/doc.md"
-
-        result_block = MagicMock(spec=ToolResultBlock)
-        result_block.tool_use_id = "tool_123"
-        result_block.is_error = False
-
-        message = MagicMock(spec=AssistantMessage)
-        message.content = [result_block]
-
-        _process_assistant_message(message, tracker)
-
-        assert tracker.writes == ["thoughts/shared/research/doc.md"]
-        assert "tool_123" not in tracker._pending
-
-    def test_rejects_write_on_error_result(self):
-        """Should reject write when tool result is error."""
-        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
-        tracker._pending["tool_123"] = "thoughts/shared/research/doc.md"
-
-        result_block = MagicMock(spec=ToolResultBlock)
-        result_block.tool_use_id = "tool_123"
-        result_block.is_error = True
-
-        message = MagicMock(spec=AssistantMessage)
-        message.content = [result_block]
-
-        _process_assistant_message(message, tracker)
-
-        assert tracker.writes == []
-        assert "tool_123" not in tracker._pending
+        assert tracker.writes == ["thoughts/shared/plans/plan.md"]
 
     def test_ignores_non_write_tools(self):
         """Should not track Read/Grep/Glob tools."""
@@ -239,7 +184,7 @@ class TestProcessAssistantMessageWithTracker:
 
         _process_assistant_message(message, tracker)
 
-        assert tracker._pending == {}
+        assert tracker.writes == []
 
     def test_none_tracker_does_not_crash(self):
         """Should work without tracker (backwards compatible)."""
