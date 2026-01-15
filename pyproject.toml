@@ -22,9 +22,11 @@ classifiers = [
 dependencies = [
     "claude-agent-sdk>=0.1.19",
     "dspy>=3.1.0",
+    "fastapi>=0.115.0",
     "mem0ai>=1.0.1",
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
+    "uvicorn>=0.32.0",
 ]
 
 [project.urls]

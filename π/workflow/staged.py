@@ -15,7 +15,6 @@ from π.core import MAX_ITERS
 from π.support.directory import get_project_root
 from π.workflow.callbacks import react_logging_callback
 from π.workflow.context import get_ctx
-from π.workflow.memory_tools import search_memories, store_memory
 from π.workflow.module import DesignSignature, ExecuteSignature, ResearchSignature
 from π.workflow.tools import (
     ask_questions,
@@ -96,7 +95,7 @@ def stage_research(
     signature = with_codebase_context(ResearchSignature, ctx.codebase_context or "")
 
     agent = dspy.ReAct(
-        tools=[research_codebase, ask_questions, search_memories, store_memory],
+        tools=[research_codebase, ask_questions],
         signature=signature,
         max_iters=max_iters,
     )
@@ -182,8 +181,6 @@ def stage_design(
             create_plan,
             review_plan,
             ask_questions,
-            search_memories,
-            store_memory,
         ],
         signature=signature,
         max_iters=max_iters,
@@ -285,8 +282,6 @@ def stage_execute(
             implement_plan,
             commit_changes,
             ask_questions,
-            search_memories,
-            store_memory,
         ],
         signature=signature,
         max_iters=max_iters,
