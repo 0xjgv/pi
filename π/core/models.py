@@ -1,39 +1,18 @@
 """LLM model configuration and factory functions."""
 
 import logging
-import warnings
 from functools import lru_cache
-from os import getenv
 
-# Suppress Pydantic serialization warnings from LiteLLM
-# This is a known issue where LiteLLM's Message class dynamically deletes
-# attributes, confusing Pydantic's serializer. The warning is cosmetic -
-# serialization works correctly. See: https://github.com/BerriAI/litellm/issues/11759
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    message=".*Pydantic serializer warnings.*",
-)
-
-import dspy  # noqa: E402 - must import after warning filter
-
-from π.core.enums import Provider, Tier, WorkflowStage  # noqa: E402
+from π.bridge.lm import ClaudeCodeLM
+from π.core.enums import Tier, WorkflowStage
 
 logger = logging.getLogger(__name__)
 
-# Provider → Tier → Model mapping
-PROVIDER_MODELS: dict[Provider, dict[Tier, str]] = {
-    Provider.Claude: {
-        Tier.LOW: "claude-haiku-4-5-20251001",
-        Tier.MED: "claude-sonnet-4-5-20250929",
-        Tier.HIGH: "claude-opus-4-5-20251101",
-    },
-    Provider.Antigravity: {
-        Tier.LOW: "gemini-3-flash-preview",
-        Tier.MED: "gemini-claude-sonnet-4-5-thinking",
-        Tier.HIGH: "gemini-3-pro-preview",
-        Tier.ULTRA: "gemini-claude-opus-4-5-thinking",
-    },
+# Tier → Model mapping (Claude only)
+TIER_TO_MODEL: dict[Tier, str] = {
+    Tier.LOW: "claude-haiku-4-5-20251001",
+    Tier.MED: "claude-sonnet-4-5-20250929",
+    Tier.HIGH: "claude-opus-4-5-20251101",
 }
 
 # WorkflowStage → Model tier mapping
@@ -47,38 +26,16 @@ STAGE_TIERS: dict[WorkflowStage, Tier] = {
 MAX_ITERS = 5
 
 
-@lru_cache(maxsize=6)
-def get_lm(provider: Provider, tier: Tier) -> dspy.LM:
-    """Get cached LM instance for provider/tier combination.
+@lru_cache(maxsize=3)
+def get_lm(tier: Tier) -> ClaudeCodeLM:
+    """Get cached ClaudeCodeLM instance for tier.
 
     Args:
-        provider: AI provider (claude, antigravity, openai)
         tier: Model tier (low, med, high)
 
     Returns:
-        Configured dspy.LM instance
-
-    Raises:
-        KeyError: If provider or tier is invalid
+        Configured ClaudeCodeLM instance
     """
-    base_url = getenv("CLIPROXY_API_BASE", "http://localhost:8317")
-    raw_model = PROVIDER_MODELS[provider][tier]
-    logger.debug("Resolving LM: %s/%s → %s", provider, tier, raw_model)
-
-    # HACK: LiteLLM auto-routes gemini-* models to Vertex AI, which requires
-    # Google Cloud auth. We bypass this by prefixing with "openai/" to force
-    # the OpenAI-compatible code path through our proxy instead.
-    if raw_model.startswith("gemini"):
-        model = f"openai/{raw_model}"
-        api_base = f"{base_url}/v1"
-        logger.debug("Gemini hack: %s → %s, base: %s", raw_model, model, api_base)
-    else:
-        model = raw_model
-        api_base = base_url
-
-    logger.debug("LM config: model=%s, api_base=%s", model, api_base)
-    return dspy.LM(
-        api_key=getenv("CLIPROXY_API_KEY"),
-        api_base=api_base,
-        model=model,
-    )
+    model = TIER_TO_MODEL.get(tier, "claude-sonnet-4-5-20250929")
+    logger.debug("Creating ClaudeCodeLM: tier=%s → model=%s", tier, model)
+    return ClaudeCodeLM(model=model)

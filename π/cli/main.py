@@ -13,7 +13,7 @@ from rich.prompt import Confirm
 
 from π.cli.live_display import LiveArtifactDisplay
 from π.console import console
-from π.core import Provider, Tier, get_lm
+from π.core import Tier, get_lm
 from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import CheckpointManager, CheckpointState, StagedWorkflow
@@ -30,14 +30,8 @@ def _create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("objective", nargs="?", help="The objective for the agent")
     parser.add_argument(
-        "--provider",
-        choices=["claude", "antigravity"],
-        default="claude",
-        help="LLM provider (default: claude)",
-    )
-    parser.add_argument(
         "--tier",
-        choices=["low", "med", "high", "ultra"],
+        choices=["low", "med", "high"],
         default="high",
         help="Model tier (default: high)",
     )
@@ -77,12 +71,8 @@ def _create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# Load environment variables and validate
+# Load environment variables
 load_dotenv()
-
-from π.core.env import validate_required_env  # noqa: E402
-
-validate_required_env()
 
 
 def _check_resume(
@@ -128,7 +118,6 @@ def _check_resume(
 def run_workflow_mode(
     objective: str,
     *,
-    provider: Provider = Provider.Claude,
     tier: Tier = Tier.HIGH,
     max_iters: int = 5,
     max_retries: int = 3,
@@ -146,7 +135,7 @@ def run_workflow_mode(
     if not no_resume and checkpoint.has_checkpoint():
         resume_state = _check_resume(checkpoint, objective)
 
-    lm = get_lm(provider, tier)
+    lm = get_lm(tier)
     workflow = StagedWorkflow(lm=lm, checkpoint=checkpoint, max_iters=max_iters)
 
     display = LiveArtifactDisplay()
@@ -228,7 +217,6 @@ def main(argv: list[str] | None = None) -> None:
 
     run_workflow_mode(
         objective,
-        provider=Provider(args.provider),
         tier=Tier(args.tier),
         max_iters=args.max_iters,
         max_retries=args.max_retries,

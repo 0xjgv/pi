@@ -3,20 +3,12 @@
 from enum import StrEnum
 
 
-class Provider(StrEnum):
-    """LLM provider identifiers."""
-
-    Claude = "claude"
-    Antigravity = "antigravity"
-
-
 class Tier(StrEnum):
     """Model tier levels."""
 
     LOW = "low"
     MED = "med"
     HIGH = "high"
-    ULTRA = "ultra"
 
 
 class WorkflowStage(StrEnum):

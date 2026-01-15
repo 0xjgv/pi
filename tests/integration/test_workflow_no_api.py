@@ -105,11 +105,8 @@ class TestWorkflowIntegrationNoAPI:
     @pytest.mark.no_api
     def test_environment_variables_not_required_in_tests(
         self,
-        clean_env,
         mock_full_workflow,
         mock_rpi_workflow_full,
     ):
-        """Tests should pass without API environment variables."""
-        # clean_env removes CLIPROXY_API_BASE and CLIPROXY_API_KEY
-        # This should not cause failures with proper mocking
+        """Tests should pass without any environment variables."""
         main(["test objective"])

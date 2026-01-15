@@ -10,9 +10,8 @@ from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
 from π.core import (
     MAX_ITERS,
-    PROVIDER_MODELS,
     STAGE_TIERS,
-    Provider,
+    TIER_TO_MODEL,
     Tier,
     WorkflowStage,
     get_lm,
@@ -71,9 +70,8 @@ def get_agent_options(
 __all__ = [
     "AVAILABLE_TOOLS",
     "MAX_ITERS",
-    "PROVIDER_MODELS",
     "STAGE_TIERS",
-    "Provider",
+    "TIER_TO_MODEL",
     "Tier",
     "WorkflowStage",
     "get_agent_options",

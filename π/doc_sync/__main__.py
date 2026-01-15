@@ -11,7 +11,7 @@ import logging
 import subprocess
 import sys
 
-from π.core import Provider, Tier, get_lm
+from π.core import Tier, get_lm
 from π.doc_sync.core import DocSyncState, stage_doc_sync
 from π.support.directory import get_project_root
 
@@ -119,7 +119,7 @@ def main() -> int:
         return 0
 
     # Run agent (use MED tier - evaluation work, not heavy implementation)
-    lm = get_lm(Provider.Claude, Tier.MED)
+    lm = get_lm(Tier.MED)
     result = stage_doc_sync(
         git_diff=git_diff,
         current_claude_md=current_claude_md,
