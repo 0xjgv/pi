@@ -57,6 +57,8 @@ class ArtifactEvent:
     """Event emitted during workflow execution.
 
     Event types:
+        - stage_start: A workflow stage has started
+        - stage_end: A workflow stage has completed
         - phase_start: A workflow phase has started
         - phase_end: A workflow phase has completed
         - file_start: A file write operation has started
@@ -69,6 +71,11 @@ class ArtifactEvent:
     phase: str | None = None
     doc_type: str | None = None
     elapsed: float | None = None
+    # Stage event fields
+    stage: str | None = None  # "Research", "Design", "Execute"
+    stage_index: int | None = None  # 1, 2, 3
+    stage_total: int | None = None  # Total stages in workflow
+    phase_count: int | None = None  # Phases in this stage
 
 
 ArtifactListener = Callable[[ArtifactEvent], None]

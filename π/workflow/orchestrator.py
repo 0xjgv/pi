@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 import dspy
 
 from π.core.constants import WORKFLOW
+from π.state import ArtifactEvent, emit_artifact_event
 from π.support.aitl import AgentQuestionAnswerer
 from π.support.directory import load_codebase_context
 from π.workflow.checkpoint import (
@@ -25,9 +27,43 @@ from π.workflow.staged import (
 from π.workflow.types import DesignResult, ExecuteResult, ResearchResult
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
 logger = logging.getLogger(__name__)
+
+# Phase counts per stage for progress display
+_STAGE_PHASE_COUNTS: dict[WorkflowStage, int] = {
+    WorkflowStage.RESEARCH: 1,
+    WorkflowStage.DESIGN: 2,
+    WorkflowStage.EXECUTE: 3,
+}
+
+
+@contextmanager
+def _timed_stage(stage: WorkflowStage, index: int, total: int = 3) -> Iterator[None]:
+    """Context manager that emits stage_start/stage_end events with timing."""
+    emit_artifact_event(
+        ArtifactEvent(
+            event_type="stage_start",
+            stage=stage.value.title(),
+            stage_index=index,
+            stage_total=total,
+            phase_count=_STAGE_PHASE_COUNTS.get(stage),
+        )
+    )
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        emit_artifact_event(
+            ArtifactEvent(
+                event_type="stage_end",
+                stage=stage.value.title(),
+                stage_index=index,
+                stage_total=total,
+                elapsed=time.monotonic() - start,
+            )
+        )
 
 
 def _run_with_retry[T: (ResearchResult, DesignResult, ExecuteResult)](
@@ -160,18 +196,19 @@ class StagedWorkflow(dspy.Module):
         # Stage 1: Research (triage gate)
         if start_stage == WorkflowStage.RESEARCH:
             logger.info("=== STAGE 1/3: RESEARCH ===")
-            try:
-                research = _run_with_retry(
-                    stage_fn=lambda: stage_research(
-                        objective=objective, lm=self.lm, max_iters=self.max_iters
-                    ),
-                    stage=WorkflowStage.RESEARCH,
-                    checkpoint=self.checkpoint,
-                    objective=objective,
-                )
-            except Exception as e:
-                logger.error("Research failed: %s", e)
-                return dspy.Prediction(status="failed", reason=str(e))
+            with _timed_stage(WorkflowStage.RESEARCH, 1):
+                try:
+                    research = _run_with_retry(
+                        stage_fn=lambda: stage_research(
+                            objective=objective, lm=self.lm, max_iters=self.max_iters
+                        ),
+                        stage=WorkflowStage.RESEARCH,
+                        checkpoint=self.checkpoint,
+                        objective=objective,
+                    )
+                except Exception as e:
+                    logger.error("Research failed: %s", e)
+                    return dspy.Prediction(status="failed", reason=str(e))
 
         assert research is not None, "Research result required"
 
@@ -196,50 +233,52 @@ class StagedWorkflow(dspy.Module):
 
         if start_idx <= design_idx and design is None:
             logger.info("=== STAGE 2/3: DESIGN ===")
-            try:
-                design = _run_with_retry(
-                    stage_fn=lambda: stage_design(
-                        research=research,
+            with _timed_stage(WorkflowStage.DESIGN, 2):
+                try:
+                    design = _run_with_retry(
+                        stage_fn=lambda: stage_design(
+                            research=research,
+                            objective=objective,
+                            lm=self.lm,
+                            max_iters=self.max_iters,
+                        ),
+                        stage=WorkflowStage.DESIGN,
+                        checkpoint=self.checkpoint,
                         objective=objective,
-                        lm=self.lm,
-                        max_iters=self.max_iters,
-                    ),
-                    stage=WorkflowStage.DESIGN,
-                    checkpoint=self.checkpoint,
-                    objective=objective,
-                )
-            except Exception as e:
-                logger.error("Design failed: %s", e)
-                return dspy.Prediction(
-                    research_doc_paths=research_paths,
-                    status="failed",
-                    reason=str(e),
-                )
+                    )
+                except Exception as e:
+                    logger.error("Design failed: %s", e)
+                    return dspy.Prediction(
+                        research_doc_paths=research_paths,
+                        status="failed",
+                        reason=str(e),
+                    )
 
         assert design is not None, "Design result required"
 
         # Stage 3: Execute (implement + commit)
         logger.info("=== STAGE 3/3: EXECUTE ===")
-        try:
-            execute = _run_with_retry(
-                stage_fn=lambda: stage_execute(
-                    plan_doc=design.plan_doc,
+        with _timed_stage(WorkflowStage.EXECUTE, 3):
+            try:
+                execute = _run_with_retry(
+                    stage_fn=lambda: stage_execute(
+                        plan_doc=design.plan_doc,
+                        objective=objective,
+                        lm=self.lm,
+                        max_iters=self.max_iters,
+                    ),
+                    stage=WorkflowStage.EXECUTE,
+                    checkpoint=self.checkpoint,
                     objective=objective,
-                    lm=self.lm,
-                    max_iters=self.max_iters,
-                ),
-                stage=WorkflowStage.EXECUTE,
-                checkpoint=self.checkpoint,
-                objective=objective,
-            )
-        except Exception as e:
-            logger.error("Execute failed: %s", e)
-            return dspy.Prediction(
-                research_doc_paths=research_paths,
-                plan_doc_path=design.plan_doc.path,
-                status="failed",
-                reason=str(e),
-            )
+                )
+            except Exception as e:
+                logger.error("Execute failed: %s", e)
+                return dspy.Prediction(
+                    research_doc_paths=research_paths,
+                    plan_doc_path=design.plan_doc.path,
+                    status="failed",
+                    reason=str(e),
+                )
 
         # Workflow complete - clear checkpoint
         self.checkpoint.clear()

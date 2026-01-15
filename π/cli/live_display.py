@@ -17,22 +17,8 @@ from π.state import (
     subscribe_to_artifacts,
 )
 
-# Map granular phase names to high-level stages
-_PHASE_TO_STAGE: dict[str, str] = {
-    "Researching codebase": "Research",
-    "Creating plan": "Design",
-    "Reviewing plan": "Design",
-    "Implementing plan": "Execute",
-    "Committing changes": "Execute",
-    "Updating documentation": "Execute",
-}
-
-# Define phases per stage for progress tracking
-_STAGE_PHASES: dict[str, list[str]] = {
-    "Research": ["Researching codebase"],
-    "Design": ["Creating plan", "Reviewing plan"],
-    "Execute": ["Implementing plan", "Committing changes", "Updating documentation"],
-}
+# Default stages (fallback if no stage events received)
+_DEFAULT_STAGES = ["Research", "Design", "Execute"]
 
 _STATUS_ICONS: dict[ArtifactStatus, str] = {
     ArtifactStatus.PENDING: "[dim]○[/]",
@@ -63,6 +49,10 @@ class LiveArtifactDisplay:
     artifacts: dict[str, TrackedArtifact] = field(default_factory=dict)
     completed_stages: set[str] = field(default_factory=set)
     completed_phases: dict[str, set[str]] = field(default_factory=dict)
+    # Dynamic stage tracking from events
+    current_stage: str | None = None
+    stages_seen: list[str] = field(default_factory=list)
+    phase_counts: dict[str, int] = field(default_factory=dict)
     _live: Live | None = None
     _unsubscribe: Callable[[], None] | None = None
 
@@ -83,15 +73,26 @@ class LiveArtifactDisplay:
 
     def _on_event(self, event: ArtifactEvent) -> None:
         """Handle artifact events."""
-        if event.event_type == "phase_start":
+        if event.event_type == "stage_start":
+            # Track stages dynamically as they're entered
+            if event.stage and event.stage not in self.stages_seen:
+                self.stages_seen.append(event.stage)
+            self.current_stage = event.stage
+            if event.stage and event.phase_count:
+                self.phase_counts[event.stage] = event.phase_count
+        elif event.event_type == "stage_end":
+            if event.stage:
+                self.completed_stages.add(event.stage)
+            self.current_stage = None
+        elif event.event_type == "phase_start":
             self.current_phase = event.phase
         elif event.event_type == "phase_end":
             self.phase_elapsed += event.elapsed or 0
-            # Track completed phases per stage
-            stage = _PHASE_TO_STAGE.get(event.phase or "")
-            if stage and event.phase:
-                self.completed_stages.add(stage)
-                self.completed_phases.setdefault(stage, set()).add(event.phase)
+            # Track completed phases under current stage
+            if self.current_stage and event.phase:
+                self.completed_phases.setdefault(self.current_stage, set()).add(
+                    event.phase
+                )
         elif event.event_type == "file_start" and event.path:
             self.artifacts[event.path] = TrackedArtifact(
                 path=event.path, status=ArtifactStatus.IN_PROGRESS
@@ -106,13 +107,12 @@ class LiveArtifactDisplay:
 
     def _render_stage(self, stage: str) -> str:
         """Render a single stage with status icon, sub-phase name, and progress."""
-        current = _PHASE_TO_STAGE.get(self.current_phase or "")
-        total = len(_STAGE_PHASES.get(stage, []))
+        total = self.phase_counts.get(stage, 1)
         done = len(self.completed_phases.get(stage, set()))
         progress = f" ({done}/{total})" if total > 1 else ""
 
         # Active stage takes priority over completed status
-        if stage == current:
+        if stage == self.current_stage:
             phase_suffix = f": {self.current_phase}" if self.current_phase else ""
             return f"[bold cyan]⟳ {stage}{phase_suffix}{progress}[/]"
         elif stage in self.completed_stages:
@@ -122,8 +122,8 @@ class LiveArtifactDisplay:
 
     def _render(self) -> Panel:
         """Render current state as Rich Panel with Tree."""
-        # Stage indicator line with status icons
-        stages = ["Research", "Design", "Execute"]
+        # Stage indicator line with status icons (dynamic or fallback)
+        stages = self.stages_seen if self.stages_seen else _DEFAULT_STAGES
         stage_parts = [self._render_stage(s) for s in stages]
         phase_line = Text.from_markup(" → ".join(stage_parts))
 

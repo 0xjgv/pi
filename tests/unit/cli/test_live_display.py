@@ -7,8 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from π.cli.live_display import (
-    _PHASE_TO_STAGE,
-    _STAGE_PHASES,
     _STATUS_ICONS,
     LiveArtifactDisplay,
     TrackedArtifact,
@@ -30,28 +28,8 @@ class TestTrackedArtifact:
         assert artifact.status == ArtifactStatus.DONE
 
 
-class TestConstantMappings:
-    """Tests for phase/stage mapping constants."""
-
-    def test_phase_to_stage_maps_research(self) -> None:
-        """Research phase maps to Research stage."""
-        assert _PHASE_TO_STAGE["Researching codebase"] == "Research"
-
-    def test_phase_to_stage_maps_design(self) -> None:
-        """Design phases map to Design stage."""
-        assert _PHASE_TO_STAGE["Creating plan"] == "Design"
-        assert _PHASE_TO_STAGE["Reviewing plan"] == "Design"
-
-    def test_phase_to_stage_maps_execute(self) -> None:
-        """Execute phases map to Execute stage."""
-        assert _PHASE_TO_STAGE["Implementing plan"] == "Execute"
-        assert _PHASE_TO_STAGE["Committing changes"] == "Execute"
-
-    def test_stage_phases_contains_all_stages(self) -> None:
-        """All three stages have defined phases."""
-        assert "Research" in _STAGE_PHASES
-        assert "Design" in _STAGE_PHASES
-        assert "Execute" in _STAGE_PHASES
+class TestStatusIcons:
+    """Tests for status icon constants."""
 
     def test_status_icons_all_defined(self) -> None:
         """All artifact statuses have icons."""
@@ -70,10 +48,13 @@ class TestLiveArtifactDisplay:
     def test_initial_state(self, display: LiveArtifactDisplay) -> None:
         """Display initializes with empty state."""
         assert display.current_phase is None
+        assert display.current_stage is None
         assert display.phase_elapsed == 0.0
         assert display.artifacts == {}
         assert display.completed_stages == set()
         assert display.completed_phases == {}
+        assert display.stages_seen == []
+        assert display.phase_counts == {}
 
     @patch("π.cli.live_display.Live")
     @patch("π.cli.live_display.subscribe_to_artifacts")
@@ -124,8 +105,40 @@ class TestLiveArtifactDisplay:
         display._on_event(event)
         assert display.current_phase == "Researching codebase"
 
+    def test_on_event_stage_start(self, display: LiveArtifactDisplay) -> None:
+        """stage_start event tracks stage dynamically."""
+        event = ArtifactEvent(
+            event_type="stage_start",
+            stage="Research",
+            stage_index=1,
+            stage_total=3,
+            phase_count=1,
+        )
+        display._on_event(event)
+
+        assert display.current_stage == "Research"
+        assert "Research" in display.stages_seen
+        assert display.phase_counts["Research"] == 1
+
+    def test_on_event_stage_end(self, display: LiveArtifactDisplay) -> None:
+        """stage_end event marks stage completed and clears current."""
+        # First start a stage
+        display._on_event(
+            ArtifactEvent(event_type="stage_start", stage="Research", phase_count=1)
+        )
+        # Then end it
+        display._on_event(ArtifactEvent(event_type="stage_end", stage="Research"))
+
+        assert display.current_stage is None
+        assert "Research" in display.completed_stages
+
     def test_on_event_phase_end(self, display: LiveArtifactDisplay) -> None:
-        """phase_end event accumulates elapsed and tracks completed stages."""
+        """phase_end event accumulates elapsed and tracks phases under current stage."""
+        # First start a stage so phases are tracked under it
+        display._on_event(
+            ArtifactEvent(event_type="stage_start", stage="Research", phase_count=1)
+        )
+        # Then end a phase
         event = ArtifactEvent(
             event_type="phase_end",
             phase="Researching codebase",
@@ -134,7 +147,6 @@ class TestLiveArtifactDisplay:
         display._on_event(event)
 
         assert display.phase_elapsed == 5.5
-        assert "Research" in display.completed_stages
         assert "Researching codebase" in display.completed_phases.get("Research", set())
 
     def test_on_event_file_start(self, display: LiveArtifactDisplay) -> None:
@@ -171,6 +183,7 @@ class TestLiveArtifactDisplay:
 
     def test_render_stage_active(self, display: LiveArtifactDisplay) -> None:
         """Active stage renders with spinning icon and phase name."""
+        display.current_stage = "Research"
         display.current_phase = "Researching codebase"
         result = display._render_stage("Research")
         assert "⟳" in result
