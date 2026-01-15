@@ -41,9 +41,3 @@ class TestValidateRequiredEnv:
         """Optional vars like CLIPROXY_API_BASE don't affect validation."""
         # Should not raise
         validate_required_env()
-
-    @patch.dict("os.environ", {"CLIPROXY_API_KEY": "test-key"}, clear=True)
-    def test_mem0_api_key_is_optional(self) -> None:
-        """MEM0_API_KEY is optional and doesn't cause exit."""
-        # Should not raise even without MEM0_API_KEY
-        validate_required_env()

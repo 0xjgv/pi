@@ -28,7 +28,6 @@ class RetentionConfig:
     logs_days: int = 7
     documents_days: int = 5
     checkpoint_hours: int = 24
-    memory_store_days: int = 30
 
 
 @dataclass(frozen=True)

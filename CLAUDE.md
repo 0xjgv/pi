@@ -5,7 +5,7 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → desig
 ## Stack (pyproject.toml)
 
 - Python 3.13+ with uv, hatchling
-- claude-agent-sdk, dspy, mem0ai, rich
+- claude-agent-sdk, dspy, rich
 - pytest + pytest-asyncio, ruff
 
 ## Commands
@@ -20,7 +20,6 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → desig
 
 - `CLIPROXY_API_BASE` — DSPy LM endpoint (default: localhost:8317)
 - `CLIPROXY_API_KEY` — API key (required)
-- `MEM0_API_KEY` — Mem0 hosted API key (optional; falls back to self-hosted)
 - `PI_LM_DEBUG` — Enable verbose LM logging: raw prompts, completions, tokens (default: off)
 
 ## Architecture
@@ -34,7 +33,7 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → desig
 - `core/` — Leaf layer: enums, models, errors (no internal deps)
 - `cli/` — Entry point, logging setup
 - `config.py` — Stage/tool config, re-exports from core
-- `workflow/` — DSPy ReAct agents, sync→async bridge, memory tools
+- `workflow/` — DSPy ReAct agents, sync→async bridge
 - `support/` — Directory management, permissions, AITL (autonomous question answering)
 - `hooks/` — PreToolUse (bash safety), PostToolUse (linting)
 - `doc_sync/` — Documentation synchronization utility

@@ -13,7 +13,6 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → desig
 - **Full Claude Agent SDK tooling** — files, shell commands, web search, task management
 - **Three-stage pipeline** — Research → Design → Execute with early exit capability
 - **Agent-in-the-loop (AITL)** — autonomous question answering via codebase-aware agent
-- **Semantic memory** — Mem0 integration for learnings across workflow iterations
 - **Safety hooks** — blocks dangerous commands, runs linters on file changes
 - **Sub-agent system** — parallel specialized agents for codebase exploration
 
@@ -40,8 +39,7 @@ User Objective
 ┌─────────────────────────────────────────────────┐
 │ Stage 3: Execute                                │
 │ • Implements plan with full SDK tooling         │
-│ • Stores learnings to semantic memory           │
-│ • Commits changes                               │
+│ • Commits changes automatically                 │
 │ • Output: Modified files, git commit            │
 └─────────────────────────────────────────────────┘
 ```
@@ -112,7 +110,6 @@ echo "Analyze the test coverage" | π
 |----------|---------|-------------|
 | `CLIPROXY_API_BASE` | `http://localhost:8317` | DSPy LM endpoint |
 | `CLIPROXY_API_KEY` | — | API authentication key (required) |
-| `MEM0_API_KEY` | — | Mem0 hosted API key (optional; falls back to self-hosted ChromaDB) |
 
 ## Project Structure
 
@@ -136,8 +133,6 @@ echo "Analyze the test coverage" | π
 │   ├── bridge.py               # Sync-async bridge to Claude SDK
 │   ├── context.py              # Execution context (session, paths)
 │   ├── callbacks.py            # ReAct logging callback
-│   ├── memory.py               # Mem0 client factory
-│   ├── memory_tools.py         # DSPy memory tools
 │   └── types.py                # Type validation (doc paths, results)
 ├── support/                    # Supporting infrastructure
 │   ├── aitl.py                 # Agent-in-the-loop question answering

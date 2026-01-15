@@ -17,7 +17,6 @@ from π.core import Provider, Tier, get_lm
 from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import CheckpointManager, CheckpointState, StagedWorkflow
-from π.workflow.memory import cleanup_chroma_store
 
 logger = logging.getLogger(__name__)
 VERSION = get_version("pi-rpi")
@@ -216,7 +215,6 @@ def main(argv: list[str] | None = None) -> None:
     logs_dir = get_logs_dir()
     cleanup_old_logs(logs_dir)  # Clean old logs first
     archive_old_documents()  # Archive old research/plan documents
-    cleanup_chroma_store()  # Archive stale memory stores
 
     # Enable verbose LM logging when --verbose flag set
     if args.verbose:

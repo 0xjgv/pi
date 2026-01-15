@@ -14,7 +14,6 @@ def validate_required_env() -> None:
 
     Optional (with defaults):
         CLIPROXY_API_BASE: LM proxy base URL (default: localhost:8317)
-        MEM0_API_KEY: Mem0 hosted API (falls back to self-hosted)
 
     Exits with code 1 if required variables are missing.
     """
