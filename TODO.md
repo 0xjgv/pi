@@ -1,25 +1,25 @@
 # TODO — High Leverage Actions
 
-[ ] fix human in the loop (aitl + hitl)
+## 0. Get It Into Users' Hands (THIS WEEK)
 
-## 1. Launch the Agent
+- [ ] **Tomorrow AM**: Message Mattia, Francesco, Marian
+  - "Can I get 20 min to watch you try π on something you're working on?"
+- [ ] Ensure `git clone && make install && π "task"` works end-to-end
+- [ ] Watch them use it. Note where it breaks.
+- [ ] Ask: "What would make this useful for you?"
+
+## 1. Make It Work
 
 - [ ] Finalize core workflow (Research → Design → Execute)
 - [ ] Ensure `make check` passes with 80%+ coverage
+
+## 2. Make It Installable
+
 - [ ] Package and publish to PyPI
-- [ ] Write installation & quickstart docs
+- [ ] Write installation & quickstart docs (1 page max)
 
-## 2. Create Landing Page
+## 3. Grow (AFTER user feedback)
 
-- [ ] Register domain
-- [ ] Build simple landing page (product explanation + value prop)
-- [ ] Add email capture form (waitlist/early access)
-- [ ] Set up email service (Resend, Buttondown, or similar)
-- [ ] Add analytics (Plausible or similar)
-
-## 3. Find Potential Customers
-
-- [ ] Identify target audience (developers, indie hackers, AI enthusiasts)
-- [ ] Post on relevant communities (Hacker News, Reddit r/LocalLLaMA, Twitter/X)
-- [ ] Reach out to early adopters in personal network
-- [ ] Collect feedback and iterate
+- [ ] Landing page with email capture
+- [ ] Post on HN, Reddit, Twitter/X
+- [ ] Iterate based on what users actually ask for
