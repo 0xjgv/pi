@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 _STAGE_PHASE_COUNTS: dict[WorkflowStage, int] = {
     WorkflowStage.RESEARCH: 1,
     WorkflowStage.DESIGN: 2,
-    WorkflowStage.EXECUTE: 3,
+    WorkflowStage.EXECUTE: 2,
 }
 
 
