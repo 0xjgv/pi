@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 # Phase counts per stage for progress display
 _STAGE_PHASE_COUNTS: dict[WorkflowStage, int] = {
     WorkflowStage.RESEARCH: 1,
-    WorkflowStage.DESIGN: 2,
     WorkflowStage.EXECUTE: 2,
+    WorkflowStage.DESIGN: 3,  # create_plan, review_plan, iterate_plan
 }
 
 
