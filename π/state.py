@@ -46,10 +46,10 @@ def set_live_display_active(active: bool) -> None:
 class ArtifactStatus(Enum):
     """Status of a tracked artifact."""
 
-    PENDING = "pending"
     IN_PROGRESS = "in_progress"
-    DONE = "done"
+    PENDING = "pending"
     FAILED = "failed"
+    DONE = "done"
 
 
 @dataclass

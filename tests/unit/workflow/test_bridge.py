@@ -11,6 +11,7 @@ from claude_agent_sdk.types import (
 )
 
 from π.core import AgentExecutionError
+from π.core.enums import Command, DocType
 from π.workflow.bridge import (
     COMMAND_DOC_TYPE,
     SessionWriteTracker,
@@ -22,7 +23,7 @@ from π.workflow.bridge import (
     execute_claude_task,
     workflow_tool,
 )
-from π.workflow.context import Command, get_event_loop
+from π.workflow.context import get_event_loop
 
 
 class TestSessionWriteTracker:
@@ -580,8 +581,8 @@ class TestWorkflowToolDecorator:
 
         assert "<doc_path>" in result
         assert "2026-01-05-test.md" in result
-        assert Command.RESEARCH_CODEBASE in mock_ctx.extracted_paths
-        paths = mock_ctx.extracted_paths[Command.RESEARCH_CODEBASE]
+        assert DocType.RESEARCH in mock_ctx.extracted_paths
+        paths = mock_ctx.extracted_paths[DocType.RESEARCH]
         assert any("2026-01-05-test.md" in p for p in paths)
 
     def test_validates_and_injects_plan_path(self, mock_ctx):

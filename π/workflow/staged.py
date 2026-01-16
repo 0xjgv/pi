@@ -12,9 +12,10 @@ from pathlib import Path
 import dspy
 
 from π.core.constants import WORKFLOW
+from π.core.enums import DocType, WorkflowStage
 from π.support.directory import get_project_root
 from π.workflow.callbacks import react_logging_callback
-from π.workflow.context import Command, get_ctx
+from π.workflow.context import get_ctx
 from π.workflow.module import DesignSignature, ExecuteSignature, ResearchSignature
 from π.workflow.tools import (
     ask_questions,
@@ -88,7 +89,7 @@ def stage_research(*, objective: str) -> ResearchResult:
         raise ValueError(msg)
     lm = ctx.lm
 
-    ctx.current_stage = "research"
+    ctx.current_stage = WorkflowStage.RESEARCH
     ctx.objective = objective
 
     # Wrap signature with codebase context (from shared ExecutionContext)
@@ -104,7 +105,7 @@ def stage_research(*, objective: str) -> ResearchResult:
         result = agent(objective=objective)
 
     # Use only tracked paths from tool calls (ignore LM output - may hallucinate)
-    all_paths = ctx.extracted_paths.get(Command.RESEARCH_CODEBASE, set())
+    all_paths = ctx.extracted_paths.get(DocType.RESEARCH, set())
     all_results = ctx.extracted_results
 
     # Build list of validated ResearchDocPath objects
@@ -162,12 +163,12 @@ def stage_design(
         raise ValueError(msg)
     lm = ctx.lm
 
-    ctx.current_stage = "design"
+    ctx.current_stage = WorkflowStage.DESIGN
     ctx.objective = objective
 
     # Keep extracted_paths for validate_plan_doc safety check
     research_paths = {doc.path for doc in research.research_docs}
-    ctx.extracted_paths[Command.RESEARCH_CODEBASE] = research_paths
+    ctx.extracted_paths[DocType.RESEARCH] = research_paths
 
     # Pass research data as lists directly to match DesignSignature
     research_doc_paths = list(research_paths)
@@ -194,7 +195,7 @@ def stage_design(
         )
 
     # Use tracked plan path from tool calls (ignore LM output - may hallucinate)
-    plan_paths = ctx.extracted_paths.get(Command.CREATE_PLAN, set())
+    plan_paths = ctx.extracted_paths.get(DocType.PLAN, set())
     if not plan_paths:
         msg = "Design did not produce a plan document"
         raise ValueError(msg)
@@ -270,8 +271,8 @@ def stage_execute(
         raise ValueError(msg)
     lm = ctx.lm
 
-    ctx.extracted_paths.setdefault(Command.IMPLEMENT_PLAN, set()).add(plan_doc.path)
-    ctx.current_stage = "execute"
+    ctx.current_stage = WorkflowStage.EXECUTE
+    ctx.implementing_plan = plan_doc.path
     ctx.objective = objective
 
     # Wrap signature with codebase context (from shared ExecutionContext)

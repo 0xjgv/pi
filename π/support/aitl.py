@@ -183,7 +183,8 @@ class AgentQuestionAnswerer:
         for doc_type, doc_paths in ctx.extracted_paths.items():
             if doc_paths:
                 paths_str = "\n".join(f"- {p}" for p in doc_paths)
-                parts.append(f"## {doc_type.title()} Documents\n{paths_str}")
+                label = doc_type.value.replace("_", " ").title()
+                parts.append(f"## {label} Documents\n{paths_str}")
 
         return parts
 

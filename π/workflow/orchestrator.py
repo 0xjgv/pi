@@ -236,8 +236,8 @@ class StagedWorkflow(dspy.Module):
                 try:
                     design = _run_with_retry(
                         stage_fn=lambda: stage_design(
-                            research=research,
                             objective=objective,
+                            research=research,
                         ),
                         stage=WorkflowStage.DESIGN,
                         checkpoint=self.checkpoint,

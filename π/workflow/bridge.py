@@ -26,6 +26,7 @@ from claude_agent_sdk.types import (
 from π.config import get_agent_options
 from π.console import console
 from π.core import AgentExecutionError
+from π.core.enums import Command, DocType
 from π.state import (
     ArtifactEvent,
     emit_artifact_event,
@@ -36,7 +37,6 @@ from π.support.directory import get_project_root
 from π.utils import speak
 from π.workflow.context import (
     COMMAND_MAP,
-    Command,
     get_ctx,
     get_event_loop,
 )
@@ -45,10 +45,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
 # Command → DocType mapping (only commands that produce tracked documents)
-COMMAND_DOC_TYPE: dict[Command, str] = {
-    Command.RESEARCH_CODEBASE: "research",
-    Command.CREATE_PLAN: "plan",
-    Command.REVIEW_PLAN: "plan",
+COMMAND_DOC_TYPE: dict[Command, DocType] = {
+    Command.RESEARCH_CODEBASE: DocType.RESEARCH,
+    Command.CREATE_PLAN: DocType.PLAN,
+    Command.REVIEW_PLAN: DocType.PLAN,
 }
 
 logger = logging.getLogger(__name__)
@@ -544,7 +544,7 @@ def workflow_tool(
                     tracked_paths = tracker.get_paths()
                     doc_path = tracked_paths[-1] if tracked_paths else None
                     if tracked_paths:
-                        paths = session.extracted_paths.setdefault(command, set())
+                        paths = session.extracted_paths.setdefault(doc_type, set())
                         paths.update(tracked_paths)
                         for p in tracked_paths:
                             session.extracted_results[p] = result
