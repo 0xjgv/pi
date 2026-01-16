@@ -18,5 +18,5 @@ wheels/
 .env
 
 # Project-specific
+mutants/
 .π/
-mutants/  # mutmut generated directory
