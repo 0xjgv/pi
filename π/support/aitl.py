@@ -377,7 +377,7 @@ Guidelines:
 
 def create_ask_questions_tool(
     default_answerer: QuestionAnswerer | None = None,
-) -> Callable[[list[Question]], list[str]]:
+) -> Callable[[list[Question] | list[str] | list[dict]], list[str]]:
     """Create a DSPy-compatible ask_questions tool.
 
     Factory function that creates a callable that:
@@ -393,7 +393,7 @@ def create_ask_questions_tool(
     """
     fallback = default_answerer or AgentQuestionAnswerer()
 
-    def ask_questions(questions: list[Question]) -> list[str]:
+    def ask_questions(questions: list[Question] | list[str] | list[dict]) -> list[str]:
         """Ask questions and get answers from codebase-aware agent.
 
         Use this tool when:

@@ -113,6 +113,7 @@ class TestJSONParsing:
         answerer = AgentQuestionAnswerer()
         result = '```json\n{"answers": [{"content": "Only one"}]}\n```'
         answers = answerer._parse_json_answers(result, 3)
+        assert answers is not None
         assert len(answers) == 3
         assert "(no answer)" in answers[2]
 
@@ -154,6 +155,7 @@ Line 2
 Line 3
 """
         answers = answerer._parse_delimiter_answers(result, 1)
+        assert answers is not None
         assert "Line 1" in answers[0]
         assert "Line 2" in answers[0]
         assert "Line 3" in answers[0]

@@ -544,7 +544,7 @@ def workflow_tool(
                     tracked_paths = tracker.get_paths()
                     doc_path = tracked_paths[-1] if tracked_paths else None
                     if tracked_paths:
-                        paths = session.extracted_paths.setdefault(doc_type, set())
+                        paths = session.extracted_paths.setdefault(command, set())
                         paths.update(tracked_paths)
                         for p in tracked_paths:
                             session.extracted_results[p] = result

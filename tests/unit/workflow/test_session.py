@@ -105,7 +105,7 @@ class TestExecutionContext:
         os.utime(new_plan, (2000000, 2000000))  # newer mtime
 
         ctx = ExecutionContext()
-        ctx.extracted_paths["plan"] = {str(old_plan), str(new_plan)}
+        ctx.extracted_paths[Command.CREATE_PLAN] = {str(old_plan), str(new_plan)}
 
         result = ctx.get_or_validate_plan_path()
         assert result == str(new_plan.resolve())
@@ -145,8 +145,8 @@ class TestExecutionContext:
         import logging
 
         ctx = ExecutionContext()
+        ctx.extracted_paths[Command.RESEARCH_CODEBASE] = {"/test/path.md"}
         ctx.session_ids[Command.RESEARCH_CODEBASE] = "test-id"
-        ctx.extracted_paths["research"] = {"/test/path.md"}
 
         with caplog.at_level(logging.DEBUG, logger="π.workflow.context"):
             ctx.log_session_state()

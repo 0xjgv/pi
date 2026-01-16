@@ -9,10 +9,14 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import dspy
 
 from π.core.constants import DOC_SYNC, WORKFLOW
+
+if TYPE_CHECKING:
+    from dspy.clients.base_lm import BaseLM
 from π.support.directory import get_project_root
 from π.workflow.tools import ask_questions, write_claude_md
 
@@ -98,7 +102,7 @@ def stage_doc_sync(
     *,
     git_diff: str,
     current_claude_md: str,
-    lm: dspy.LM,
+    lm: BaseLM,
 ) -> DocSyncResult:
     """Evaluate and optionally update documentation.
 

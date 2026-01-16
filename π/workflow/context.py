@@ -108,7 +108,7 @@ class ExecutionContext:
             ValueError: If no plan available or path is invalid.
         """
         if plan_path is None:
-            plan_paths = self.extracted_paths.get("plan", set())
+            plan_paths = self.extracted_paths.get(Command.CREATE_PLAN, set())
             if not plan_paths:
                 raise ValueError("No plan document available. Run create_plan first.")
             # Select most recently modified plan

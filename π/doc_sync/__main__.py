@@ -112,8 +112,8 @@ def main() -> int:
     # Run agent (use MED tier - evaluation work, not heavy implementation)
     lm = get_lm(Tier.MED)
     result = stage_doc_sync(
-        git_diff=git_diff,
         current_claude_md=current_claude_md,
+        git_diff=git_diff,
         lm=lm,
     )
 
