@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from asyncio import wait_for
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk.types import (
     PermissionResult,
@@ -12,13 +12,15 @@ from claude_agent_sdk.types import (
 )
 
 from π.console import console
+from π.core.constants import TIMEOUTS
 from π.state import get_current_status
-from π.utils import speak
+from π.utils import speak, truncate
+from π.workflow.context import get_ctx
+
+if TYPE_CHECKING:
+    from π.support.aitl import QuestionAnswerer
 
 logger = logging.getLogger(__name__)
-
-# Default timeout for user input (5 minutes)
-USER_INPUT_TIMEOUT = 300.0
 
 
 async def _get_input_with_timeout(prompt: str) -> str:
@@ -26,11 +28,11 @@ async def _get_input_with_timeout(prompt: str) -> str:
     try:
         response = await wait_for(
             asyncio.to_thread(console.input, prompt),
-            timeout=USER_INPUT_TIMEOUT,
+            timeout=TIMEOUTS.user_input,
         )
         return response.strip() or "[No response provided]"
     except TimeoutError:
-        logger.warning("User input timed out after %s seconds", USER_INPUT_TIMEOUT)
+        logger.warning("User input timed out after %s seconds", TIMEOUTS.user_input)
         return "[No response - timed out]"
 
 
@@ -98,13 +100,51 @@ async def _collect_answer(question: dict[str, Any]) -> str:
     return user_input
 
 
+def _route_to_aitl(
+    questions: list[dict[str, Any]],
+    answerer: "QuestionAnswerer",
+) -> PermissionResultAllow:
+    """Route questions to AITL agent instead of user."""
+    # Extract question text, including options as context
+    question_texts = []
+    for q in questions:
+        text = q.get("question", "")
+        options = q.get("options", [])
+        if options:
+            opts_str = " | ".join(
+                f"{o.get('label', '')}: {o.get('description', '')}" for o in options
+            )
+            text = f"{text} Options: [{opts_str}]"
+        question_texts.append(text)
+
+    # Get answers from AITL
+    logger.info("Routing %d question(s) to AITL", len(question_texts))
+    answers = answerer.ask(question_texts)
+
+    # Map answers back to dict format expected by SDK
+    answers_dict = {}
+    for q, a in zip(questions, answers, strict=True):
+        answers_dict[q.get("question", "")] = a
+
+    logger.debug("AITL answers: %s", truncate(str(answers_dict)))
+
+    return PermissionResultAllow(
+        updated_input={"questions": questions, "answers": answers_dict}
+    )
+
+
 async def _handle_ask_user_question(
     tool_input: dict[str, Any],
 ) -> PermissionResultAllow:
     """Handle AskUserQuestion tool with structured questions/answers."""
     questions = tool_input.get("questions", [])
 
-    # Suspend spinner during user input
+    # Check if AITL mode is enabled (autonomous workflow)
+    ctx = get_ctx()
+    if ctx.input_provider is not None:
+        return _route_to_aitl(questions, ctx.input_provider)
+
+    # Interactive mode: prompt user for answers
     status = get_current_status()
     if status:
         status.stop()
@@ -131,7 +171,7 @@ async def _handle_ask_user_question(
             question_text = q.get("question", "")
             answers[question_text] = await _collect_answer(q)
 
-        logger.debug("User responded to AskUserQuestion: %s", str(answers)[:100])
+        logger.debug("User responded to AskUserQuestion: %s", truncate(str(answers)))
 
         return PermissionResultAllow(
             updated_input={"questions": questions, "answers": answers}
@@ -168,9 +208,8 @@ async def can_use_tool(
         return await _handle_ask_user_question(tool_input)
 
     # Log other tool calls
-    input_preview = (
-        str(tool_input)[:100] + "..." if len(str(tool_input)) > 100 else str(tool_input)
+    logger.debug(
+        "Allowing tool %s with input: %s", tool_name, truncate(str(tool_input))
     )
-    logger.debug("Allowing tool %s with input: %s", tool_name, input_preview)
 
     return PermissionResultAllow()

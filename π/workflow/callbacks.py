@@ -6,23 +6,32 @@ Provides visibility into agent thought/action/observation cycles.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any
 
 from dspy.utils.callback import BaseCallback
 
+from π.utils import truncate
+
 logger = logging.getLogger(__name__)
+
+# LM debug logging configuration
+LM_PROMPT_TRUNCATE = 2000  # Max chars for prompt logging
+LM_RESPONSE_TRUNCATE = 1000  # Max chars for response logging
+
+# Stage values from DSPy signatures (for final output detection)
+_FINAL_STAGES = frozenset({"research", "design", "execute"})
+
+
+def lm_debug_enabled() -> bool:
+    """Check if verbose LM debug logging is enabled at runtime."""
+    return os.getenv("PI_LM_DEBUG", "").lower() in ("1", "true", "yes")
 
 
 def _summarize_inputs(inputs: dict[str, Any]) -> str:
     """Summarize inputs for logging (truncate long values)."""
-    parts = []
-    for k, v in inputs.items():
-        val_str = str(v)
-        if len(val_str) > 100:
-            val_str = val_str[:100] + "..."
-        parts.append(f"{k}={val_str!r}")
-    return ", ".join(parts)
+    return ", ".join(f"{k}={truncate(str(v))!r}" for k, v in inputs.items())
 
 
 class ReActLoggingCallback(BaseCallback):
@@ -35,6 +44,7 @@ class ReActLoggingCallback(BaseCallback):
     def __init__(self) -> None:
         self._start_times: dict[str, float] = {}
         self._iteration_counts: dict[str, int] = {}
+        self._lm_start_times: dict[str, float] = {}  # Track LM call timing
 
     def on_module_start(
         self,
@@ -70,7 +80,7 @@ class ReActLoggingCallback(BaseCallback):
             logger.error("ReAct FAILED (%.2fs): %s", duration, exception)
             return
 
-        if not outputs:
+        if not isinstance(outputs, dict):
             return
 
         # Log based on output type
@@ -80,6 +90,85 @@ class ReActLoggingCallback(BaseCallback):
             self._log_action(outputs, duration)
         elif self._is_final_output(outputs):
             self._log_completion(outputs, duration, call_id)
+
+    def on_lm_start(
+        self,
+        call_id: str,
+        instance: Any,
+        inputs: dict[str, Any],
+    ) -> None:
+        """Log when an LM call starts (captures raw prompt)."""
+        self._lm_start_times[call_id] = time.perf_counter()
+
+        # Defensive model attribute access - try multiple locations
+        model = (
+            getattr(instance, "model", None)
+            or getattr(instance, "model_name", None)
+            or getattr(getattr(instance, "kwargs", {}), "model", None)
+            or "unknown"
+        )
+        logger.debug("LM CALL START [%s]: model=%s", call_id[:8], model)
+
+        # Verbose prompt logging when PI_LM_DEBUG=1
+        if lm_debug_enabled():
+            messages = inputs.get("messages", [])
+            prompt_str = str(messages)
+            total_len = len(prompt_str)
+            prompt_str = truncate(
+                prompt_str,
+                LM_PROMPT_TRUNCATE,
+                f"... [truncated, {total_len} total chars]",
+            )
+            logger.debug("LM PROMPT [%s]: %s", call_id[:8], prompt_str)
+
+    def on_lm_end(
+        self,
+        call_id: str,
+        outputs: dict[str, Any] | None,
+        exception: Exception | None,
+    ) -> None:
+        """Log LM call completion with timing, tokens, and response."""
+        start_time = self._lm_start_times.pop(call_id, None)
+        latency_ms = int((time.perf_counter() - start_time) * 1000) if start_time else 0
+        cid = call_id[:8]
+
+        if exception:
+            logger.error(
+                "LM CALL FAILED [%s]: %s (latency=%dms)", cid, exception, latency_ms
+            )
+            return
+
+        if not isinstance(outputs, dict):
+            logger.debug("LM CALL END [%s]: no outputs (latency=%dms)", cid, latency_ms)
+            return
+
+        # Defensive fallback: check multiple possible locations for usage data
+        response = outputs.get("response", {})
+        response_usage = response.get("usage") if isinstance(response, dict) else None
+        usage = outputs.get("usage") or response_usage or {}
+        if not usage:
+            logger.debug(
+                "LM COMPLETE [%s]: latency=%dms, tokens=unavailable", cid, latency_ms
+            )
+        else:
+            in_tok = usage.get("prompt_tokens", 0)
+            out_tok = usage.get("completion_tokens", 0)
+            cached = usage.get("cache_read_input_tokens", 0)
+            tokens_str = f"tokens={{in={in_tok}, out={out_tok}, cached={cached}}}"
+            logger.debug(
+                "LM COMPLETE [%s]: latency=%dms, %s", cid, latency_ms, tokens_str
+            )
+
+        # Verbose response logging when PI_LM_DEBUG=1
+        if lm_debug_enabled():
+            response_str = str(outputs.get("response", outputs))
+            total_len = len(response_str)
+            response_str = truncate(
+                response_str,
+                LM_RESPONSE_TRUNCATE,
+                f"... [truncated, {total_len} total chars]",
+            )
+            logger.debug("LM RESPONSE [%s]: %s", cid, response_str)
 
     def _is_thought_output(self, outputs: dict[str, Any]) -> bool:
         """Check if outputs contain a thought/reasoning step."""
@@ -93,9 +182,7 @@ class ReActLoggingCallback(BaseCallback):
 
     def _is_final_output(self, outputs: dict[str, Any]) -> bool:
         """Check if outputs are the final result."""
-        return "trajectory" in outputs or any(
-            k in ("research_doc_paths", "plan_doc_path", "status") for k in outputs
-        )
+        return "trajectory" in outputs or outputs.get("stage") in _FINAL_STAGES
 
     def _log_thought(self, outputs: dict[str, Any], duration: float) -> None:
         """Log a reasoning step."""
@@ -105,24 +192,22 @@ class ReActLoggingCallback(BaseCallback):
             or outputs.get("rationale", "")
         )
         if thought:
-            thought_preview = thought[:500] + "..." if len(thought) > 500 else thought
-            logger.info("ReAct THOUGHT (%.2fs): %s", duration, thought_preview)
+            logger.info("ReAct THOUGHT (%.2fs): %s", duration, truncate(thought, 500))
 
     def _log_action(self, outputs: dict[str, Any], duration: float) -> None:
         """Log an action step."""
         tool_name = outputs.get("next_tool_name") or outputs.get("tool_name", "unknown")
         tool_args = outputs.get("next_tool_args") or outputs.get("tool_args", {})
-        args_str = str(tool_args)[:200]
-        logger.info("ReAct ACTION (%.2fs): %s(%s)", duration, tool_name, args_str)
+        logger.info(
+            "ReAct ACTION (%.2fs): %s(%s)",
+            duration,
+            tool_name,
+            truncate(str(tool_args), 200),
+        )
 
         # Log observation if present
         if observation := outputs.get("observation"):
-            obs_preview = (
-                str(observation)[:500] + "..."
-                if len(str(observation)) > 500
-                else str(observation)
-            )
-            logger.info("ReAct OBSERVATION: %s", obs_preview)
+            logger.info("ReAct OBSERVATION: %s", truncate(str(observation), 500))
 
     def _log_completion(
         self, outputs: dict[str, Any], duration: float, call_id: str

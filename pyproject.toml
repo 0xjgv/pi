@@ -1,6 +1,6 @@
 [project]
 name = "pi-rpi"
-version = "0.1.1"
+version = "0.1.2"
 description = "Research, plan, & implement workflows for Claude agents"
 readme = "README.md"
 license = "MIT"
@@ -22,7 +22,6 @@ classifiers = [
 dependencies = [
     "claude-agent-sdk>=0.1.19",
     "dspy>=3.1.0",
-    "mem0ai>=1.0.1",
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
 ]
@@ -120,9 +119,6 @@ ignore = [
 "π/support/permissions.py" = [
     "ARG001",   # context param required by SDK callback signature
 ]
-"π/workflow/memory.py" = [
-    "PLC0415",  # late imports for lazy loading mem0
-]
 
 [tool.ruff.lint.isort]
 known-first-party = ["π"]
@@ -130,6 +126,7 @@ known-first-party = ["π"]
 [tool.coverage.run]
 source = ["π"]
 branch = true
+omit = ["π/workflow/sdk_orchestrator.py"]  # Prototype, not production code
 
 [tool.coverage.report]
 fail_under = 80

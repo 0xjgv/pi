@@ -19,7 +19,6 @@ class TestCommand:
         assert Command.RESEARCH_CODEBASE == "research_codebase"
         assert Command.CREATE_PLAN == "create_plan"
         assert Command.REVIEW_PLAN == "review_plan"
-        assert Command.ITERATE_PLAN == "iterate_plan"
         assert Command.IMPLEMENT_PLAN == "implement_plan"
         assert Command.COMMIT == "commit"
 

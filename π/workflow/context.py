@@ -33,7 +33,6 @@ class Command(StrEnum):
     RESEARCH_CODEBASE = "research_codebase"
     REVIEW_PLAN = "review_plan"
     CREATE_PLAN = "create_plan"
-    ITERATE_PLAN = "iterate_plan"
     IMPLEMENT_PLAN = "implement_plan"
     COMMIT = "commit"
     WRITE_CLAUDE_MD = "write_claude_md"  # Non-numbered command
@@ -86,6 +85,8 @@ class ExecutionContext:
     objective: str | None = None
     current_stage: str | None = None
     input_provider: QuestionAnswerer | None = None  # type: ignore[name-defined]
+    # Codebase context (loaded once, shared across stages)
+    codebase_context: str | None = None
 
     def get_or_validate_plan_path(
         self,

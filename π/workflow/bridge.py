@@ -7,11 +7,11 @@ tools to invoke the async Claude Agent SDK.
 from __future__ import annotations
 
 import logging
-import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import wraps
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -26,25 +26,30 @@ from claude_agent_sdk.types import (
 from π.config import get_agent_options
 from π.console import console
 from π.core import AgentExecutionError
-from π.state import set_current_status
+from π.state import (
+    ArtifactEvent,
+    emit_artifact_event,
+    is_live_display_active,
+    set_current_status,
+)
 from π.support.directory import get_project_root
 from π.utils import speak
 from π.workflow.context import (
     COMMAND_MAP,
     Command,
-    _ctx,
     get_ctx,
     get_event_loop,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
-    from pathlib import Path
 
-    from π.workflow.types import DocType
-
-# Re-export _ctx for backwards compatibility (tests import it from bridge.py)
-__all__ = ["_ctx"]
+# Command → DocType mapping (only commands that produce tracked documents)
+COMMAND_DOC_TYPE: dict[Command, str] = {
+    Command.RESEARCH_CODEBASE: "research",
+    Command.CREATE_PLAN: "plan",
+    Command.REVIEW_PLAN: "plan",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +59,18 @@ def timed_phase(phase_name: str) -> Generator[None]:
     """Context manager that shows spinner during execution and timing after."""
     start = time.monotonic()
     logger.info(">>> Phase started: %s", phase_name)
+    emit_artifact_event(ArtifactEvent(event_type="phase_start", phase=phase_name))
 
-    with console.status(f"[bold cyan]{phase_name}...") as status:
-        set_current_status(status)
-        try:
-            yield
-        finally:
-            set_current_status(None)
+    # Skip spinner if live display is active (it shows phase status)
+    if is_live_display_active():
+        yield
+    else:
+        with console.status(f"[bold cyan]{phase_name}...") as status:
+            set_current_status(status)
+            try:
+                yield
+            finally:
+                set_current_status(None)
 
     elapsed = time.monotonic() - start
     if elapsed < 60:
@@ -69,14 +79,20 @@ def timed_phase(phase_name: str) -> Generator[None]:
         mins, secs = divmod(int(elapsed), 60)
         time_str = f"{mins}m {secs}s"
 
+    emit_artifact_event(
+        ArtifactEvent(event_type="phase_end", phase=phase_name, elapsed=elapsed)
+    )
     logger.info("<<< Phase complete: %s (%s)", phase_name, time_str)
     console.print(f"[green]✓[/green] {phase_name} ({time_str})")
 
 
 def _log_tool_call(block: ToolUseBlock) -> None:
     """Log tool invocation details with timing start."""
-    # Start timing for all tools
-    _tool_timing.start(block.id, block.name)
+    # Extract file_path for write tools (used for completion events)
+    file_path = (
+        block.input.get("file_path") if block.name in _FILE_WRITE_TOOLS else None
+    )
+    _tool_timing.start(block.id, block.name, file_path=file_path)
 
     # Skip logging for read-only tools (reduce noise)
     if block.name in _READ_TOOLS:
@@ -105,10 +121,15 @@ def _log_tool_call(block: ToolUseBlock) -> None:
 
 def _log_tool_result(block: ToolResultBlock) -> None:
     """Log tool result details with timing."""
-    duration, tool_name = _tool_timing.end(block.tool_use_id)
+    duration, tool_name, file_path = _tool_timing.end(block.tool_use_id)
     duration_str = f" ({duration:.2f}s)" if duration else ""
     status = "error" if block.is_error else "ok"
     content_str = str(block.content)
+
+    # Note: file_done/file_failed events are emitted at session end in
+    # _run_claude_session since the SDK doesn't stream ToolResultBlock.
+    # The file_path is still tracked here for potential future use.
+    _ = file_path  # Unused but kept for consistency with end() return type
 
     # Full logging for important tools or errors
     if tool_name in _FULL_LOG_TOOLS or block.is_error:
@@ -177,13 +198,16 @@ def _process_assistant_message(
                 and block.name in _FILE_WRITE_TOOLS
                 and (file_path := block.input.get("file_path"))
             ):
-                tracker.on_tool_use(block.id, file_path)
+                tracker.on_tool_use(file_path)
+                emit_artifact_event(
+                    ArtifactEvent(
+                        event_type="file_start",
+                        path=file_path,
+                        doc_type=tracker.doc_type,
+                    )
+                )
         elif isinstance(block, ToolResultBlock):
             _log_tool_result(block)
-            if tracker:
-                tracker.on_tool_result(
-                    block.tool_use_id, is_error=block.is_error or False
-                )
     return block_text
 
 
@@ -196,12 +220,6 @@ def _get_agent_options() -> ClaudeAgentOptions:
     ctx.agent_options = options
     return options
 
-
-# Document path patterns for extraction
-_DOC_PATH_PATTERNS: dict[str, str] = {
-    "research": r"(thoughts/shared/research/[\w\-]+\.md)",
-    "plan": r"(thoughts/shared/plans/[\w\-]+\.md)",
-}
 
 # Tools that create/modify files
 _FILE_WRITE_TOOLS = frozenset({"Write", "Edit"})
@@ -216,25 +234,44 @@ _FULL_LOG_TOOLS = frozenset({"Skill", "Task", "Write", "Edit"})
 # Maximum payload size before truncation (10KB)
 _MAX_PAYLOAD_SIZE = 10 * 1024
 
+# Commands that involve planning (not execution)
+_PLANNING_COMMANDS = frozenset({Command.CREATE_PLAN, Command.REVIEW_PLAN})
+
 
 @dataclass
 class ToolTimingTracker:
-    """Tracks tool execution timing for duration logging."""
+    """Tracks tool execution timing and file paths for duration logging and events."""
 
     _start_times: dict[str, float] = field(default_factory=dict)
     _tool_names: dict[str, str] = field(default_factory=dict)
+    _file_paths: dict[str, str] = field(default_factory=dict)
 
-    def start(self, tool_use_id: str, tool_name: str) -> None:
+    def start(
+        self, tool_use_id: str, tool_name: str, *, file_path: str | None = None
+    ) -> None:
         """Record start time for a tool invocation."""
         self._start_times[tool_use_id] = time.perf_counter()
         self._tool_names[tool_use_id] = tool_name
+        if file_path:
+            self._file_paths[tool_use_id] = file_path
 
-    def end(self, tool_use_id: str) -> tuple[float | None, str | None]:
-        """Get duration and tool name for a completed tool invocation."""
+    def end(self, tool_use_id: str) -> tuple[float | None, str | None, str | None]:
+        """Get duration, tool name, and file path for a completed tool invocation."""
         start = self._start_times.pop(tool_use_id, None)
         tool_name = self._tool_names.pop(tool_use_id, None)
+        file_path = self._file_paths.pop(tool_use_id, None)
         duration = time.perf_counter() - start if start else None
-        return duration, tool_name
+        return duration, tool_name, file_path
+
+    def flush_file_paths(self) -> list[str]:
+        """Return and clear all pending file paths.
+
+        Used to emit file_done events at session end since the SDK doesn't
+        stream ToolResultBlock messages.
+        """
+        paths = list(self._file_paths.values())
+        self._file_paths.clear()
+        return paths
 
 
 # Module-level timing tracker
@@ -245,77 +282,38 @@ _tool_timing = ToolTimingTracker()
 class SessionWriteTracker:
     """Tracks file writes during a single SDK session.
 
-    Captures all writes per doc_type. Pending/confirm pattern excludes failed writes.
+    Command-based tracking: doc_type is determined by the command at creation.
+    Paths are validated via get_paths() which checks files exist on disk.
     """
 
-    writes: dict[str, list[str]] = field(default_factory=dict)  # doc_type -> [paths]
-    _pending: dict[str, tuple[str, str]] = field(
-        default_factory=dict
-    )  # tool_use_id -> (doc_type, path)
+    command: Command
+    writes: list[str] = field(default_factory=list)
 
-    def on_tool_use(self, tool_use_id: str, file_path: str) -> None:
-        """Record pending write from ToolUseBlock."""
-        if doc_type := self._infer_doc_type(file_path):
-            self._pending[tool_use_id] = (doc_type, file_path)
+    @property
+    def doc_type(self) -> str | None:
+        """Get doc_type for this command (if any)."""
+        return COMMAND_DOC_TYPE.get(self.command)
 
-    def on_tool_result(self, tool_use_id: str, *, is_error: bool) -> None:
-        """Confirm or reject write based on ToolResultBlock."""
-        if (pending := self._pending.pop(tool_use_id, None)) and not is_error:
-            doc_type, path = pending
-            self.writes.setdefault(doc_type, []).append(path)
+    def on_tool_use(self, file_path: str) -> None:
+        """Record write from ToolUseBlock."""
+        if self.doc_type and self._is_thoughts_path(file_path):
+            self.writes.append(file_path)
 
-    def get_paths(self, doc_type: str) -> list[str]:
-        """Get all tracked paths for doc_type that exist on disk."""
-        return [
-            str(get_project_root() / p)
-            for p in self.writes.get(doc_type, [])
-            if (get_project_root() / p).exists()
-        ]
+    def get_paths(self) -> list[str]:
+        """Get all tracked paths that exist on disk."""
+        result = []
+        for p in self.writes:
+            path = Path(p)
+            # Handle both absolute and relative paths
+            full_path = path if path.is_absolute() else get_project_root() / p
+            if full_path.exists():
+                result.append(str(full_path))
+        return result
 
     @staticmethod
-    def _infer_doc_type(file_path: str) -> str | None:
-        """Infer doc_type from file path pattern."""
-        for doc_type, pattern in _DOC_PATH_PATTERNS.items():
-            if re.search(pattern, file_path):
-                return doc_type
-        return None
-
-
-def _extract_doc_path(
-    result: str,
-    doc_type: DocType,
-    tracker: SessionWriteTracker | None = None,
-) -> str | None:
-    """Extract document path. Tracker path preferred, regex fallback.
-
-    Args:
-        result: Claude agent response text
-        doc_type: Type of document ("research" or "plan")
-        tracker: Optional write tracker with captured file paths
-
-    Returns:
-        Absolute path if found and exists, None otherwise
-    """
-    pattern = _DOC_PATH_PATTERNS.get(doc_type)
-    if not pattern:
-        logger.warning("Unknown doc_type: %s", doc_type)
-        return None
-
-    # Priority 1: Most recent tracked write
-    if tracker:
-        paths = tracker.get_paths(doc_type)
-        if paths:
-            logger.debug("Using tracked path: %s", paths[-1])
-            return paths[-1]
-
-    # Priority 2: Regex fallback
-    if match := re.search(pattern, result):
-        path = get_project_root() / match.group(1)
-        if path.exists():
-            logger.debug("Using regex path: %s", path)
-            return str(path)
-
-    return None
+    def _is_thoughts_path(file_path: str) -> bool:
+        """Check if path is in thoughts/shared/."""
+        return "thoughts/shared/" in file_path
 
 
 def _format_tool_result(
@@ -331,9 +329,9 @@ def _format_tool_result(
     DSPy ReAct handles continuation from response context.
 
     Args:
-        tool_name: Name of the tool (unused, kept for interface stability)
         doc_path: Extracted document path (if any)
         session_id: Session ID for continuation
+        tool_name: Name of the tool for context
         result: Raw result from Claude agent
 
     Returns:
@@ -353,8 +351,9 @@ def _format_tool_result(
 
 
 async def _run_claude_session(
-    command: str,
+    command_str: str,
     session_id: str | None,
+    tool_command: Command,
 ) -> tuple[str, str, SessionWriteTracker]:
     """Execute a Claude agent session asynchronously.
 
@@ -362,8 +361,9 @@ async def _run_claude_session(
     reduce function complexity.
 
     Args:
-        command: The command string to execute
+        command_str: The command string to execute
         session_id: Optional session ID for resumption
+        tool_command: The Command enum for tracking writes
 
     Returns:
         Tuple of (result content, new session ID, write tracker)
@@ -371,7 +371,7 @@ async def _run_claude_session(
     Raises:
         AgentExecutionError: If agent execution fails
     """
-    tracker = SessionWriteTracker()
+    tracker = SessionWriteTracker(command=tool_command)
     last_text_content = ""
     result_content = ""
     new_session_id = ""
@@ -381,7 +381,7 @@ async def _run_claude_session(
             logger.debug(
                 "%s session", "Using existing" if session_id else "Starting new"
             )
-            await client.query(command, session_id=session_id or "default")
+            await client.query(command_str, session_id=session_id or "default")
 
             async for message in client.receive_response():
                 if isinstance(message, ResultMessage):
@@ -392,21 +392,26 @@ async def _run_claude_session(
                     console.print(
                         f"\n[bold cyan]Result:[/bold cyan] {result_content}\n"
                     )
+                    # Emit file_done events for all tracked file writes
+                    # SDK doesn't stream ToolResultBlock, so we emit on session end
+                    for path in _tool_timing.flush_file_paths():
+                        emit_artifact_event(
+                            ArtifactEvent(event_type="file_done", path=path)
+                        )
                     break
                 elif isinstance(message, AssistantMessage):
                     block_text = _process_assistant_message(message, tracker)
                     if block_text:
                         last_text_content = block_text
         except Exception as e:
+            # Emit file_failed events on error
+            for path in _tool_timing.flush_file_paths():
+                emit_artifact_event(ArtifactEvent(event_type="file_failed", path=path))
             raise AgentExecutionError(f"Agent execution failed: {e}") from e
 
     logger.debug("Session writes: %s", tracker.writes)
 
-    return (
-        result_content if result_content else last_text_content,
-        new_session_id,
-        tracker,
-    )
+    return (result_content or last_text_content, new_session_id, tracker)
 
 
 def execute_claude_task(
@@ -456,12 +461,7 @@ def execute_claude_task(
         #
         # For planning commands, prefix with explicit instruction to prevent the agent
         # from jumping straight to implementation when given user feedback.
-        planning_commands = {
-            Command.CREATE_PLAN,
-            Command.REVIEW_PLAN,
-            Command.ITERATE_PLAN,
-        }
-        if tool_command in planning_commands:
+        if tool_command in _PLANNING_COMMANDS:
             command = (
                 f"Based on this feedback, continue with your planning task "
                 f"(write or update the plan document, do NOT implement): {query}"
@@ -475,13 +475,16 @@ def execute_claude_task(
     ctx.log_session_state()
 
     # Bridge Sync -> Async (reuse event loop across tool calls)
-    return get_event_loop().run_until_complete(_run_claude_session(command, session_id))
+    result = get_event_loop().run_until_complete(
+        _run_claude_session(command, session_id, tool_command)
+    )
+    logger.debug("Tool call complete: %s", COMMAND_MAP.get(tool_command))
+    return result
 
 
 def workflow_tool(
     command: Command,
     *,
-    doc_type: DocType | None = None,
     validate_plan: bool = False,
     phase_name: str,
 ) -> Callable[
@@ -495,14 +498,15 @@ def workflow_tool(
         continue the conversation or produce output fields.
 
     Args:
-        command: The workflow command for session tracking.
+        command: The workflow command for session tracking (also determines doc_type).
         phase_name: Display name for the timed phase spinner.
-        doc_type: If set, extract doc path from result (DocType: "plan" | "research").
         validate_plan: If True, validate that plan_document_path is not a research doc.
 
     Returns:
         Decorated function that handles all workflow boilerplate.
     """
+    # Get doc_type from command mapping (None for commands that don't produce docs)
+    doc_type = COMMAND_DOC_TYPE.get(command)
 
     def decorator(
         func: Callable[..., tuple[str, str, SessionWriteTracker]],
@@ -537,22 +541,14 @@ def workflow_tool(
                 speak(f"{phase_name.lower()} complete")
 
                 if doc_type:
-                    # Add ALL tracked paths to extracted_paths
-                    tracked_paths = tracker.get_paths(doc_type)
+                    tracked_paths = tracker.get_paths()
+                    doc_path = tracked_paths[-1] if tracked_paths else None
                     if tracked_paths:
                         paths = session.extracted_paths.setdefault(doc_type, set())
                         paths.update(tracked_paths)
                         for p in tracked_paths:
                             session.extracted_results[p] = result
-
-                    # Primary doc_path for completion marker (latest or regex fallback)
-                    doc_path = _extract_doc_path(result, doc_type, tracker)
-                    if doc_path:
-                        # Also add regex-fallback path if not already tracked
-                        paths = session.extracted_paths.setdefault(doc_type, set())
-                        paths.add(doc_path)
-                        session.extracted_results[doc_path] = result
-                        # Document created = research complete, clear session
+                        # Document created = complete, clear session
                         session.session_ids.pop(command, None)
                     return _format_tool_result(
                         session_id=last_session_id,

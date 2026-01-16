@@ -1,11 +1,11 @@
 """Safety checks for blocking dangerous operations."""
 
 import re
-from typing import cast
 
 from claude_agent_sdk.types import HookContext, HookInput, HookJSONOutput
 
 from π.console import console
+from π.hooks.result import Block, HookResult, PassThrough, to_pre_hook_output
 
 
 def is_dangerous_command(cmd: str) -> bool:
@@ -54,6 +54,28 @@ def is_dangerous_command(cmd: str) -> bool:
     return any(pattern in cmd.lower() for pattern in simple_patterns)
 
 
+def _check_bash_safety(tool_name: str | None, tool_input: dict) -> HookResult:
+    """Check if bash command is safe to execute.
+
+    Args:
+        tool_name: Name of the tool that triggered the hook.
+        tool_input: Input parameters from the tool.
+
+    Returns:
+        PassThrough if command is safe, Block if dangerous.
+    """
+    if tool_name != "Bash":
+        return PassThrough(reason="not_bash_tool")
+
+    command = tool_input.get("command", "")
+
+    if is_dangerous_command(command):
+        console.print(f"🚫 Blocked dangerous command: {command}")
+        return Block(reason="Command blocked: Potentially dangerous operation")
+
+    return PassThrough(reason="command_safe")
+
+
 async def check_bash_command(
     input_data: HookInput, _tool_use_id: str | None, _context: HookContext
 ) -> HookJSONOutput:
@@ -75,24 +97,6 @@ async def check_bash_command(
 
     tool_input = input_data["tool_input"]
     tool_name = input_data["tool_name"]
-    if tool_name != "Bash":
-        return {}
 
-    command = tool_input.get("command", "")
-
-    if is_dangerous_command(command):
-        console.print(f"🚫 Blocked dangerous command: {command}")
-        return cast(
-            "HookJSONOutput",
-            {
-                "hookSpecificOutput": {
-                    "permissionDecisionReason": (
-                        "Command blocked: Potentially dangerous operation"
-                    ),
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                }
-            },
-        )
-
-    return {}
+    result = _check_bash_safety(tool_name, tool_input)
+    return to_pre_hook_output(result)

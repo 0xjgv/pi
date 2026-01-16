@@ -1,5 +1,6 @@
 ---
 description: Review existing implementation plans for completeness and accuracy
+model: opus
 ---
 # Review Implementation Plan
 
@@ -141,25 +142,12 @@ If verification surfaced questions about code patterns, dependencies, or technic
    **For external validation (use conditionally):**
    - **web-search-researcher** - To validate libraries, tools, and external dependencies
 
-   **With the `codex-synth` skill (AI-assisted synthesis or validation):**
-   - Use the skill to stress-test plan coverage, extract best-practice checklists, or synthesize findings. Always include the plan path, the verification concerns, and the specific deliverable you expect in the prompt.
-
    **When to use web-search-researcher**:
    - Plan mentions specific library versions (check if deprecated/vulnerable)
    - Questions about external APIs or third-party services
    - Security concerns about dependencies
    - Unfamiliar technologies that need validation
    - Verifying best practices for specific tools
-
-   **When to invoke `codex-synth`**:
-   - Need a second opinion on plan completeness or risk coverage
-   - Need industry best practices or mitigation ideas for an unfamiliar domain
-   - Need to translate verification findings into stakeholder-ready language quickly
-
-   **When NOT to invoke `codex-synth`**:
-   - Questions answerable directly from the codebase or existing documentation
-   - Re-running prompts that already produced satisfactory answers in this review
-   - Situations where the user requested purely human-sourced analysis
 
    **When NOT to use web-search-researcher**:
    - Internal architecture decisions
@@ -169,7 +157,6 @@ If verification surfaced questions about code patterns, dependencies, or technic
 
    **Be EXTREMELY specific about directories**:
    - Include full path context in prompts
-   - Provide the plan filename, current findings, and desired output structure when invoking `codex-synth`
 
 3. **Read any new files identified by research**:
    - Read them FULLY into the main context
@@ -458,8 +445,7 @@ Assistant: Plan approved. Ready for implementation!
 ## Related Commands
 
 - **`2_create_plan.md`**: Create new implementation plans from scratch
-- **`2.7.5_iterate_plan.md`**: Iterate on plans based on user-requested changes
-- **`3_implement_plan.md`**: Execute the implementation of a reviewed plan
+- **`4_implement_plan.md`**: Execute the implementation of a reviewed plan
 - **`5_validate_plan.md`**: Validate plan assumptions against codebase
 
 ## References
@@ -468,6 +454,4 @@ Assistant: Plan approved. Ready for implementation!
   - Code: `codebase-locator`, `codebase-analyzer`, `codebase-pattern-finder`
   - Historical: `thoughts-locator`, `thoughts-analyzer`
   - External: `web-search-researcher` (conditional use)
-- **Skills**:
-  - `codex-synth` skill — AI-assisted plan sanity checks and summary synthesis
-- **Plan Template**: Check existing plans in `thoughts/plans/` for structure
+- **Plan Template**: Check existing plans in `thoughts/shared/plans/` for structure

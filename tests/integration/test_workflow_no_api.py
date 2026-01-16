@@ -14,10 +14,13 @@ class TestWorkflowIntegrationNoAPI:
 
     @pytest.fixture(autouse=True)
     def isolate_logging(self, tmp_path: Path) -> Generator[None]:
-        """Redirect logging to temporary directory."""
+        """Redirect logging to temporary directory and disable checkpoints."""
         mock_logs_dir = tmp_path / ".π" / "logs"
         mock_logs_dir.mkdir(parents=True)
-        with patch("π.cli.main.get_logs_dir", return_value=mock_logs_dir):
+        with (
+            patch("π.cli.main.get_logs_dir", return_value=mock_logs_dir),
+            patch("π.workflow.checkpoint.get_project_root", return_value=tmp_path),
+        ):
             yield
 
     @pytest.fixture(autouse=True)
@@ -102,11 +105,8 @@ class TestWorkflowIntegrationNoAPI:
     @pytest.mark.no_api
     def test_environment_variables_not_required_in_tests(
         self,
-        clean_env,
         mock_full_workflow,
         mock_rpi_workflow_full,
     ):
-        """Tests should pass without API environment variables."""
-        # clean_env removes CLIPROXY_API_BASE and CLIPROXY_API_KEY
-        # This should not cause failures with proper mocking
+        """Tests should pass without any environment variables."""
         main(["test objective"])

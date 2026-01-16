@@ -1,12 +1,16 @@
 """Project directory management for π CLI."""
 
+import logging
 import subprocess
+import tomllib
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from π.core.constants import RETENTION
+
+logger = logging.getLogger(__name__)
+
 PI_GITIGNORE_ENTRY = ".π/\n"
-DEFAULT_LOG_RETENTION_DAYS = 7
-DEFAULT_DOCUMENT_RETENTION_DAYS = 5
 ARCHIVED_BASE_DIR = "thoughts/shared/archived"
 PROJECT_MARKERS = {
     ".git",
@@ -69,9 +73,7 @@ def get_logs_dir(root: Path | None = None) -> Path:
     return logs_dir
 
 
-def cleanup_old_logs(
-    logs_dir: Path, retention_days: int = DEFAULT_LOG_RETENTION_DAYS
-) -> int:
+def cleanup_old_logs(logs_dir: Path, retention_days: int = RETENTION.logs_days) -> int:
     """Remove log files older than retention_days.
 
     Args:
@@ -104,7 +106,7 @@ def cleanup_old_logs(
 def archive_old_documents(
     *,
     root: Path | None = None,
-    retention_days: int = DEFAULT_DOCUMENT_RETENTION_DAYS,
+    retention_days: int = RETENTION.documents_days,
 ) -> dict[str, int]:
     """Archive research and plan documents older than retention_days.
 
@@ -148,7 +150,46 @@ def _ensure_gitignore(root: Path) -> None:
     gitignore = root / ".gitignore"
     if gitignore.exists():
         content = gitignore.read_text()
-        if ".π" not in content:
+        lines = content.splitlines()
+        # Check for .π/ or .π (line-based to avoid false positives)
+        if ".π/" not in lines and ".π" not in lines:
             gitignore.write_text(content.rstrip("\n") + "\n" + PI_GITIGNORE_ENTRY)
     else:
         gitignore.write_text(PI_GITIGNORE_ENTRY)
+
+
+def load_codebase_context(*, root: Path | None = None) -> str:
+    """Load CLAUDE.md and dependencies for agent context.
+
+    Provides codebase awareness to ReAct agents via signature instructions.
+    Context is loaded once and shared across all workflow stages.
+
+    Args:
+        root: Project root path. Defaults to detected project root.
+
+    Returns:
+        Formatted context string with architecture and dependencies,
+        or empty string if no context files found.
+    """
+    root = root or get_project_root()
+    parts: list[str] = []
+
+    # Load CLAUDE.md
+    claude_md = root / "CLAUDE.md"
+    if claude_md.exists():
+        parts.append(f"## Project Overview (CLAUDE.md)\n\n{claude_md.read_text()}")
+
+    # Parse dependencies from pyproject.toml
+    pyproject = root / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            data = tomllib.loads(pyproject.read_text())
+            deps = data.get("project", {}).get("dependencies", [])
+            if deps:
+                deps_str = "\n".join(f'  "{dep}",' for dep in deps)
+                deps_block = f"```toml\ndependencies = [\n{deps_str}\n]\n```"
+                parts.append(f"## Dependencies\n\n{deps_block}")
+        except tomllib.TOMLDecodeError:
+            logger.debug("Failed to parse pyproject.toml")
+
+    return "\n\n".join(parts)

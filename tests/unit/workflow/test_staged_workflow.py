@@ -1,6 +1,10 @@
 """Tests for StagedWorkflow orchestrator."""
 
+from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from π.workflow.orchestrator import StagedWorkflow
 from π.workflow.types import ResearchDocPath, ResearchResult
@@ -9,9 +13,19 @@ from π.workflow.types import ResearchDocPath, ResearchResult
 class TestStagedWorkflowEarlyExit:
     """Tests for early-exit behavior."""
 
+    @pytest.fixture(autouse=True)
+    def isolate_checkpoint(self, tmp_path: Path) -> Generator[None]:
+        """Isolate checkpoint to temp directory."""
+        (tmp_path / ".π").mkdir(parents=True)
+        with patch(
+            "π.workflow.checkpoint.get_project_root",
+            return_value=tmp_path,
+        ):
+            yield
+
     @patch("π.workflow.orchestrator.stage_research")
     def test_early_exit_when_already_complete(
-        self, mock_research: MagicMock, tmp_path
+        self, mock_research: MagicMock, tmp_path: Path
     ) -> None:
         """Should exit after research if needs_implementation=False."""
         # Setup: create valid research doc
@@ -44,7 +58,7 @@ class TestStagedWorkflowEarlyExit:
         mock_research: MagicMock,
         mock_design: MagicMock,
         mock_execute: MagicMock,
-        tmp_path,
+        tmp_path: Path,
     ) -> None:
         """Should execute all stages if needs_implementation=True."""
         from π.workflow.types import DesignResult, ExecuteResult, PlanDocPath
@@ -85,7 +99,10 @@ class TestStagedWorkflowEarlyExit:
         mock_execute.assert_called_once()
 
     @patch("π.workflow.orchestrator.stage_research")
-    def test_returns_failed_on_research_error(self, mock_research: MagicMock) -> None:
+    def test_returns_failed_on_research_error(
+        self,
+        mock_research: MagicMock,
+    ) -> None:
         """Should return failed status when research raises ValueError."""
         mock_research.side_effect = ValueError("Research failed")
 
@@ -98,7 +115,7 @@ class TestStagedWorkflowEarlyExit:
     @patch("π.workflow.orchestrator.stage_design")
     @patch("π.workflow.orchestrator.stage_research")
     def test_returns_failed_on_design_error(
-        self, mock_research: MagicMock, mock_design: MagicMock, tmp_path
+        self, mock_research: MagicMock, mock_design: MagicMock, tmp_path: Path
     ) -> None:
         """Should return failed status when design raises ValueError."""
         # Setup: create valid research doc

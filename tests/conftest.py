@@ -23,6 +23,13 @@ import pytest
 # suppressed from within pytest as it occurs after the test session ends.
 warnings.filterwarnings("ignore", category=ResourceWarning, module="litellm.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="litellm.*")
+# Suppress Pydantic serialization warnings from LiteLLM (cosmetic, no data loss)
+# See: https://github.com/BerriAI/litellm/issues/11759
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=".*Pydantic serializer warnings.*",
+)
 
 # ============================================================================
 # Path Fixtures
@@ -145,25 +152,6 @@ def mock_subprocess_failure() -> Generator[MagicMock]:
 
 
 # ============================================================================
-# Environment Fixtures
-# ============================================================================
-
-
-@pytest.fixture
-def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear environment variables that affect tests."""
-    monkeypatch.delenv("CLIPROXY_API_BASE", raising=False)
-    monkeypatch.delenv("CLIPROXY_API_KEY", raising=False)
-
-
-@pytest.fixture
-def configured_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Set up environment variables for tests."""
-    monkeypatch.setenv("CLIPROXY_API_BASE", "http://test:8317")
-    monkeypatch.setenv("CLIPROXY_API_KEY", "test-key")
-
-
-# ============================================================================
 # Logging Fixtures
 # ============================================================================
 
@@ -258,8 +246,8 @@ def mock_spinner() -> Generator[MagicMock]:
 # --------------------------
 # This test suite uses a 3-layer mocking strategy to prevent API calls:
 #
-# Layer 1 (Lowest): DSPy LM Mock
-#   - Patches dspy.LM at π.config to prevent any LM instantiation
+# Layer 1 (Lowest): ClaudeCodeLM Mock
+#   - Patches ClaudeCodeLM at π.core.models to prevent any LM instantiation
 #   - Use: mock_lm fixture (depends on clear_lm_cache)
 #   - Tests: DSPy ReAct behavior, agent decision making
 #
@@ -298,7 +286,7 @@ def clear_lm_cache():
     cleared before patching. Can also be used independently for tests that
     modify LM configuration.
 
-    Note: The get_lm() function uses @lru_cache(maxsize=6), so cache must
+    Note: The get_lm() function uses @lru_cache(maxsize=3), so cache must
     be cleared before mocking to prevent test pollution from cached real LMs.
     """
     from π.config import get_lm
@@ -310,28 +298,22 @@ def clear_lm_cache():
 
 @pytest.fixture
 def mock_lm(
-    clear_lm_cache,  # Explicit dependency ensures cache is cleared
+    clear_lm_cache,
     mock_lm_response: dict[str, str],
 ) -> Generator[MagicMock]:
-    """Mock dspy.LM to prevent API calls.
+    """Mock ClaudeCodeLM to prevent API calls.
 
-    This fixture patches get_lm() to return a mock LM that:
+    This fixture patches ClaudeCodeLM at π.core.models to return a mock that:
     - Returns predefined completions
     - Tracks call history for assertions
-    - Simulates streaming behavior
 
     Note: Depends on clear_lm_cache to ensure LRU cache is cleared before
     patching. This prevents test pollution from cached LM instances.
     """
-    with patch("π.core.models.dspy.LM") as mock_class:
+    with patch("π.bridge.lm.ClaudeCodeLM") as mock_class:
         mock_instance = MagicMock()
-
-        # Mock the __call__ method to return completions
         mock_instance.return_value = [mock_lm_response["output"]]
-
-        # Mock inspect for DSPy internals
         mock_instance.inspect_history.return_value = []
-
         mock_class.return_value = mock_instance
         yield mock_instance
 
@@ -435,7 +417,7 @@ def fresh_execution_context():
     - Cleans up after the test (including closing event loop)
     """
     from π.workflow import ExecutionContext
-    from π.workflow.bridge import _ctx
+    from π.workflow.context import _ctx
 
     ctx = ExecutionContext()
     token = _ctx.set(ctx)
@@ -514,7 +496,6 @@ def mock_workflow_stages():
         "research": "π.workflow.tools.research_codebase",
         "plan": "π.workflow.tools.create_plan",
         "review": "π.workflow.tools.review_plan",
-        "iterate": "π.workflow.tools.iterate_plan",
         "implement": "π.workflow.tools.implement_plan",
         "commit": "π.workflow.tools.commit_changes",
     }

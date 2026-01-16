@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>π - Claude Agent Orchestration CLI</title>
+    <meta name="description" content="CLI orchestrating Claude agents via DSPy ReAct for autonomous research, design, and execute workflows.">
+    <meta name="keywords" content="claude, agent, dspy, react, cli, orchestration, ai, llm, autonomous">
+    <meta name="author" content="0xjgv">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0d1117">
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://0xjgv.github.io/pi/">
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>π</text></svg>">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://0xjgv.github.io/pi/">
+    <meta property="og:title" content="π - Claude Agent Orchestration CLI">
+    <meta property="og:description" content="CLI orchestrating Claude agents via DSPy ReAct for autonomous research, design, and execute workflows.">
+    <meta property="og:site_name" content="π">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="π - Claude Agent Orchestration CLI">
+    <meta name="twitter:description" content="CLI orchestrating Claude agents via DSPy ReAct for autonomous research, design, and execute workflows.">
+
+    <style>
+        /* Reset and base */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-secondary: #238636;
+            --border: #30363d;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        code {
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            background: var(--bg-tertiary);
+            padding: 0.2em 0.4em;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+        }
+
+        pre code { background: none; padding: 0; }
+
+        /* Layout */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+
+        section { padding: 4rem 0; }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 6rem 0;
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .hero .tagline {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        .install-cmd {
+            display: inline-block;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-family: monospace;
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover { opacity: 0.9; text-decoration: none; }
+
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            margin-left: 0.5rem;
+        }
+
+        /* Workflow */
+        .workflow { background: var(--bg-secondary); }
+
+        .workflow h2 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .stages {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .stage {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .stage-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .stage-num {
+            background: var(--accent);
+            color: var(--bg-primary);
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.875rem;
+        }
+
+        .stage h3 { font-size: 1.25rem; }
+
+        .stage ul {
+            list-style: none;
+            color: var(--text-secondary);
+        }
+
+        .stage li::before {
+            content: "•";
+            color: var(--accent);
+            margin-right: 0.5rem;
+        }
+
+        .stage .output {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .stage .output code { font-size: 0.8rem; }
+
+        /* Arrow connectors (desktop only) */
+        @media (min-width: 900px) {
+            .stages { position: relative; }
+            .stage:not(:last-child)::after {
+                content: "→";
+                position: absolute;
+                right: -1.25rem;
+                top: 50%;
+                transform: translateY(-50%);
+                font-size: 1.5rem;
+                color: var(--text-secondary);
+            }
+            .stage { position: relative; }
+        }
+
+        /* Features */
+        .features h2 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .feature {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .feature h3 {
+            font-size: 1.125rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature p { color: var(--text-secondary); }
+
+        /* Install */
+        .install { background: var(--bg-secondary); }
+
+        .install h2 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .install-steps {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .install-steps pre { margin-bottom: 1rem; }
+
+        .install-note {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-top: 1.5rem;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 0;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        footer a { margin: 0 0.5rem; }
+
+        /* Badges */
+        .badges {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+
+        .badges img {
+            height: 20px;
+        }
+
+        /* Reference sections */
+        .reference {
+            padding: 4rem 0;
+        }
+
+        .reference.alt {
+            background: var(--bg-secondary);
+        }
+
+        .reference h2 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .section-desc {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        /* Tables */
+        .table-wrapper {
+            max-width: 700px;
+            margin: 0 auto;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .reference.alt table {
+            background: var(--bg-tertiary);
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .reference.alt th {
+            background: var(--bg-primary);
+        }
+
+        td {
+            color: var(--text-secondary);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        td code {
+            color: var(--accent);
+            background: var(--bg-tertiary);
+        }
+
+        /* Development section */
+        .development {
+            padding: 2rem 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .development details {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .development summary {
+            cursor: pointer;
+            font-size: 1.25rem;
+            font-weight: 600;
+            text-align: center;
+            padding: 1rem;
+            color: var(--text-secondary);
+            transition: color 0.2s;
+        }
+
+        .development summary:hover {
+            color: var(--text-primary);
+        }
+
+        .development summary::marker {
+            color: var(--accent);
+        }
+
+        .dev-content {
+            padding-top: 1.5rem;
+        }
+
+        .dev-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .dev-item h4 {
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        table.compact {
+            font-size: 0.875rem;
+            background: var(--bg-secondary);
+        }
+
+        table.compact td {
+            padding: 0.5rem 0.75rem;
+        }
+
+        table.compact code {
+            font-size: 0.8rem;
+        }
+
+        /* Accessibility */
+        .skip-link {
+            position: absolute;
+            top: -100%;
+            left: 0;
+            background: var(--accent);
+            color: var(--bg-primary);
+            padding: 0.5rem 1rem;
+            z-index: 1000;
+            transition: top 0.2s;
+        }
+
+        .skip-link:focus {
+            top: 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .hero h1 { font-size: 3rem; }
+            .hero .tagline { font-size: 1rem; }
+            .install-cmd { font-size: 0.875rem; padding: 0.5rem 1rem; }
+            .btn { display: block; margin: 0.5rem 0; }
+            .btn-secondary { margin-left: 0; }
+            section { padding: 3rem 0; }
+        }
+    </style>
+</head>
+<body>
+    <a href="#main" class="skip-link">Skip to main content</a>
+
+    <!-- Hero -->
+    <header class="hero">
+        <div class="container">
+            <h1>π</h1>
+            <p class="tagline">CLI orchestrating Claude agents via DSPy ReAct for autonomous research → design → execute workflows.</p>
+            <div class="badges">
+                <a href="https://github.com/0xjgv/pi/actions/workflows/test.yml">
+                    <img src="https://github.com/0xjgv/pi/actions/workflows/test.yml/badge.svg" alt="Build Status">
+                </a>
+                <a href="https://codecov.io/gh/0xjgv/pi">
+                    <img src="https://codecov.io/gh/0xjgv/pi/branch/main/graph/badge.svg" alt="Code Coverage">
+                </a>
+                <a href="https://opensource.org/licenses/MIT">
+                    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License">
+                </a>
+                <a href="https://www.python.org/downloads/">
+                    <img src="https://img.shields.io/badge/python-3.13+-blue.svg" alt="Python 3.13+">
+                </a>
+            </div>
+            <div class="install-cmd">π "Your objective here"</div>
+            <div>
+                <a href="https://github.com/0xjgv/pi" class="btn btn-primary">View on GitHub</a>
+                <a href="#install" class="btn btn-secondary">Get Started</a>
+            </div>
+        </div>
+    </header>
+
+    <main id="main">
+
+    <!-- Workflow -->
+    <section class="workflow" aria-labelledby="workflow-heading">
+        <div class="container">
+            <h2 id="workflow-heading">Three-Stage Workflow</h2>
+            <div class="stages">
+                <div class="stage">
+                    <div class="stage-header">
+                        <span class="stage-num">1</span>
+                        <h3>Research</h3>
+                    </div>
+                    <ul>
+                        <li>Spawns codebase-locator, analyzer agents</li>
+                        <li>Autonomous question answering via AITL</li>
+                        <li>Early exit if no implementation needed</li>
+                    </ul>
+                    <div class="output">Output: <code>thoughts/shared/research/*.md</code></div>
+                </div>
+                <div class="stage">
+                    <div class="stage-header">
+                        <span class="stage-num">2</span>
+                        <h3>Design</h3>
+                    </div>
+                    <ul>
+                        <li>Creates implementation plan from research</li>
+                        <li>Reviews and iterates on plan</li>
+                        <li>Structured, actionable specifications</li>
+                    </ul>
+                    <div class="output">Output: <code>thoughts/shared/plans/*.md</code></div>
+                </div>
+                <div class="stage">
+                    <div class="stage-header">
+                        <span class="stage-num">3</span>
+                        <h3>Execute</h3>
+                    </div>
+                    <ul>
+                        <li>Implements plan with full SDK tooling</li>
+                        <li>Commits changes automatically</li>
+                    </ul>
+                    <div class="output">Output: Modified files, git commit</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features" aria-labelledby="features-heading">
+        <div class="container">
+            <h2 id="features-heading">Features</h2>
+            <div class="features-grid">
+                <div class="feature">
+                    <h3>DSPy ReAct Orchestration</h3>
+                    <p>Automatic tool selection and multi-step reasoning powered by DSPy's ReAct implementation.</p>
+                </div>
+                <div class="feature">
+                    <h3>Claude Agent SDK</h3>
+                    <p>Full tooling support — files, shell commands, web search, task management, and more.</p>
+                </div>
+                <div class="feature">
+                    <h3>Agent-in-the-Loop (AITL)</h3>
+                    <p>Autonomous question answering via codebase-aware agent. No human intervention required.</p>
+                </div>
+                <div class="feature">
+                    <h3>Safety Hooks</h3>
+                    <p>Blocks dangerous commands and runs linters automatically on file changes.</p>
+                </div>
+                <div class="feature">
+                    <h3>Sub-Agent System</h3>
+                    <p>Parallel specialized agents for fast codebase exploration and analysis.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sub-Agents -->
+    <section class="reference" aria-labelledby="agents-heading">
+        <div class="container">
+            <h2 id="agents-heading">Sub-Agents</h2>
+            <p class="section-desc">Specialized agents spawned in parallel for codebase exploration</p>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Agent</th>
+                            <th>Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>codebase-locator</code></td>
+                            <td>Finds WHERE code lives (file paths)</td>
+                        </tr>
+                        <tr>
+                            <td><code>codebase-analyzer</code></td>
+                            <td>Analyzes HOW code works (implementation details)</td>
+                        </tr>
+                        <tr>
+                            <td><code>codebase-pattern-finder</code></td>
+                            <td>Finds similar patterns and usage examples</td>
+                        </tr>
+                        <tr>
+                            <td><code>thoughts-analyzer</code></td>
+                            <td>Extracts insights from research documents</td>
+                        </tr>
+                        <tr>
+                            <td><code>thoughts-locator</code></td>
+                            <td>Discovers relevant documents in thoughts/</td>
+                        </tr>
+                        <tr>
+                            <td><code>web-search-researcher</code></td>
+                            <td>External web research</td>
+                        </tr>
+                        <tr>
+                            <td><code>codebase-simplifier</code></td>
+                            <td>Simplifies and refines code for clarity</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slash Commands -->
+    <section class="reference alt" aria-labelledby="commands-heading">
+        <div class="container">
+            <h2 id="commands-heading">Slash Commands</h2>
+            <p class="section-desc">Direct workflow stage invocation</p>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Command</th>
+                            <th>Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>/1_research_codebase</code></td>
+                            <td>Research codebase patterns and architecture</td>
+                        </tr>
+                        <tr>
+                            <td><code>/2_create_plan</code></td>
+                            <td>Create implementation plan from research</td>
+                        </tr>
+                        <tr>
+                            <td><code>/3_review_plan</code></td>
+                            <td>Review plan for completeness</td>
+                        </tr>
+                        <tr>
+                            <td><code>/4_implement_plan</code></td>
+                            <td>Execute implementation from plan</td>
+                        </tr>
+                        <tr>
+                            <td><code>/5_commit</code></td>
+                            <td>Create git commit with changes</td>
+                        </tr>
+                        <tr>
+                            <td><code>/write-claude-md</code></td>
+                            <td>Create or update CLAUDE.md</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Install -->
+    <section class="install" id="install" aria-labelledby="install-heading">
+        <div class="container">
+            <h2 id="install-heading">Installation</h2>
+            <div class="install-steps">
+                <pre><code>git clone https://github.com/0xjgv/pi π
+cd π
+make link</code></pre>
+                <pre><code># Ensure ~/.local/bin is in your PATH
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc</code></pre>
+                <p class="install-note">Requires Python 3.13+, <a href="https://github.com/astral-sh/uv">uv</a>, and <a href="https://claude.ai/code">Claude Code</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Development (collapsible) -->
+    <section class="development" aria-labelledby="dev-heading">
+        <div class="container">
+            <details>
+                <summary id="dev-heading">Development</summary>
+                <div class="dev-content">
+                    <div class="dev-grid">
+                        <div class="dev-item">
+                            <h4>Environment Variables</h4>
+                            <table class="compact">
+                                <tr>
+                                    <td><code>CLIPROXY_API_BASE</code></td>
+                                    <td>DSPy LM endpoint</td>
+                                </tr>
+                                <tr>
+                                    <td><code>CLIPROXY_API_KEY</code></td>
+                                    <td>API key (required)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>PI_LM_DEBUG</code></td>
+                                    <td>Verbose LM logging (optional)</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="dev-item">
+                            <h4>Commands</h4>
+                            <pre><code>make install    # Install dependencies
+make check      # Run all checks
+make test       # Run tests
+make test-cov   # Tests + coverage
+make clean      # Remove caches</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <nav aria-label="Footer navigation">
+                <a href="https://github.com/0xjgv/pi">GitHub</a> ·
+                <a href="https://github.com/0xjgv/pi/issues">Issues</a> ·
+                <a href="https://opensource.org/licenses/MIT">MIT License</a>
+            </nav>
+            <p style="margin-top: 0.5rem;">Built with Claude Agent SDK + DSPy</p>
+        </div>
+    </footer>
+</body>
+</html>

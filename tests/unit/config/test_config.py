@@ -5,31 +5,30 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from π.config import (
-    PROVIDER_MODELS,
-    Provider,
+    TIER_TO_MODEL,
+    Tier,
     get_lm,
 )
 
 
 class TestClaudeModels:
-    """Tests for Claude provider models."""
+    """Tests for Claude model tiers."""
 
-    def test_contains_all_levels(self):
-        """Should have low, med, high levels."""
-        claude_models = PROVIDER_MODELS[Provider.Claude]
-        assert "low" in claude_models
-        assert "med" in claude_models
-        assert "high" in claude_models
+    def test_contains_all_tiers(self):
+        """Should have low, med, high tiers."""
+        assert Tier.LOW in TIER_TO_MODEL
+        assert Tier.MED in TIER_TO_MODEL
+        assert Tier.HIGH in TIER_TO_MODEL
 
     def test_models_are_strings(self):
         """All model values should be strings."""
-        for level, model in PROVIDER_MODELS[Provider.Claude].items():
-            assert isinstance(model, str), f"{level} model is not a string"
+        for tier, model in TIER_TO_MODEL.items():
+            assert isinstance(model, str), f"{tier} model is not a string"
 
     def test_models_contain_claude(self):
         """All models should be Claude models."""
-        for level, model in PROVIDER_MODELS[Provider.Claude].items():
-            assert "claude" in model.lower(), f"{level} model doesn't contain 'claude'"
+        for tier, model in TIER_TO_MODEL.items():
+            assert "claude" in model.lower(), f"{tier} model doesn't contain 'claude'"
 
 
 class TestGetLm:
@@ -42,81 +41,44 @@ class TestGetLm:
         yield
         get_lm.cache_clear()
 
-    def test_returns_cached_lm(self, configured_env: None):
+    def test_returns_cached_lm(self):
         """Should return cached LM instances."""
-        with patch("π.core.models.dspy") as mock_dspy:
-            mock_dspy.LM.return_value = MagicMock()
+        with patch("π.bridge.lm.ClaudeCodeLM") as mock_claude_code_lm:
+            mock_claude_code_lm.return_value = MagicMock()
 
-            lm1 = get_lm(Provider.Claude, "low")
-            lm2 = get_lm(Provider.Claude, "low")
+            lm1 = get_lm(Tier.LOW)
+            lm2 = get_lm(Tier.LOW)
 
             assert lm1 is lm2
-            mock_dspy.LM.assert_called_once()
+            mock_claude_code_lm.assert_called_once()
 
-    def test_different_tiers_return_different_lms(self, configured_env: None):
+    def test_different_tiers_return_different_lms(self):
         """Different tiers should return different LM instances."""
-        with patch("π.core.models.dspy") as mock_dspy:
-            mock_dspy.LM.side_effect = [MagicMock(), MagicMock()]
+        with patch("π.bridge.lm.ClaudeCodeLM") as mock_claude_code_lm:
+            mock_claude_code_lm.side_effect = [MagicMock(), MagicMock()]
 
-            lm_low = get_lm(Provider.Claude, "low")
-            lm_high = get_lm(Provider.Claude, "high")
+            lm_low = get_lm(Tier.LOW)
+            lm_high = get_lm(Tier.HIGH)
 
             assert lm_low is not lm_high
-            assert mock_dspy.LM.call_count == 2
-
-    def test_uses_env_vars_for_api(self, configured_env: None):
-        """Should use CLIPROXY_API_BASE and CLIPROXY_API_KEY from env."""
-        with patch("π.core.models.dspy") as mock_dspy:
-            mock_dspy.LM.return_value = MagicMock()
-
-            get_lm(Provider.Claude, "low")
-
-            call_kwargs = mock_dspy.LM.call_args
-            assert call_kwargs.kwargs["api_base"] == "http://test:8317"
-            assert call_kwargs.kwargs["api_key"] == "test-key"
-
-    def test_defaults_to_localhost(self, clean_env: None):
-        """Should default to localhost:8317 when no env var set."""
-        with patch("π.core.models.dspy") as mock_dspy:
-            mock_dspy.LM.return_value = MagicMock()
-
-            get_lm(Provider.Claude, "low")
-
-            call_kwargs = mock_dspy.LM.call_args
-            assert "localhost:8317" in call_kwargs.kwargs["api_base"]
+            assert mock_claude_code_lm.call_count == 2
 
 
-class TestProviderModels:
-    """Tests for PROVIDER_MODELS configuration."""
+class TestTierToModel:
+    """Tests for TIER_TO_MODEL configuration."""
 
-    def test_all_providers_defined(self):
-        """Should have models for all providers."""
-        assert Provider.Claude in PROVIDER_MODELS
-        assert Provider.Antigravity in PROVIDER_MODELS
+    def test_all_tiers_have_models(self):
+        """All tiers should have model mappings."""
+        assert Tier.LOW in TIER_TO_MODEL
+        assert Tier.MED in TIER_TO_MODEL
+        assert Tier.HIGH in TIER_TO_MODEL
 
-    def test_claude_and_antigravity_have_all_tiers(self):
-        """Claude and Antigravity providers should have low/med/high tiers."""
-        for provider in [Provider.Claude, Provider.Antigravity]:
-            assert "low" in PROVIDER_MODELS[provider]
-            assert "med" in PROVIDER_MODELS[provider]
-            assert "high" in PROVIDER_MODELS[provider]
-
-    def test_all_providers_have_at_least_one_tier(self):
-        """All providers should have at least one tier defined."""
-        for provider in Provider:
-            assert len(PROVIDER_MODELS[provider]) >= 1
-
-    def test_claude_models_are_claude(self):
-        """Claude provider should return Claude models."""
-        for _tier, model in PROVIDER_MODELS[Provider.Claude].items():
+    def test_models_are_claude(self):
+        """All models should be Claude models."""
+        for _tier, model in TIER_TO_MODEL.items():
             assert "claude" in model.lower()
 
-    def test_antigravity_models_contain_gemini(self):
-        """Antigravity provider should return Gemini-based models."""
-        for _tier, model in PROVIDER_MODELS[Provider.Antigravity].items():
-            assert "gemini" in model.lower()
-
     def test_raises_for_invalid_tier(self):
-        """Should raise KeyError for invalid tier via PROVIDER_MODELS."""
+        """Should raise KeyError for invalid tier."""
         with pytest.raises(KeyError):
-            _ = PROVIDER_MODELS[Provider.Claude]["invalid"]  # type: ignore[index]
+            _ = TIER_TO_MODEL["invalid"]  # type: ignore[index]

@@ -12,8 +12,9 @@ from claude_agent_sdk.types import (
 
 from π.core import AgentExecutionError
 from π.workflow.bridge import (
+    COMMAND_DOC_TYPE,
     SessionWriteTracker,
-    _extract_doc_path,
+    ToolTimingTracker,
     _format_tool_result,
     _log_tool_call,
     _log_tool_result,
@@ -27,51 +28,55 @@ from π.workflow.context import Command, get_event_loop
 class TestSessionWriteTracker:
     """Tests for SessionWriteTracker."""
 
-    def test_confirmed_write_stored(self):
-        """Confirmed writes stored by doc_type."""
-        tracker = SessionWriteTracker()
-        tracker.on_tool_use("tool_1", "thoughts/shared/research/doc.md")
-        tracker.on_tool_result("tool_1", is_error=False)
+    def test_write_tracked(self):
+        """Writes are tracked in list."""
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
+        tracker.on_tool_use("thoughts/shared/research/doc.md")
 
-        assert tracker.writes["research"] == ["thoughts/shared/research/doc.md"]
+        assert tracker.writes == ["thoughts/shared/research/doc.md"]
 
-    def test_failed_write_excluded(self):
-        """Failed writes not stored."""
-        tracker = SessionWriteTracker()
-        tracker.on_tool_use("tool_1", "thoughts/shared/research/doc.md")
-        tracker.on_tool_result("tool_1", is_error=True)
+    def test_nonexistent_file_excluded_from_get_paths(self):
+        """Nonexistent files filtered by get_paths()."""
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
+        tracker.on_tool_use("thoughts/shared/research/nonexistent.md")
 
-        assert "research" not in tracker.writes
+        assert tracker.writes == ["thoughts/shared/research/nonexistent.md"]
+        assert tracker.get_paths() == []
 
     def test_multiple_writes_all_tracked(self):
-        """Multiple writes to same doc_type: all tracked in order."""
-        tracker = SessionWriteTracker()
-        tracker.on_tool_use("t1", "thoughts/shared/research/first.md")
-        tracker.on_tool_result("t1", is_error=False)
-        tracker.on_tool_use("t2", "thoughts/shared/research/second.md")
-        tracker.on_tool_result("t2", is_error=False)
+        """Multiple writes: all tracked in order."""
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
+        tracker.on_tool_use("thoughts/shared/research/first.md")
+        tracker.on_tool_use("thoughts/shared/research/second.md")
 
-        assert tracker.writes["research"] == [
+        assert tracker.writes == [
             "thoughts/shared/research/first.md",
             "thoughts/shared/research/second.md",
         ]
 
-    def test_infer_doc_type_research(self):
-        """Doc type inference for research path."""
-        assert (
-            SessionWriteTracker._infer_doc_type("thoughts/shared/research/x.md")
-            == "research"
-        )
+    def test_doc_type_from_command_research(self):
+        """Doc type derived from command for research."""
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
+        assert tracker.doc_type == "research"
 
-    def test_infer_doc_type_plan(self):
-        """Doc type inference for plan path."""
-        assert (
-            SessionWriteTracker._infer_doc_type("thoughts/shared/plans/x.md") == "plan"
-        )
+    def test_doc_type_from_command_plan(self):
+        """Doc type derived from command for plan."""
+        tracker = SessionWriteTracker(command=Command.CREATE_PLAN)
+        assert tracker.doc_type == "plan"
 
-    def test_infer_doc_type_unknown(self):
-        """Doc type inference returns None for unknown paths."""
-        assert SessionWriteTracker._infer_doc_type("src/main.py") is None
+    def test_doc_type_none_for_non_doc_commands(self):
+        """Doc type is None for commands that don't produce docs."""
+        tracker = SessionWriteTracker(command=Command.COMMIT)
+        assert tracker.doc_type is None
+
+    def test_is_thoughts_path_true(self):
+        """_is_thoughts_path returns True for thoughts/shared paths."""
+        assert SessionWriteTracker._is_thoughts_path("thoughts/shared/research/x.md")
+        assert SessionWriteTracker._is_thoughts_path("thoughts/shared/plans/y.md")
+
+    def test_is_thoughts_path_false(self):
+        """_is_thoughts_path returns False for non-thoughts paths."""
+        assert not SessionWriteTracker._is_thoughts_path("src/main.py")
 
     def test_get_paths_returns_existing_in_order(self, tmp_path):
         """get_paths returns all existing files in write order."""
@@ -80,79 +85,99 @@ class TestSessionWriteTracker:
             (tmp_path / "thoughts/shared/research/a.md").write_text("a")
             (tmp_path / "thoughts/shared/research/b.md").write_text("b")
 
-            tracker = SessionWriteTracker()
-            tracker.writes["research"] = [
+            tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
+            tracker.writes = [
                 "thoughts/shared/research/a.md",
                 "thoughts/shared/research/missing.md",  # doesn't exist - filtered out
                 "thoughts/shared/research/b.md",
             ]
 
-            paths = tracker.get_paths("research")
+            paths = tracker.get_paths()
             assert len(paths) == 2
             assert paths[0].endswith("a.md")
             assert paths[1].endswith("b.md")  # Last = most recent
 
-    def test_pending_cleared_after_result(self):
-        """Pending write should be cleared after tool result."""
-        tracker = SessionWriteTracker()
-        tracker.on_tool_use("tool_1", "thoughts/shared/research/doc.md")
-        assert "tool_1" in tracker._pending
-
-        tracker.on_tool_result("tool_1", is_error=False)
-        assert "tool_1" not in tracker._pending
-
-    def test_unknown_tool_result_ignored(self):
-        """Tool result for unknown tool_use_id should be ignored."""
-        tracker = SessionWriteTracker()
-        # No on_tool_use called, so this should not raise
-        tracker.on_tool_result("unknown_id", is_error=False)
-        assert tracker.writes == {}
-
-
-class TestDocPathExtractionWithTracker:
-    """Tests for _extract_doc_path with tracker."""
-
-    def test_tracker_preferred_over_regex(self, tmp_path):
-        """Tracker path preferred over regex match."""
+    def test_get_paths_handles_absolute_paths(self, tmp_path):
+        """get_paths handles absolute paths without mangling them."""
         with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            (tmp_path / "thoughts/shared/research").mkdir(parents=True)
-            (tmp_path / "thoughts/shared/research/old.md").write_text("old")
-            (tmp_path / "thoughts/shared/research/new.md").write_text("new")
+            (tmp_path / "thoughts/shared/plans").mkdir(parents=True)
+            doc = tmp_path / "thoughts/shared/plans/test.md"
+            doc.write_text("# Plan")
 
-            tracker = SessionWriteTracker()
-            tracker.writes["research"] = ["thoughts/shared/research/new.md"]
+            tracker = SessionWriteTracker(command=Command.CREATE_PLAN)
+            # Write tool sends absolute paths
+            tracker.writes = [str(doc)]
 
-            # Result mentions old doc first - tracker should win
-            result = "Reviewed thoughts/shared/research/old.md, created new.md"
-            extracted = _extract_doc_path(result, "research", tracker)
+            paths = tracker.get_paths()
+            assert len(paths) == 1
+            assert paths[0] == str(doc)
 
-            assert extracted == str(tmp_path / "thoughts/shared/research/new.md")
+    def test_ignores_writes_for_non_doc_commands(self):
+        """Should not track writes for commands without doc_type."""
+        tracker = SessionWriteTracker(command=Command.COMMIT)
+        tracker.on_tool_use("thoughts/shared/research/doc.md")
+        assert tracker.writes == []
 
-    def test_regex_fallback_when_no_tracker(self, tmp_path):
-        """Falls back to regex when tracker is None."""
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            doc = tmp_path / "thoughts/shared/research/doc.md"
-            doc.parent.mkdir(parents=True)
-            doc.write_text("content")
 
-            result = "Created thoughts/shared/research/doc.md"
-            extracted = _extract_doc_path(result, "research", tracker=None)
+class TestToolTimingTracker:
+    """Tests for ToolTimingTracker."""
 
-            assert extracted == str(doc)
+    def test_returns_duration_and_tool_name(self):
+        """Should return duration and tool name on end()."""
+        tracker = ToolTimingTracker()
+        tracker.start("tool-1", "Write")
+        duration, tool_name, file_path = tracker.end("tool-1")
+        assert duration is not None
+        assert tool_name == "Write"
+        assert file_path is None
 
-    def test_regex_fallback_when_tracker_empty(self, tmp_path):
-        """Falls back to regex when tracker has no writes for doc_type."""
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            doc = tmp_path / "thoughts/shared/research/doc.md"
-            doc.parent.mkdir(parents=True)
-            doc.write_text("content")
+    def test_returns_file_path_when_provided(self):
+        """Should return file_path when provided to start()."""
+        tracker = ToolTimingTracker()
+        tracker.start("tool-1", "Write", file_path="/path/to/file.md")
+        _duration, _tool_name, file_path = tracker.end("tool-1")
+        assert file_path == "/path/to/file.md"
 
-            tracker = SessionWriteTracker()  # Empty tracker
+    def test_cleans_up_after_end(self):
+        """Should remove all tracking data after end()."""
+        tracker = ToolTimingTracker()
+        tracker.start("tool-1", "Write", file_path="/path/to/file.md")
+        tracker.end("tool-1")
+        # Second call returns None for everything
+        duration, tool_name, file_path = tracker.end("tool-1")
+        assert duration is None
+        assert tool_name is None
+        assert file_path is None
 
-            result = "Created thoughts/shared/research/doc.md"
-            extracted = _extract_doc_path(result, "research", tracker)
+    def test_flush_file_paths_returns_all_pending(self):
+        """Should return all pending file paths and clear them."""
+        tracker = ToolTimingTracker()
+        tracker.start("tool-1", "Write", file_path="/path/a.md")
+        tracker.start("tool-2", "Edit", file_path="/path/b.md")
+        tracker.start("tool-3", "Read")  # No file_path
 
-            assert extracted == str(doc)
+        paths = tracker.flush_file_paths()
+        assert set(paths) == {"/path/a.md", "/path/b.md"}
+
+        # Subsequent flush returns empty
+        assert tracker.flush_file_paths() == []
+
+
+class TestCommandDocTypeMapping:
+    """Tests for COMMAND_DOC_TYPE mapping."""
+
+    def test_research_command_maps_to_research(self):
+        """RESEARCH_CODEBASE maps to 'research'."""
+        assert COMMAND_DOC_TYPE[Command.RESEARCH_CODEBASE] == "research"
+
+    def test_create_plan_maps_to_plan(self):
+        """CREATE_PLAN maps to 'plan'."""
+        assert COMMAND_DOC_TYPE[Command.CREATE_PLAN] == "plan"
+
+    def test_other_commands_not_in_mapping(self):
+        """Other commands should not be in the mapping."""
+        assert Command.COMMIT not in COMMAND_DOC_TYPE
+        assert Command.IMPLEMENT_PLAN not in COMMAND_DOC_TYPE
 
 
 class TestProcessAssistantMessageWithTracker:
@@ -160,7 +185,7 @@ class TestProcessAssistantMessageWithTracker:
 
     def test_tracks_write_tool_use(self):
         """Should track Write tool file_path in tracker."""
-        tracker = SessionWriteTracker()
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
 
         tool_block = MagicMock(spec=ToolUseBlock)
         tool_block.name = "Write"
@@ -172,15 +197,11 @@ class TestProcessAssistantMessageWithTracker:
 
         _process_assistant_message(message, tracker)
 
-        assert "tool_123" in tracker._pending
-        assert tracker._pending["tool_123"] == (
-            "research",
-            "thoughts/shared/research/doc.md",
-        )
+        assert tracker.writes == ["thoughts/shared/research/doc.md"]
 
     def test_tracks_edit_tool_use(self):
         """Should track Edit tool file_path in tracker."""
-        tracker = SessionWriteTracker()
+        tracker = SessionWriteTracker(command=Command.CREATE_PLAN)
 
         tool_block = MagicMock(spec=ToolUseBlock)
         tool_block.name = "Edit"
@@ -192,45 +213,11 @@ class TestProcessAssistantMessageWithTracker:
 
         _process_assistant_message(message, tracker)
 
-        assert "tool_456" in tracker._pending
-
-    def test_confirms_write_on_success_result(self):
-        """Should confirm write when tool result is success."""
-        tracker = SessionWriteTracker()
-        tracker._pending["tool_123"] = ("research", "thoughts/shared/research/doc.md")
-
-        result_block = MagicMock(spec=ToolResultBlock)
-        result_block.tool_use_id = "tool_123"
-        result_block.is_error = False
-
-        message = MagicMock(spec=AssistantMessage)
-        message.content = [result_block]
-
-        _process_assistant_message(message, tracker)
-
-        assert tracker.writes["research"] == ["thoughts/shared/research/doc.md"]
-        assert "tool_123" not in tracker._pending
-
-    def test_rejects_write_on_error_result(self):
-        """Should reject write when tool result is error."""
-        tracker = SessionWriteTracker()
-        tracker._pending["tool_123"] = ("research", "thoughts/shared/research/doc.md")
-
-        result_block = MagicMock(spec=ToolResultBlock)
-        result_block.tool_use_id = "tool_123"
-        result_block.is_error = True
-
-        message = MagicMock(spec=AssistantMessage)
-        message.content = [result_block]
-
-        _process_assistant_message(message, tracker)
-
-        assert "research" not in tracker.writes
-        assert "tool_123" not in tracker._pending
+        assert tracker.writes == ["thoughts/shared/plans/plan.md"]
 
     def test_ignores_non_write_tools(self):
         """Should not track Read/Grep/Glob tools."""
-        tracker = SessionWriteTracker()
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
 
         tool_block = MagicMock(spec=ToolUseBlock)
         tool_block.name = "Read"
@@ -242,7 +229,7 @@ class TestProcessAssistantMessageWithTracker:
 
         _process_assistant_message(message, tracker)
 
-        assert tracker._pending == {}
+        assert tracker.writes == []
 
     def test_none_tracker_does_not_crash(self):
         """Should work without tracker (backwards compatible)."""
@@ -385,64 +372,6 @@ class TestGetEventLoop:
                 assert result == new_loop
 
 
-class TestExtractDocPath:
-    """Tests for _extract_doc_path() function."""
-
-    def test_extracts_research_path(self, tmp_path):
-        """Should extract research doc path from result text."""
-        research_dir = tmp_path / "thoughts" / "shared" / "research"
-        research_dir.mkdir(parents=True)
-        doc = research_dir / "2026-01-05-test.md"
-        doc.write_text("# Test")
-
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            result = _extract_doc_path(
-                "Created document at thoughts/shared/research/2026-01-05-test.md",
-                "research",
-            )
-
-        assert result is not None
-        assert "research" in result
-
-    def test_extracts_plan_path(self, tmp_path):
-        """Should extract plan doc path from result text."""
-        plan_dir = tmp_path / "thoughts" / "shared" / "plans"
-        plan_dir.mkdir(parents=True)
-        doc = plan_dir / "2026-01-05-plan.md"
-        doc.write_text("# Plan")
-
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            result = _extract_doc_path(
-                "Plan saved to thoughts/shared/plans/2026-01-05-plan.md",
-                "plan",
-            )
-
-        assert result is not None
-        assert "plans" in result
-
-    def test_returns_none_for_unknown_doc_type(self):
-        """Should return None and log warning for unknown doc_type."""
-        result = _extract_doc_path("some text", "unknown_type")
-
-        assert result is None
-
-    def test_returns_none_when_no_match(self):
-        """Should return None when pattern doesn't match."""
-        result = _extract_doc_path("No path here", "research")
-
-        assert result is None
-
-    def test_returns_none_when_path_not_exists(self, tmp_path):
-        """Should return None when extracted path doesn't exist."""
-        with patch("π.workflow.bridge.get_project_root", return_value=tmp_path):
-            result = _extract_doc_path(
-                "Created thoughts/shared/research/2026-01-05-missing.md",
-                "research",
-            )
-
-        assert result is None
-
-
 class TestFormatToolResult:
     """Tests for _format_tool_result() function."""
 
@@ -512,7 +441,7 @@ class TestExecuteClaudeTask:
 
     def test_appends_path_to_command(self, mock_ctx):
         """Should append document path to command string."""
-        mock_tracker = SessionWriteTracker()
+        mock_tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
         mock_session = AsyncMock(return_value=("result", "sid", mock_tracker))
         mock_loop = MagicMock()
         mock_loop.run_until_complete.side_effect = lambda coro: (
@@ -541,7 +470,7 @@ class TestExecuteClaudeTask:
 
     def test_planning_command_resumption_prefix(self, mock_ctx):
         """Should prefix planning commands with explicit instruction on resume."""
-        mock_tracker = SessionWriteTracker()
+        mock_tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
         mock_session = AsyncMock(return_value=("result", "sid", mock_tracker))
         mock_loop = MagicMock()
         mock_loop.run_until_complete.side_effect = lambda coro: (
@@ -612,10 +541,11 @@ class TestWorkflowToolDecorator:
 
     def test_stores_session_id(self, mock_ctx):
         """Should store session_id in context after successful execution."""
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
 
         @workflow_tool(Command.RESEARCH_CODEBASE, phase_name="Research")
         def success_tool(**kwargs):
-            return ("Tool result", "new-session-123", SessionWriteTracker())
+            return ("Tool result", "new-session-123", tracker)
 
         with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
             success_tool()
@@ -623,20 +553,22 @@ class TestWorkflowToolDecorator:
         assert mock_ctx.session_ids[Command.RESEARCH_CODEBASE] == "new-session-123"
 
     def test_extracts_doc_path_when_configured(self, mock_ctx, tmp_path):
-        """Should extract and store doc path when doc_type is set."""
+        """Should extract and store doc path for doc-producing commands."""
         research_dir = tmp_path / "thoughts" / "shared" / "research"
         research_dir.mkdir(parents=True)
         doc = research_dir / "2026-01-05-test.md"
         doc.write_text("# Test")
 
-        @workflow_tool(
-            Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
-        )
+        # Create tracker with tracked write
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
+        tracker.writes = ["thoughts/shared/research/2026-01-05-test.md"]
+
+        @workflow_tool(Command.RESEARCH_CODEBASE, phase_name="Research")
         def research_tool(**kwargs):
             return (
-                "Done. Created thoughts/shared/research/2026-01-05-test.md",
+                "Done.",
                 "sess-1",
-                SessionWriteTracker(),
+                tracker,
             )
 
         with (
@@ -656,13 +588,14 @@ class TestWorkflowToolDecorator:
         """Should call get_or_validate_plan_path and inject result into kwargs."""
         mock_ctx.get_or_validate_plan_path.return_value = "/validated/plan.md"
         captured_kwargs = {}
+        tracker = SessionWriteTracker(command=Command.IMPLEMENT_PLAN)
 
         @workflow_tool(
             Command.IMPLEMENT_PLAN, phase_name="Implement", validate_plan=True
         )
         def implement_tool(**kwargs):
             captured_kwargs.update(kwargs)
-            return ("Implemented", "sess-1", SessionWriteTracker())
+            return ("Implemented", "sess-1", tracker)
 
         with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
             implement_tool(plan_document_path="/path/to/plan.md")
@@ -674,13 +607,14 @@ class TestWorkflowToolDecorator:
         """Should auto-inject plan path from context when not provided."""
         mock_ctx.get_or_validate_plan_path.return_value = "/auto/selected/plan.md"
         captured_kwargs = {}
+        tracker = SessionWriteTracker(command=Command.IMPLEMENT_PLAN)
 
         @workflow_tool(
             Command.IMPLEMENT_PLAN, phase_name="Implement", validate_plan=True
         )
         def implement_tool(**kwargs):
             captured_kwargs.update(kwargs)
-            return ("Implemented", "sess-1", SessionWriteTracker())
+            return ("Implemented", "sess-1", tracker)
 
         with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
             implement_tool(query="test")  # No plan_document_path
@@ -755,14 +689,16 @@ class TestSessionClearingOnDocExtraction:
         doc = research_dir / "2026-01-05-test.md"
         doc.write_text("# Test")
 
-        @workflow_tool(
-            Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
-        )
+        # Create tracker with tracked write
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
+        tracker.writes = ["thoughts/shared/research/2026-01-05-test.md"]
+
+        @workflow_tool(Command.RESEARCH_CODEBASE, phase_name="Research")
         def research_tool(**kwargs):
             return (
-                "Done. Created thoughts/shared/research/2026-01-05-test.md",
+                "Done.",
                 "new-session",
-                SessionWriteTracker(),
+                tracker,
             )
 
         with (
@@ -777,15 +713,14 @@ class TestSessionClearingOnDocExtraction:
 
     def test_preserves_session_when_no_doc(self, mock_ctx):
         """Should preserve session_id when no document is extracted."""
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
 
-        @workflow_tool(
-            Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
-        )
+        @workflow_tool(Command.RESEARCH_CODEBASE, phase_name="Research")
         def research_tool(**kwargs):
             return (
                 "What framework should I use?",
                 "new-session",
-                SessionWriteTracker(),
+                tracker,
             )
 
         with (
@@ -804,15 +739,16 @@ class TestSessionClearingOnDocExtraction:
         doc = research_dir / "2026-01-05-test.md"
         doc.write_text("# Test")
 
-        @workflow_tool(
-            Command.RESEARCH_CODEBASE, phase_name="Research", doc_type="research"
-        )
+        # Create tracker with tracked write
+        tracker = SessionWriteTracker(command=Command.RESEARCH_CODEBASE)
+        tracker.writes = ["thoughts/shared/research/2026-01-05-test.md"]
+
+        @workflow_tool(Command.RESEARCH_CODEBASE, phase_name="Research")
         def research_tool(**kwargs):
             return (
-                "Research complete. "
-                "Created thoughts/shared/research/2026-01-05-test.md",
+                "Research complete.",
                 "sess-1",
-                SessionWriteTracker(),
+                tracker,
             )
 
         with (

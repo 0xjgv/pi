@@ -7,7 +7,7 @@ class TestSessionStateIntegration:
     def test_session_persists_across_workflow_calls(self):
         """Session state should persist across multiple workflow calls."""
         from π.workflow import Command, ExecutionContext
-        from π.workflow.bridge import _ctx, get_ctx
+        from π.workflow.context import _ctx, get_ctx
 
         # Clear any existing context
         try:

@@ -17,9 +17,7 @@ from π.workflow.context import Command
 ask_questions = create_ask_questions_tool()
 
 
-@workflow_tool(
-    Command.RESEARCH_CODEBASE, phase_name="Researching codebase", doc_type="research"
-)
+@workflow_tool(Command.RESEARCH_CODEBASE, phase_name="Researching codebase")
 def research_codebase(
     *,
     session_id: str | None = None,
@@ -41,7 +39,7 @@ def research_codebase(
     )
 
 
-@workflow_tool(Command.CREATE_PLAN, phase_name="Creating plan", doc_type="plan")
+@workflow_tool(Command.CREATE_PLAN, phase_name="Creating plan")
 def create_plan(
     *,
     research_document_paths: list[Path | str],
@@ -88,31 +86,6 @@ def review_plan(
         tool_command=Command.REVIEW_PLAN,
         session_id=session_id,
         query=query,
-    )
-
-
-@workflow_tool(Command.ITERATE_PLAN, phase_name="Iterating plan", validate_plan=True)
-def iterate_plan(
-    *,
-    plan_document_path: Path | str,
-    session_id: str | None = None,
-    review_feedback: str,
-) -> tuple[str, str, SessionWriteTracker]:
-    """Iterate the plan for the codebase.
-
-    Args:
-        review_feedback: The review feedback to iterate the plan.
-        plan_document_path: Required path to the plan document.
-        session_id: Session ID for resumption (injected by decorator).
-
-    Returns:
-        Tuple of (result text, session ID, write tracker).
-    """
-    return execute_claude_task(
-        path_to_documents=[Path(plan_document_path)],
-        tool_command=Command.ITERATE_PLAN,
-        session_id=session_id,
-        query=review_feedback,
     )
 
 

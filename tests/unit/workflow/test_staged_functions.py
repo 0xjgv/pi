@@ -55,10 +55,14 @@ class TestStageResearch:
         """Should call ReAct agent with research objective."""
         research_doc = _create_research_doc(tmp_path)
 
-        # Configure mock agent response
+        # Set up context with tracked paths and summaries (simulating tool calls)
+        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_results = {research_doc: "Found existing patterns"}
+
+        # Configure mock agent response (LM output is now ignored for paths/summaries)
         mock_react.return_value = dspy.Prediction(
-            research_summaries=["Found existing patterns"],
-            research_doc_paths=[research_doc],
+            research_summaries=["LM summary (ignored)"],
+            research_doc_paths=["invalid/path.md"],  # Ignored
             needs_implementation=True,
             task_status="complete",
         )
@@ -68,7 +72,7 @@ class TestStageResearch:
 
         # Verify agent was called with objective
         mock_react.assert_called_once_with(objective="add logging")
-        # Summary is in the summaries list
+        # Summary comes from tracked context, not LM output
         assert "Found existing patterns" in result.summaries
 
     def test_returns_early_when_no_implementation_needed(
@@ -77,9 +81,13 @@ class TestStageResearch:
         """Should set needs_implementation=False when research indicates complete."""
         research_doc = _create_research_doc(tmp_path)
 
+        # Set up context with tracked paths
+        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_results = {research_doc: "Feature already exists"}
+
         mock_react.return_value = dspy.Prediction(
-            research_summaries=["Feature already exists"],
-            research_doc_paths=[research_doc],
+            research_summaries=["LM summary (ignored)"],
+            research_doc_paths=["ignored"],
             needs_implementation=False,
             task_status="complete",
         )
@@ -90,19 +98,23 @@ class TestStageResearch:
         assert result.reason == "Agent determined no implementation needed"
 
     def test_extracts_research_doc_paths(self, tmp_path, mock_context, mock_react):
-        """Should parse and validate doc paths from agent output."""
+        """Should use tracked doc paths from context, not LM output."""
         research_doc = _create_research_doc(tmp_path)
 
+        # Set up context with tracked paths
+        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_results = {research_doc: "Research complete"}
+
         mock_react.return_value = dspy.Prediction(
-            research_summaries=["Research complete"],
-            research_doc_paths=[research_doc],
+            research_summaries=["LM summary (ignored)"],
+            research_doc_paths=["ignored"],
             needs_implementation=True,
             task_status="complete",
         )
 
         result = stage_research(objective="test", lm=MagicMock())
 
-        assert len(result.research_docs) >= 1
+        assert len(result.research_docs) == 1
         assert isinstance(result.research_docs[0], ResearchDocPath)
         assert "research" in result.research_docs[0].path
 
@@ -110,9 +122,13 @@ class TestStageResearch:
         """Should set current_stage and objective in ExecutionContext."""
         research_doc = _create_research_doc(tmp_path)
 
+        # Set up context with tracked paths
+        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_results = {research_doc: "Done"}
+
         mock_react.return_value = dspy.Prediction(
-            research_summaries=["Done"],
-            research_doc_paths=[research_doc],
+            research_summaries=["ignored"],
+            research_doc_paths=["ignored"],
             needs_implementation=True,
             task_status="complete",
         )
@@ -122,17 +138,26 @@ class TestStageResearch:
         assert mock_context.current_stage == "research"
         assert mock_context.objective == "implement feature"
 
-    def test_raises_on_invalid_doc_path(self, mock_context, mock_react):
-        """Should raise ValueError when agent returns invalid path."""
+    def test_ignores_invalid_lm_doc_paths(self, tmp_path, mock_context, mock_react):
+        """Should ignore invalid paths from LM output and use only tracked paths."""
+        research_doc = _create_research_doc(tmp_path)
+
+        # Set up context with valid tracked path
+        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_results = {research_doc: "Valid research"}
+
+        # LM returns invalid path - should be ignored
         mock_react.return_value = dspy.Prediction(
-            research_summaries=["Done"],
+            research_summaries=["LM summary"],
             research_doc_paths=["/invalid/path.md"],
             needs_implementation=True,
             task_status="complete",
         )
 
-        with pytest.raises(ValueError, match="must be in"):
-            stage_research(objective="test", lm=MagicMock())
+        # Should NOT raise - LM paths are ignored
+        result = stage_research(objective="test", lm=MagicMock())
+        assert len(result.research_docs) == 1
+        assert result.research_docs[0].path == research_doc
 
     def test_aggregates_multiple_research_docs(
         self, tmp_path, mock_context, mock_react
@@ -146,25 +171,28 @@ class TestStageResearch:
         doc2.write_text("# Second Research\n\nMore content.")
         research_doc2 = str(doc2)
 
-        # Pre-populate context with an additional research doc (simulating tool call)
-        mock_context.extracted_paths = {"research": {research_doc2}}
-        mock_context.extracted_results = {research_doc2: "Second research findings"}
+        # Pre-populate context with both research docs (simulating tool calls)
+        mock_context.extracted_paths = {"research": {research_doc, research_doc2}}
+        mock_context.extracted_results = {
+            research_doc: "Primary research findings",
+            research_doc2: "Second research findings",
+        }
 
         mock_react.return_value = dspy.Prediction(
-            research_summaries=["Primary research findings"],
-            research_doc_paths=[research_doc],
+            research_summaries=["LM summary (ignored)"],
+            research_doc_paths=["ignored"],
             needs_implementation=True,
             task_status="complete",
         )
 
         result = stage_research(objective="test", lm=MagicMock())
 
-        # Should have both docs
+        # Should have both docs from context
         assert len(result.research_docs) == 2
         paths = [doc.path for doc in result.research_docs]
         assert research_doc in paths
         assert research_doc2 in paths
-        # Should have both summaries
+        # Should have both summaries from context
         assert len(result.summaries) == 2
 
     def test_handles_needs_clarification_status(
@@ -173,9 +201,13 @@ class TestStageResearch:
         """Should set reason when agent signals needs_clarification."""
         research_doc = _create_research_doc(tmp_path)
 
+        # Set up context with tracked paths
+        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_results = {research_doc: "Partial findings"}
+
         mock_react.return_value = dspy.Prediction(
-            research_summaries=["Partial findings"],
-            research_doc_paths=[research_doc],
+            research_summaries=["ignored"],
+            research_doc_paths=["ignored"],
             needs_implementation=True,
             task_status="needs_clarification",
         )
@@ -211,9 +243,12 @@ class TestStageDesign:
         research_doc = _create_research_doc(tmp_path)
         plan_doc = _create_plan_doc(tmp_path)
 
+        # Set up context with tracked plan path (simulating tool call)
+        mock_context.extracted_paths = {"plan": {plan_doc}}
+
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
-            plan_doc_path=plan_doc,
+            plan_doc_path="ignored",  # LM output ignored
         )
 
         research = ResearchResult(
@@ -232,13 +267,16 @@ class TestStageDesign:
         assert research_doc in mock_context.extracted_paths["research"]
 
     def test_extracts_plan_doc_path(self, tmp_path, mock_context, mock_react):
-        """Should parse and validate plan path from agent output."""
+        """Should use tracked plan path from context, not LM output."""
         research_doc = _create_research_doc(tmp_path)
         plan_doc = _create_plan_doc(tmp_path)
 
+        # Set up context with tracked plan path
+        mock_context.extracted_paths = {"plan": {plan_doc}}
+
         mock_react.return_value = dspy.Prediction(
             plan_summary="Design complete",
-            plan_doc_path=plan_doc,
+            plan_doc_path="ignored",  # LM output ignored
         )
 
         research = ResearchResult(
@@ -260,9 +298,12 @@ class TestStageDesign:
         research_doc = _create_research_doc(tmp_path)
         plan_doc = _create_plan_doc(tmp_path)
 
+        # Set up context with tracked plan path
+        mock_context.extracted_paths = {"plan": {plan_doc}}
+
         mock_react.return_value = dspy.Prediction(
             plan_summary="Done",
-            plan_doc_path=plan_doc,
+            plan_doc_path="ignored",
         )
 
         research = ResearchResult(
@@ -278,13 +319,16 @@ class TestStageDesign:
 
         assert mock_context.current_stage == "design"
 
-    def test_raises_on_invalid_plan_path(self, tmp_path, mock_context, mock_react):
-        """Should raise ValueError when agent returns invalid plan path."""
+    def test_raises_when_no_plan_created(self, tmp_path, mock_context, mock_react):
+        """Should raise ValueError when no plan is tracked in context."""
         research_doc = _create_research_doc(tmp_path)
+
+        # No plan in context
+        mock_context.extracted_paths = {}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Done",
-            plan_doc_path="/invalid/plan.md",
+            plan_doc_path="/invalid/plan.md",  # Ignored
         )
 
         research = ResearchResult(
@@ -292,7 +336,7 @@ class TestStageDesign:
             summaries=["Research done"],
             needs_implementation=True,
         )
-        with pytest.raises(ValueError, match="must be in"):
+        with pytest.raises(ValueError, match="did not produce a plan"):
             stage_design(
                 research=research,
                 objective="test",
@@ -306,9 +350,12 @@ class TestStageDesign:
         research_doc = _create_research_doc(tmp_path)
         plan_doc = _create_plan_doc(tmp_path)
 
+        # Set up context with tracked plan path
+        mock_context.extracted_paths = {"plan": {plan_doc}}
+
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
-            plan_doc_path=plan_doc,
+            plan_doc_path="ignored",
         )
 
         research = ResearchResult(
@@ -346,9 +393,12 @@ class TestStageDesign:
 
         plan_doc = _create_plan_doc(tmp_path)
 
+        # Set up context with tracked plan path
+        mock_context.extracted_paths = {"plan": {plan_doc}}
+
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
-            plan_doc_path=plan_doc,
+            plan_doc_path="ignored",
         )
 
         research = ResearchResult(
@@ -394,14 +444,31 @@ class TestStageExecute:
             mock_class.return_value = mock_agent
             yield mock_agent
 
-    def test_parses_files_changed(self, tmp_path, mock_context, mock_react):
-        """Should parse comma-separated file list from agent output."""
+    @pytest.fixture
+    def mock_subprocess(self):
+        """Mock subprocess.run for git commands."""
+        with patch("π.workflow.staged.subprocess.run") as mock_run:
+            yield mock_run
+
+    def test_gets_files_changed_from_git(
+        self, tmp_path, mock_context, mock_react, mock_subprocess
+    ):
+        """Should get files_changed from git diff, not LM output."""
         plan_doc = _create_plan_doc(tmp_path)
+
+        # Mock git diff --name-only output
+        mock_subprocess.side_effect = [
+            MagicMock(
+                returncode=0,
+                stdout="src/main.py\nsrc/utils.py\ntests/test_main.py\n",
+            ),
+            MagicMock(returncode=0, stdout="abc1234"),  # git rev-parse
+        ]
 
         mock_react.return_value = dspy.Prediction(
             status="success",
-            files_changed="src/main.py, src/utils.py, tests/test_main.py",
-            commit_hash="abc1234",
+            files_changed="ignored",  # LM output ignored
+            commit_hash="ignored",
         )
 
         plan_path = PlanDocPath(path=plan_doc)
@@ -414,34 +481,22 @@ class TestStageExecute:
         expected = ["src/main.py", "src/utils.py", "tests/test_main.py"]
         assert result.files_changed == expected
 
-    def test_handles_none_commit_hash(self, tmp_path, mock_context, mock_react):
-        """Should convert 'none' string to None for commit_hash."""
+    def test_gets_commit_hash_from_git(
+        self, tmp_path, mock_context, mock_react, mock_subprocess
+    ):
+        """Should get commit_hash from git rev-parse, not LM output."""
         plan_doc = _create_plan_doc(tmp_path)
 
-        mock_react.return_value = dspy.Prediction(
-            status="partial",
-            files_changed="file.py",
-            commit_hash="none",
-        )
-
-        plan_path = PlanDocPath(path=plan_doc)
-        result = stage_execute(
-            plan_doc=plan_path,
-            objective="test",
-            lm=MagicMock(),
-        )
-
-        assert result.commit_hash is None
-        assert result.status == "partial"
-
-    def test_preserves_actual_commit_hash(self, tmp_path, mock_context, mock_react):
-        """Should preserve actual commit hash when not 'none'."""
-        plan_doc = _create_plan_doc(tmp_path)
+        # Mock git commands
+        mock_subprocess.side_effect = [
+            MagicMock(returncode=0, stdout="file.py\n"),  # git diff
+            MagicMock(returncode=0, stdout="def5678"),  # git rev-parse
+        ]
 
         mock_react.return_value = dspy.Prediction(
             status="success",
-            files_changed="file.py",
-            commit_hash="def5678",
+            files_changed="ignored",
+            commit_hash="ignored",
         )
 
         plan_path = PlanDocPath(path=plan_doc)
@@ -453,14 +508,51 @@ class TestStageExecute:
 
         assert result.commit_hash == "def5678"
 
-    def test_handles_empty_files_changed(self, tmp_path, mock_context, mock_react):
-        """Should handle empty files_changed string."""
+    def test_handles_git_failure(
+        self, tmp_path, mock_context, mock_react, mock_subprocess
+    ):
+        """Should handle git command failures gracefully."""
         plan_doc = _create_plan_doc(tmp_path)
+
+        # Mock git commands failing
+        mock_subprocess.side_effect = [
+            MagicMock(returncode=1, stdout=""),  # git diff failed
+            MagicMock(returncode=1, stdout=""),  # git rev-parse failed
+        ]
+
+        mock_react.return_value = dspy.Prediction(
+            status="partial",
+            files_changed="ignored",
+            commit_hash="ignored",
+        )
+
+        plan_path = PlanDocPath(path=plan_doc)
+        result = stage_execute(
+            plan_doc=plan_path,
+            objective="test",
+            lm=MagicMock(),
+        )
+
+        assert result.files_changed == []
+        assert result.commit_hash is None
+        assert result.status == "partial"
+
+    def test_handles_empty_git_diff(
+        self, tmp_path, mock_context, mock_react, mock_subprocess
+    ):
+        """Should handle empty git diff output."""
+        plan_doc = _create_plan_doc(tmp_path)
+
+        # Mock empty git diff output
+        mock_subprocess.side_effect = [
+            MagicMock(returncode=0, stdout=""),  # No changes
+            MagicMock(returncode=0, stdout="abc1234"),
+        ]
 
         mock_react.return_value = dspy.Prediction(
             status="failed",
-            files_changed="",
-            commit_hash="none",
+            files_changed="ignored",
+            commit_hash="ignored",
         )
 
         plan_path = PlanDocPath(path=plan_doc)
@@ -472,14 +564,22 @@ class TestStageExecute:
 
         assert result.files_changed == []
 
-    def test_sets_context_stage(self, tmp_path, mock_context, mock_react):
+    def test_sets_context_stage(
+        self, tmp_path, mock_context, mock_react, mock_subprocess
+    ):
         """Should set current_stage to 'execute' in ExecutionContext."""
         plan_doc = _create_plan_doc(tmp_path)
 
+        # Mock git commands
+        mock_subprocess.side_effect = [
+            MagicMock(returncode=0, stdout="file.py\n"),
+            MagicMock(returncode=0, stdout="abc1234"),
+        ]
+
         mock_react.return_value = dspy.Prediction(
             status="success",
-            files_changed="file.py",
-            commit_hash="abc1234",
+            files_changed="ignored",
+            commit_hash="ignored",
         )
 
         plan_path = PlanDocPath(path=plan_doc)

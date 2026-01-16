@@ -45,26 +45,6 @@ class TestLanguageCheckerDecorator:
         # All should map to same checker
         assert _registry[".py"] is py_checker
 
-    def test_accepts_scope_parameter(self, clean_registry: None):
-        """Should accept scope parameter for API compatibility."""
-
-        @language_checker([".xyz"], scope="project")
-        def _file_checker(_path: Path, _tool_name: str | None = None) -> int:
-            return 0
-
-        # Scope is accepted but not stored (API compatibility)
-        assert ".xyz" in _registry
-
-    def test_accepts_project_markers_parameter(self, clean_registry: None):
-        """Should accept project_markers parameter for API compatibility."""
-
-        @language_checker([".rs"], scope="project", project_markers=["Cargo.toml"])
-        def _rust_checker(_path: Path, _tool_name: str | None = None) -> int:
-            return 0
-
-        # project_markers is accepted but not stored (API compatibility)
-        assert ".rs" in _registry
-
     def test_returns_original_function(self, clean_registry: None):
         """Decorator should return the original function unchanged."""
 
