@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import dspy
 import pytest
 
+from π.workflow.context import Command
 from π.workflow.staged import stage_design, stage_execute, stage_research
 from π.workflow.types import PlanDocPath, ResearchDocPath, ResearchResult
 
@@ -56,7 +57,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths and summaries (simulating tool calls)
-        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
         mock_context.extracted_results = {research_doc: "Found existing patterns"}
 
         # Configure mock agent response (LM output is now ignored for paths/summaries)
@@ -82,7 +83,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths
-        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
         mock_context.extracted_results = {research_doc: "Feature already exists"}
 
         mock_react.return_value = dspy.Prediction(
@@ -102,7 +103,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths
-        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
         mock_context.extracted_results = {research_doc: "Research complete"}
 
         mock_react.return_value = dspy.Prediction(
@@ -123,7 +124,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths
-        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
         mock_context.extracted_results = {research_doc: "Done"}
 
         mock_react.return_value = dspy.Prediction(
@@ -143,7 +144,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with valid tracked path
-        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
         mock_context.extracted_results = {research_doc: "Valid research"}
 
         # LM returns invalid path - should be ignored
@@ -172,7 +173,9 @@ class TestStageResearch:
         research_doc2 = str(doc2)
 
         # Pre-populate context with both research docs (simulating tool calls)
-        mock_context.extracted_paths = {"research": {research_doc, research_doc2}}
+        mock_context.extracted_paths = {
+            Command.RESEARCH_CODEBASE: {research_doc, research_doc2}
+        }
         mock_context.extracted_results = {
             research_doc: "Primary research findings",
             research_doc2: "Second research findings",
@@ -202,7 +205,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths
-        mock_context.extracted_paths = {"research": {research_doc}}
+        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
         mock_context.extracted_results = {research_doc: "Partial findings"}
 
         mock_react.return_value = dspy.Prediction(
@@ -244,7 +247,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path (simulating tool call)
-        mock_context.extracted_paths = {"plan": {plan_doc}}
+        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
@@ -264,7 +267,7 @@ class TestStageDesign:
 
         assert result.summary == "Plan created"
         # Verify research path was stored in context for validation
-        assert research_doc in mock_context.extracted_paths["research"]
+        assert research_doc in mock_context.extracted_paths[Command.RESEARCH_CODEBASE]
 
     def test_extracts_plan_doc_path(self, tmp_path, mock_context, mock_react):
         """Should use tracked plan path from context, not LM output."""
@@ -272,7 +275,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path
-        mock_context.extracted_paths = {"plan": {plan_doc}}
+        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Design complete",
@@ -299,7 +302,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path
-        mock_context.extracted_paths = {"plan": {plan_doc}}
+        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Done",
@@ -351,7 +354,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path
-        mock_context.extracted_paths = {"plan": {plan_doc}}
+        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
@@ -394,7 +397,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path
-        mock_context.extracted_paths = {"plan": {plan_doc}}
+        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
@@ -590,4 +593,4 @@ class TestStageExecute:
         )
 
         assert mock_context.current_stage == "execute"
-        assert plan_doc in mock_context.extracted_paths["plan"]
+        assert plan_doc in mock_context.extracted_paths[Command.IMPLEMENT_PLAN]

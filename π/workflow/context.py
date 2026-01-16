@@ -79,7 +79,7 @@ class ExecutionContext:
     agent_options: ClaudeAgentOptions | None = None
     event_loop: asyncio.AbstractEventLoop | None = None
     session_ids: dict[Command, str] = field(default_factory=dict)
-    extracted_paths: dict[str, set[str]] = field(default_factory=dict)
+    extracted_paths: dict[Command, set[str]] = field(default_factory=dict)
     extracted_results: dict[str, str] = field(default_factory=dict)
     # Auto-answer support fields
     objective: str | None = None
