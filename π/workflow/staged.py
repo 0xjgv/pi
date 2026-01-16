@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from functools import wraps
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import dspy
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from π.core.enums import DocType, WorkflowStage
 from π.support.directory import get_project_root
@@ -33,6 +38,20 @@ from π.workflow.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def require_lm[**P, R](func: Callable[P, R]) -> Callable[P, R]:
+    """Decorator ensuring ExecutionContext.lm is configured before stage runs."""
+
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        ctx = get_ctx()
+        if ctx.lm is None:
+            msg = "ExecutionContext.lm not configured"
+            raise ValueError(msg)
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 def with_codebase_context[T: dspy.Signature](
@@ -70,6 +89,7 @@ Strategy:
     return ContextAwareSignature  # type: ignore[return-value]
 
 
+@require_lm
 def stage_research(*, objective: str) -> ResearchResult:
     """Research stage using ReAct agent.
 
@@ -83,9 +103,6 @@ def stage_research(*, objective: str) -> ResearchResult:
         ValueError: If research did not produce a valid document.
     """
     ctx = get_ctx()
-    if ctx.lm is None:
-        msg = "ExecutionContext.lm not configured"
-        raise ValueError(msg)
     lm = ctx.lm
 
     ctx.current_stage = WorkflowStage.RESEARCH
@@ -139,6 +156,7 @@ def stage_research(*, objective: str) -> ResearchResult:
     )
 
 
+@require_lm
 def stage_design(
     *,
     research: ResearchResult,
@@ -157,9 +175,6 @@ def stage_design(
         ValueError: If design did not produce a valid plan document.
     """
     ctx = get_ctx()
-    if ctx.lm is None:
-        msg = "ExecutionContext.lm not configured"
-        raise ValueError(msg)
     lm = ctx.lm
 
     ctx.current_stage = WorkflowStage.DESIGN
@@ -250,6 +265,7 @@ def _get_git_commit_hash(*, cwd: Path) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+@require_lm
 def stage_execute(
     *,
     plan_doc: PlanDocPath,
@@ -265,9 +281,6 @@ def stage_execute(
         ExecuteResult from signature outputs.
     """
     ctx = get_ctx()
-    if ctx.lm is None:
-        msg = "ExecutionContext.lm not configured"
-        raise ValueError(msg)
     lm = ctx.lm
 
     ctx.current_stage = WorkflowStage.EXECUTE
