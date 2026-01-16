@@ -8,13 +8,18 @@
     <meta name="keywords" content="claude, agent, dspy, react, cli, orchestration, ai, llm, autonomous">
     <meta name="author" content="0xjgv">
     <meta name="robots" content="index, follow">
-    <meta name="theme-color" content="#0d1117">
+    <meta name="theme-color" content="#ffffff">
 
     <!-- Canonical -->
     <link rel="canonical" href="https://0xjgv.github.io/pi/">
 
     <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>π</text></svg>">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;700&family=Geist+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
@@ -33,41 +38,50 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg-primary: #0d1117;
-            --bg-secondary: #161b22;
-            --bg-tertiary: #21262d;
-            --text-primary: #e6edf3;
-            --text-secondary: #8b949e;
-            --accent: #58a6ff;
-            --accent-secondary: #238636;
-            --border: #30363d;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f8f8;
+            --bg-tertiary: rgba(187, 187, 187, 0.15);
+            --text-primary: #000000;
+            --text-secondary: #7e7e7e;
+            --accent: #0099ff;
+            --accent-secondary: #0077cc;
+            --border: rgba(136, 136, 136, 0.1);
         }
 
         html { scroll-behavior: smooth; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            line-height: 1.6;
+            line-height: 1.5;
+            font-weight: 400;
         }
 
-        a { color: var(--accent); text-decoration: none; }
-        a:hover { text-decoration: underline; }
+        h1, h2, h3, h4 {
+            font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            line-height: 1.3;
+        }
+
+        a { color: var(--accent); text-decoration: underline; }
+        a:hover { background-color: #fff024; }
 
         code {
-            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            font-family: "Geist Mono", "SF Mono", "Fira Code", "Consolas", monospace;
             background: var(--bg-tertiary);
-            padding: 0.2em 0.4em;
-            border-radius: 4px;
-            font-size: 0.9em;
+            padding: 0.25em 0.5em;
+            border-radius: 6px;
+            font-size: 0.875em;
+            color: var(--text-primary);
         }
 
         pre {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem;
+            border-radius: 10px;
+            padding: 1.25rem;
             overflow-x: auto;
         }
 
@@ -75,63 +89,68 @@
 
         /* Layout */
         .container {
-            max-width: 1200px;
+            max-width: 1000px;
             margin: 0 auto;
-            padding: 0 1.5rem;
+            padding: 0 2rem;
         }
 
-        section { padding: 4rem 0; }
+        section { padding: 5rem 0; }
 
         /* Hero */
         .hero {
             text-align: center;
-            padding: 6rem 0;
-            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            padding: 8rem 0 6rem;
+            background: var(--bg-primary);
         }
 
         .hero h1 {
-            font-size: 4rem;
-            margin-bottom: 1rem;
+            font-size: 5rem;
+            margin-bottom: 1.5rem;
+            font-weight: 400;
         }
 
         .hero .tagline {
-            font-size: 1.25rem;
+            font-size: 1.125rem;
             color: var(--text-secondary);
-            max-width: 600px;
-            margin: 0 auto 2rem;
+            max-width: 640px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.6;
         }
 
         .install-cmd {
             display: inline-block;
-            background: var(--bg-tertiary);
+            background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.75rem 1.5rem;
-            font-family: monospace;
+            border-radius: 10px;
+            padding: 1rem 2rem;
+            font-family: "Geist Mono", monospace;
             font-size: 1rem;
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
         }
 
         .btn {
             display: inline-block;
-            padding: 0.75rem 1.5rem;
-            border-radius: 6px;
-            font-weight: 600;
-            transition: opacity 0.2s;
+            padding: 0.875rem 1.75rem;
+            border-radius: 8px;
+            font-weight: 500;
+            font-family: "Geist Mono", monospace;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            text-decoration: none;
         }
 
-        .btn:hover { opacity: 0.9; text-decoration: none; }
+        .btn:hover { opacity: 0.85; text-decoration: none; transform: translateY(-1px); }
 
         .btn-primary {
             background: var(--accent);
-            color: var(--bg-primary);
+            color: #ffffff;
         }
 
         .btn-secondary {
-            background: var(--bg-tertiary);
+            background: transparent;
             border: 1px solid var(--border);
             color: var(--text-primary);
-            margin-left: 0.5rem;
+            margin-left: 0.75rem;
         }
 
         /* Workflow */
@@ -139,21 +158,22 @@
 
         .workflow h2 {
             text-align: center;
-            font-size: 2rem;
+            font-size: 1.75rem;
+            font-weight: 400;
             margin-bottom: 3rem;
         }
 
         .stages {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1.5rem;
+            gap: 2rem;
         }
 
         .stage {
             background: var(--bg-primary);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
+            border-radius: 10px;
+            padding: 2rem;
         }
 
         .stage-header {
@@ -165,7 +185,7 @@
 
         .stage-num {
             background: var(--accent);
-            color: var(--bg-primary);
+            color: #ffffff;
             width: 2rem;
             height: 2rem;
             border-radius: 50%;
@@ -217,21 +237,22 @@
         /* Features */
         .features h2 {
             text-align: center;
-            font-size: 2rem;
+            font-size: 1.75rem;
+            font-weight: 400;
             margin-bottom: 3rem;
         }
 
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 1.5rem;
+            gap: 2rem;
         }
 
         .feature {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
+            border-radius: 10px;
+            padding: 2rem;
         }
 
         .feature h3 {
@@ -246,7 +267,8 @@
 
         .install h2 {
             text-align: center;
-            font-size: 2rem;
+            font-size: 1.75rem;
+            font-weight: 400;
             margin-bottom: 2rem;
         }
 
@@ -266,9 +288,10 @@
         /* Footer */
         footer {
             text-align: center;
-            padding: 3rem 0;
+            padding: 4rem 0;
             border-top: 1px solid var(--border);
             color: var(--text-secondary);
+            font-size: 0.875rem;
         }
 
         footer a { margin: 0 0.5rem; }
@@ -297,7 +320,8 @@
 
         .reference h2 {
             text-align: center;
-            font-size: 2rem;
+            font-size: 1.75rem;
+            font-weight: 400;
             margin-bottom: 0.5rem;
         }
 
@@ -319,7 +343,7 @@
             border-collapse: collapse;
             background: var(--bg-primary);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
         }
 
@@ -328,15 +352,19 @@
         }
 
         th, td {
-            padding: 0.75rem 1rem;
+            padding: 1rem 1.25rem;
             text-align: left;
             border-bottom: 1px solid var(--border);
         }
 
         th {
-            background: var(--bg-tertiary);
-            font-weight: 600;
+            background: var(--bg-secondary);
+            font-weight: 500;
             color: var(--text-primary);
+            font-family: "Geist Mono", monospace;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .reference.alt th {
@@ -419,7 +447,7 @@
             top: -100%;
             left: 0;
             background: var(--accent);
-            color: var(--bg-primary);
+            color: #ffffff;
             padding: 0.5rem 1rem;
             z-index: 1000;
             transition: top 0.2s;
@@ -431,12 +459,14 @@
 
         /* Responsive */
         @media (max-width: 600px) {
-            .hero h1 { font-size: 3rem; }
+            .hero { padding: 5rem 0 4rem; }
+            .hero h1 { font-size: 3.5rem; }
             .hero .tagline { font-size: 1rem; }
-            .install-cmd { font-size: 0.875rem; padding: 0.5rem 1rem; }
-            .btn { display: block; margin: 0.5rem 0; }
+            .install-cmd { font-size: 0.875rem; padding: 0.75rem 1.25rem; }
+            .btn { display: block; margin: 0.5rem 0; width: 100%; }
             .btn-secondary { margin-left: 0; }
-            section { padding: 3rem 0; }
+            section { padding: 3.5rem 0; }
+            .container { padding: 0 1.5rem; }
         }
     </style>
 </head>
