@@ -8,10 +8,7 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from dspy.clients.base_lm import BaseLM
 import dspy
 
 from π.core.constants import WORKFLOW
@@ -73,15 +70,11 @@ Strategy:
     return ContextAwareSignature  # type: ignore[return-value]
 
 
-def stage_research(
-    *, objective: str, lm: BaseLM, max_iters: int = WORKFLOW.max_iters
-) -> ResearchResult:
+def stage_research(*, objective: str) -> ResearchResult:
     """Research stage using ReAct agent.
 
     Args:
         objective: The objective to research.
-        lm: DSPy language model for ReAct agent.
-        max_iters: Maximum ReAct iterations.
 
     Returns:
         ResearchResult with aggregated docs and summaries from all tool calls.
@@ -89,8 +82,12 @@ def stage_research(
     Raises:
         ValueError: If research did not produce a valid document.
     """
-    # Set context for ask_questions
     ctx = get_ctx()
+    if ctx.lm is None:
+        msg = "ExecutionContext.lm not configured"
+        raise ValueError(msg)
+    lm = ctx.lm
+
     ctx.current_stage = "research"
     ctx.objective = objective
 
@@ -100,7 +97,7 @@ def stage_research(
     agent = dspy.ReAct(
         tools=[research_codebase, ask_questions],
         signature=signature,
-        max_iters=max_iters,
+        max_iters=WORKFLOW.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
@@ -146,16 +143,12 @@ def stage_design(
     *,
     research: ResearchResult,
     objective: str,
-    lm: BaseLM,
-    max_iters: int = WORKFLOW.max_iters,
 ) -> DesignResult:
     """Design stage using ReAct agent.
 
     Args:
         research: Complete result from research stage with all docs and summaries.
         objective: The original objective.
-        lm: DSPy language model for ReAct agent.
-        max_iters: Maximum ReAct iterations.
 
     Returns:
         DesignResult from signature outputs.
@@ -163,8 +156,12 @@ def stage_design(
     Raises:
         ValueError: If design did not produce a valid plan document.
     """
-    # Set context for ask_questions (runtime state only)
     ctx = get_ctx()
+    if ctx.lm is None:
+        msg = "ExecutionContext.lm not configured"
+        raise ValueError(msg)
+    lm = ctx.lm
+
     ctx.current_stage = "design"
     ctx.objective = objective
 
@@ -186,7 +183,7 @@ def stage_design(
             ask_questions,
         ],
         signature=signature,
-        max_iters=max_iters,
+        max_iters=WORKFLOW.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
@@ -257,22 +254,22 @@ def stage_execute(
     *,
     plan_doc: PlanDocPath,
     objective: str,
-    lm: BaseLM,
-    max_iters: int = WORKFLOW.max_iters,
 ) -> ExecuteResult:
     """Execute stage using ReAct agent.
 
     Args:
         plan_doc: Validated PlanDocPath from design stage.
         objective: The original objective.
-        lm: DSPy language model for ReAct agent.
-        max_iters: Maximum ReAct iterations.
 
     Returns:
         ExecuteResult from signature outputs.
     """
-    # Set context for ask_questions
     ctx = get_ctx()
+    if ctx.lm is None:
+        msg = "ExecutionContext.lm not configured"
+        raise ValueError(msg)
+    lm = ctx.lm
+
     ctx.extracted_paths.setdefault(Command.IMPLEMENT_PLAN, set()).add(plan_doc.path)
     ctx.current_stage = "execute"
     ctx.objective = objective
@@ -287,7 +284,7 @@ def stage_execute(
             ask_questions,
         ],
         signature=signature,
-        max_iters=max_iters,
+        max_iters=WORKFLOW.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):

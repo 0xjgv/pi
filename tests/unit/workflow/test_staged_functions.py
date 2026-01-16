@@ -39,6 +39,7 @@ class TestStageResearch:
             ctx = MagicMock()
             ctx.extracted_paths = {}
             ctx.extracted_results = {}
+            ctx.lm = MagicMock()  # Mock LM for stage functions
             mock_get.return_value = ctx
             yield ctx
 
@@ -68,8 +69,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        mock_lm = MagicMock()
-        result = stage_research(objective="add logging", lm=mock_lm)
+        result = stage_research(objective="add logging")
 
         # Verify agent was called with objective
         mock_react.assert_called_once_with(objective="add logging")
@@ -93,7 +93,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        result = stage_research(objective="add logging", lm=MagicMock())
+        result = stage_research(objective="add logging")
 
         assert result.needs_implementation is False
         assert result.reason == "Agent determined no implementation needed"
@@ -113,7 +113,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        result = stage_research(objective="test", lm=MagicMock())
+        result = stage_research(objective="test")
 
         assert len(result.research_docs) == 1
         assert isinstance(result.research_docs[0], ResearchDocPath)
@@ -134,7 +134,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        stage_research(objective="implement feature", lm=MagicMock())
+        stage_research(objective="implement feature")
 
         assert mock_context.current_stage == "research"
         assert mock_context.objective == "implement feature"
@@ -156,7 +156,7 @@ class TestStageResearch:
         )
 
         # Should NOT raise - LM paths are ignored
-        result = stage_research(objective="test", lm=MagicMock())
+        result = stage_research(objective="test")
         assert len(result.research_docs) == 1
         assert result.research_docs[0].path == research_doc
 
@@ -188,7 +188,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        result = stage_research(objective="test", lm=MagicMock())
+        result = stage_research(objective="test")
 
         # Should have both docs from context
         assert len(result.research_docs) == 2
@@ -215,7 +215,7 @@ class TestStageResearch:
             task_status="needs_clarification",
         )
 
-        result = stage_research(objective="test", lm=MagicMock())
+        result = stage_research(objective="test")
 
         assert result.needs_implementation is True
         assert result.reason == "Agent requires user clarification"
@@ -230,6 +230,7 @@ class TestStageDesign:
         with patch("π.workflow.staged.get_ctx") as mock_get:
             ctx = MagicMock()
             ctx.extracted_paths = {}
+            ctx.lm = MagicMock()  # Mock LM for stage functions
             mock_get.return_value = ctx
             yield ctx
 
@@ -262,7 +263,6 @@ class TestStageDesign:
         result = stage_design(
             research=research,
             objective="add feature",
-            lm=MagicMock(),
         )
 
         assert result.summary == "Plan created"
@@ -290,7 +290,6 @@ class TestStageDesign:
         result = stage_design(
             research=research,
             objective="test",
-            lm=MagicMock(),
         )
 
         assert isinstance(result.plan_doc, PlanDocPath)
@@ -317,7 +316,6 @@ class TestStageDesign:
         stage_design(
             research=research,
             objective="implement",
-            lm=MagicMock(),
         )
 
         assert mock_context.current_stage == "design"
@@ -343,7 +341,6 @@ class TestStageDesign:
             stage_design(
                 research=research,
                 objective="test",
-                lm=MagicMock(),
             )
 
     def test_agent_receives_exactly_declared_fields(
@@ -369,7 +366,6 @@ class TestStageDesign:
         stage_design(
             research=research,
             objective="add feature",
-            lm=MagicMock(),
         )
 
         # Verify agent was called with exactly the declared signature fields
@@ -415,7 +411,6 @@ class TestStageDesign:
         stage_design(
             research=research,
             objective="add feature",
-            lm=MagicMock(),
         )
 
         call_kwargs = mock_react.call_args[1]
@@ -436,6 +431,7 @@ class TestStageExecute:
         with patch("π.workflow.staged.get_ctx") as mock_get:
             ctx = MagicMock()
             ctx.extracted_paths = {}
+            ctx.lm = MagicMock()  # Mock LM for stage functions
             mock_get.return_value = ctx
             yield ctx
 
@@ -478,7 +474,6 @@ class TestStageExecute:
         result = stage_execute(
             plan_doc=plan_path,
             objective="implement feature",
-            lm=MagicMock(),
         )
 
         expected = ["src/main.py", "src/utils.py", "tests/test_main.py"]
@@ -506,7 +501,6 @@ class TestStageExecute:
         result = stage_execute(
             plan_doc=plan_path,
             objective="test",
-            lm=MagicMock(),
         )
 
         assert result.commit_hash == "def5678"
@@ -533,7 +527,6 @@ class TestStageExecute:
         result = stage_execute(
             plan_doc=plan_path,
             objective="test",
-            lm=MagicMock(),
         )
 
         assert result.files_changed == []
@@ -562,7 +555,6 @@ class TestStageExecute:
         result = stage_execute(
             plan_doc=plan_path,
             objective="test",
-            lm=MagicMock(),
         )
 
         assert result.files_changed == []
@@ -589,7 +581,6 @@ class TestStageExecute:
         stage_execute(
             plan_doc=plan_path,
             objective="implement",
-            lm=MagicMock(),
         )
 
         assert mock_context.current_stage == "execute"

@@ -18,6 +18,7 @@ from π.workflow.types import PlanDocPath
 
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeAgentOptions
+    from dspy.clients.base_lm import BaseLM
 
     from π.support.aitl import QuestionAnswerer
 
@@ -87,6 +88,8 @@ class ExecutionContext:
     input_provider: QuestionAnswerer | None = None  # type: ignore[name-defined]
     # Codebase context (loaded once, shared across stages)
     codebase_context: str | None = None
+    # LM configuration (set by orchestrator, used by stage functions)
+    lm: BaseLM | None = None  # type: ignore[name-defined]
 
     def get_or_validate_plan_path(
         self,

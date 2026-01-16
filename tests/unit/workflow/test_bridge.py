@@ -580,8 +580,8 @@ class TestWorkflowToolDecorator:
 
         assert "<doc_path>" in result
         assert "2026-01-05-test.md" in result
-        assert "research" in mock_ctx.extracted_paths
-        paths = mock_ctx.extracted_paths["research"]
+        assert Command.RESEARCH_CODEBASE in mock_ctx.extracted_paths
+        paths = mock_ctx.extracted_paths[Command.RESEARCH_CODEBASE]
         assert any("2026-01-05-test.md" in p for p in paths)
 
     def test_validates_and_injects_plan_path(self, mock_ctx):
