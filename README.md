@@ -102,7 +102,13 @@ echo "Analyze the test coverage" | π
 
 | Flag | Description |
 |------|-------------|
-| `-v, --version` | Show version |
+| `-v, --verbose` | Enable debug logging (sets `PI_LM_DEBUG=1`) |
+| `--tier low\|med\|high` | Model tier: haiku / sonnet / opus (default: high) |
+| `--max-iters N` | ReAct iterations per stage (default: 5) |
+| `--max-retries N` | Stage retry attempts (default: 3) |
+| `--checkpoint-path PATH` | Custom checkpoint file path |
+| `--no-resume` | Ignore existing checkpoint, start fresh |
+| `--clear-checkpoint` | Delete checkpoint and exit |
 
 ## Environment Variables
 
@@ -110,6 +116,15 @@ echo "Analyze the test coverage" | π
 |----------|---------|-------------|
 | `CLIPROXY_API_BASE` | `http://localhost:8317` | DSPy LM endpoint |
 | `CLIPROXY_API_KEY` | — | API authentication key (required) |
+| `PI_LM_DEBUG` | `0` | Verbose LM logging (set by `--verbose`) |
+
+## Model Tiers
+
+| Tier | Model | Use Case |
+|------|-------|----------|
+| `low` | Haiku 4.5 | Fast iteration, simple tasks |
+| `med` | Sonnet 4.5 | Balanced speed/capability |
+| `high` | Opus 4.5 | Complex reasoning (default) |
 
 ## Project Structure
 
@@ -202,6 +217,8 @@ Specialized agents spawned in parallel for codebase exploration:
 - Working directory is wherever you launch the CLI
 - Logs stored in `.π/logs/` (7-day retention)
 - Research/plan documents archived after 5 days
+- Checkpoint saves after each stage to `.π/checkpoint.json`
+- Re-run same objective to resume; use `--no-resume` to start fresh
 
 ## Development
 
@@ -210,6 +227,7 @@ make install        # Install dependencies with uv
 make check          # Run all checks (fix, format, lint, test)
 make test           # Run tests with pytest
 make test-cov       # Tests with coverage report (fails if <80%)
+make test-no-api    # Run tests without API markers
 make quality-check  # Fix + format + lint only
 make mutate         # Run mutation testing
 make clean          # Remove caches and build artifacts
