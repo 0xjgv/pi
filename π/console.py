@@ -15,23 +15,3 @@ custom_theme = Theme({
 
 # Singleton console instance
 console = Console(theme=custom_theme)
-
-
-def print_heading(text: str) -> None:
-    """Print text with heading style."""
-    console.print(text, style="heading")
-
-
-def print_success(text: str) -> None:
-    """Print text with success style."""
-    console.print(f"[success]\u2713[/success] {text}")
-
-
-def print_error(text: str) -> None:
-    """Print text with error style."""
-    console.print(f"[error]\u2717[/error] {text}")
-
-
-def print_path(label: str, path: str) -> None:
-    """Print labeled path with muted style."""
-    console.print(f"[muted]{label}:[/muted] [path]{path}[/path]")

@@ -1,10 +1,10 @@
 """Core workflow execution module."""
 
+from π.core.enums import Command
 from π.state import get_current_status
 from π.workflow.checkpoint import CheckpointManager, CheckpointState, WorkflowStage
 from π.workflow.context import (
     COMMAND_MAP,
-    Command,
     ExecutionContext,
     build_command_map,
 )

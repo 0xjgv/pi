@@ -183,7 +183,8 @@ class AgentQuestionAnswerer:
         for doc_type, doc_paths in ctx.extracted_paths.items():
             if doc_paths:
                 paths_str = "\n".join(f"- {p}" for p in doc_paths)
-                parts.append(f"## {doc_type.title()} Documents\n{paths_str}")
+                label = doc_type.value.replace("_", " ").title()
+                parts.append(f"## {label} Documents\n{paths_str}")
 
         return parts
 
@@ -377,7 +378,7 @@ Guidelines:
 
 def create_ask_questions_tool(
     default_answerer: QuestionAnswerer | None = None,
-) -> Callable[[list[Question]], list[str]]:
+) -> Callable[[list[Question] | list[str] | list[dict]], list[str]]:
     """Create a DSPy-compatible ask_questions tool.
 
     Factory function that creates a callable that:
@@ -393,7 +394,7 @@ def create_ask_questions_tool(
     """
     fallback = default_answerer or AgentQuestionAnswerer()
 
-    def ask_questions(questions: list[Question]) -> list[str]:
+    def ask_questions(questions: list[Question] | list[str] | list[dict]) -> list[str]:
         """Ask questions and get answers from codebase-aware agent.
 
         Use this tool when:

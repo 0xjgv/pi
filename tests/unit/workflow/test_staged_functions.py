@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import dspy
 import pytest
 
-from π.workflow.context import Command
+from π.core.enums import DocType
 from π.workflow.staged import stage_design, stage_execute, stage_research
 from π.workflow.types import PlanDocPath, ResearchDocPath, ResearchResult
 
@@ -39,6 +39,7 @@ class TestStageResearch:
             ctx = MagicMock()
             ctx.extracted_paths = {}
             ctx.extracted_results = {}
+            ctx.lm = MagicMock()  # Mock LM for stage functions
             mock_get.return_value = ctx
             yield ctx
 
@@ -57,7 +58,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths and summaries (simulating tool calls)
-        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
+        mock_context.extracted_paths = {DocType.RESEARCH: {research_doc}}
         mock_context.extracted_results = {research_doc: "Found existing patterns"}
 
         # Configure mock agent response (LM output is now ignored for paths/summaries)
@@ -68,8 +69,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        mock_lm = MagicMock()
-        result = stage_research(objective="add logging", lm=mock_lm)
+        result = stage_research(objective="add logging")
 
         # Verify agent was called with objective
         mock_react.assert_called_once_with(objective="add logging")
@@ -83,7 +83,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths
-        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
+        mock_context.extracted_paths = {DocType.RESEARCH: {research_doc}}
         mock_context.extracted_results = {research_doc: "Feature already exists"}
 
         mock_react.return_value = dspy.Prediction(
@@ -93,7 +93,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        result = stage_research(objective="add logging", lm=MagicMock())
+        result = stage_research(objective="add logging")
 
         assert result.needs_implementation is False
         assert result.reason == "Agent determined no implementation needed"
@@ -103,7 +103,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths
-        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
+        mock_context.extracted_paths = {DocType.RESEARCH: {research_doc}}
         mock_context.extracted_results = {research_doc: "Research complete"}
 
         mock_react.return_value = dspy.Prediction(
@@ -113,7 +113,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        result = stage_research(objective="test", lm=MagicMock())
+        result = stage_research(objective="test")
 
         assert len(result.research_docs) == 1
         assert isinstance(result.research_docs[0], ResearchDocPath)
@@ -124,7 +124,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths
-        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
+        mock_context.extracted_paths = {DocType.RESEARCH: {research_doc}}
         mock_context.extracted_results = {research_doc: "Done"}
 
         mock_react.return_value = dspy.Prediction(
@@ -134,7 +134,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        stage_research(objective="implement feature", lm=MagicMock())
+        stage_research(objective="implement feature")
 
         assert mock_context.current_stage == "research"
         assert mock_context.objective == "implement feature"
@@ -144,7 +144,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with valid tracked path
-        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
+        mock_context.extracted_paths = {DocType.RESEARCH: {research_doc}}
         mock_context.extracted_results = {research_doc: "Valid research"}
 
         # LM returns invalid path - should be ignored
@@ -156,7 +156,7 @@ class TestStageResearch:
         )
 
         # Should NOT raise - LM paths are ignored
-        result = stage_research(objective="test", lm=MagicMock())
+        result = stage_research(objective="test")
         assert len(result.research_docs) == 1
         assert result.research_docs[0].path == research_doc
 
@@ -173,9 +173,7 @@ class TestStageResearch:
         research_doc2 = str(doc2)
 
         # Pre-populate context with both research docs (simulating tool calls)
-        mock_context.extracted_paths = {
-            Command.RESEARCH_CODEBASE: {research_doc, research_doc2}
-        }
+        mock_context.extracted_paths = {DocType.RESEARCH: {research_doc, research_doc2}}
         mock_context.extracted_results = {
             research_doc: "Primary research findings",
             research_doc2: "Second research findings",
@@ -188,7 +186,7 @@ class TestStageResearch:
             task_status="complete",
         )
 
-        result = stage_research(objective="test", lm=MagicMock())
+        result = stage_research(objective="test")
 
         # Should have both docs from context
         assert len(result.research_docs) == 2
@@ -205,7 +203,7 @@ class TestStageResearch:
         research_doc = _create_research_doc(tmp_path)
 
         # Set up context with tracked paths
-        mock_context.extracted_paths = {Command.RESEARCH_CODEBASE: {research_doc}}
+        mock_context.extracted_paths = {DocType.RESEARCH: {research_doc}}
         mock_context.extracted_results = {research_doc: "Partial findings"}
 
         mock_react.return_value = dspy.Prediction(
@@ -215,7 +213,7 @@ class TestStageResearch:
             task_status="needs_clarification",
         )
 
-        result = stage_research(objective="test", lm=MagicMock())
+        result = stage_research(objective="test")
 
         assert result.needs_implementation is True
         assert result.reason == "Agent requires user clarification"
@@ -230,6 +228,7 @@ class TestStageDesign:
         with patch("π.workflow.staged.get_ctx") as mock_get:
             ctx = MagicMock()
             ctx.extracted_paths = {}
+            ctx.lm = MagicMock()  # Mock LM for stage functions
             mock_get.return_value = ctx
             yield ctx
 
@@ -247,7 +246,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path (simulating tool call)
-        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
+        mock_context.extracted_paths = {DocType.PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
@@ -262,12 +261,11 @@ class TestStageDesign:
         result = stage_design(
             research=research,
             objective="add feature",
-            lm=MagicMock(),
         )
 
         assert result.summary == "Plan created"
         # Verify research path was stored in context for validation
-        assert research_doc in mock_context.extracted_paths[Command.RESEARCH_CODEBASE]
+        assert research_doc in mock_context.extracted_paths[DocType.RESEARCH]
 
     def test_extracts_plan_doc_path(self, tmp_path, mock_context, mock_react):
         """Should use tracked plan path from context, not LM output."""
@@ -275,7 +273,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path
-        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
+        mock_context.extracted_paths = {DocType.PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Design complete",
@@ -290,7 +288,6 @@ class TestStageDesign:
         result = stage_design(
             research=research,
             objective="test",
-            lm=MagicMock(),
         )
 
         assert isinstance(result.plan_doc, PlanDocPath)
@@ -302,7 +299,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path
-        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
+        mock_context.extracted_paths = {DocType.PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Done",
@@ -317,7 +314,6 @@ class TestStageDesign:
         stage_design(
             research=research,
             objective="implement",
-            lm=MagicMock(),
         )
 
         assert mock_context.current_stage == "design"
@@ -343,7 +339,6 @@ class TestStageDesign:
             stage_design(
                 research=research,
                 objective="test",
-                lm=MagicMock(),
             )
 
     def test_agent_receives_exactly_declared_fields(
@@ -354,7 +349,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path
-        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
+        mock_context.extracted_paths = {DocType.PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
@@ -369,7 +364,6 @@ class TestStageDesign:
         stage_design(
             research=research,
             objective="add feature",
-            lm=MagicMock(),
         )
 
         # Verify agent was called with exactly the declared signature fields
@@ -397,7 +391,7 @@ class TestStageDesign:
         plan_doc = _create_plan_doc(tmp_path)
 
         # Set up context with tracked plan path
-        mock_context.extracted_paths = {Command.CREATE_PLAN: {plan_doc}}
+        mock_context.extracted_paths = {DocType.PLAN: {plan_doc}}
 
         mock_react.return_value = dspy.Prediction(
             plan_summary="Plan created",
@@ -415,7 +409,6 @@ class TestStageDesign:
         stage_design(
             research=research,
             objective="add feature",
-            lm=MagicMock(),
         )
 
         call_kwargs = mock_react.call_args[1]
@@ -436,6 +429,7 @@ class TestStageExecute:
         with patch("π.workflow.staged.get_ctx") as mock_get:
             ctx = MagicMock()
             ctx.extracted_paths = {}
+            ctx.lm = MagicMock()  # Mock LM for stage functions
             mock_get.return_value = ctx
             yield ctx
 
@@ -478,7 +472,6 @@ class TestStageExecute:
         result = stage_execute(
             plan_doc=plan_path,
             objective="implement feature",
-            lm=MagicMock(),
         )
 
         expected = ["src/main.py", "src/utils.py", "tests/test_main.py"]
@@ -506,7 +499,6 @@ class TestStageExecute:
         result = stage_execute(
             plan_doc=plan_path,
             objective="test",
-            lm=MagicMock(),
         )
 
         assert result.commit_hash == "def5678"
@@ -533,7 +525,6 @@ class TestStageExecute:
         result = stage_execute(
             plan_doc=plan_path,
             objective="test",
-            lm=MagicMock(),
         )
 
         assert result.files_changed == []
@@ -562,7 +553,6 @@ class TestStageExecute:
         result = stage_execute(
             plan_doc=plan_path,
             objective="test",
-            lm=MagicMock(),
         )
 
         assert result.files_changed == []
@@ -589,8 +579,7 @@ class TestStageExecute:
         stage_execute(
             plan_doc=plan_path,
             objective="implement",
-            lm=MagicMock(),
         )
 
         assert mock_context.current_stage == "execute"
-        assert plan_doc in mock_context.extracted_paths[Command.IMPLEMENT_PLAN]
+        assert mock_context.implementing_plan == plan_doc

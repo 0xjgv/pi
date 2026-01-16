@@ -7,17 +7,19 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from dspy.clients.base_lm import BaseLM
 import dspy
 
-from π.core.constants import WORKFLOW
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+from π.core.enums import DocType, WorkflowStage
 from π.support.directory import get_project_root
 from π.workflow.callbacks import react_logging_callback
-from π.workflow.context import Command, get_ctx
+from π.workflow.context import get_ctx
 from π.workflow.module import DesignSignature, ExecuteSignature, ResearchSignature
 from π.workflow.tools import (
     ask_questions,
@@ -36,6 +38,20 @@ from π.workflow.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def require_lm[**P, R](func: Callable[P, R]) -> Callable[P, R]:
+    """Decorator ensuring ExecutionContext.lm is configured before stage runs."""
+
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        ctx = get_ctx()
+        if ctx.lm is None:
+            msg = "ExecutionContext.lm not configured"
+            raise ValueError(msg)
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 def with_codebase_context[T: dspy.Signature](
@@ -73,15 +89,12 @@ Strategy:
     return ContextAwareSignature  # type: ignore[return-value]
 
 
-def stage_research(
-    *, objective: str, lm: BaseLM, max_iters: int = WORKFLOW.max_iters
-) -> ResearchResult:
+@require_lm
+def stage_research(*, objective: str) -> ResearchResult:
     """Research stage using ReAct agent.
 
     Args:
         objective: The objective to research.
-        lm: DSPy language model for ReAct agent.
-        max_iters: Maximum ReAct iterations.
 
     Returns:
         ResearchResult with aggregated docs and summaries from all tool calls.
@@ -89,9 +102,10 @@ def stage_research(
     Raises:
         ValueError: If research did not produce a valid document.
     """
-    # Set context for ask_questions
     ctx = get_ctx()
-    ctx.current_stage = "research"
+    lm = ctx.lm
+
+    ctx.current_stage = WorkflowStage.RESEARCH
     ctx.objective = objective
 
     # Wrap signature with codebase context (from shared ExecutionContext)
@@ -100,14 +114,14 @@ def stage_research(
     agent = dspy.ReAct(
         tools=[research_codebase, ask_questions],
         signature=signature,
-        max_iters=max_iters,
+        max_iters=ctx.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
         result = agent(objective=objective)
 
     # Use only tracked paths from tool calls (ignore LM output - may hallucinate)
-    all_paths = ctx.extracted_paths.get(Command.RESEARCH_CODEBASE, set())
+    all_paths = ctx.extracted_paths.get(DocType.RESEARCH, set())
     all_results = ctx.extracted_results
 
     # Build list of validated ResearchDocPath objects
@@ -142,20 +156,17 @@ def stage_research(
     )
 
 
+@require_lm
 def stage_design(
     *,
     research: ResearchResult,
     objective: str,
-    lm: BaseLM,
-    max_iters: int = WORKFLOW.max_iters,
 ) -> DesignResult:
     """Design stage using ReAct agent.
 
     Args:
         research: Complete result from research stage with all docs and summaries.
         objective: The original objective.
-        lm: DSPy language model for ReAct agent.
-        max_iters: Maximum ReAct iterations.
 
     Returns:
         DesignResult from signature outputs.
@@ -163,14 +174,15 @@ def stage_design(
     Raises:
         ValueError: If design did not produce a valid plan document.
     """
-    # Set context for ask_questions (runtime state only)
     ctx = get_ctx()
-    ctx.current_stage = "design"
+    lm = ctx.lm
+
+    ctx.current_stage = WorkflowStage.DESIGN
     ctx.objective = objective
 
     # Keep extracted_paths for validate_plan_doc safety check
     research_paths = {doc.path for doc in research.research_docs}
-    ctx.extracted_paths[Command.RESEARCH_CODEBASE] = research_paths
+    ctx.extracted_paths[DocType.RESEARCH] = research_paths
 
     # Pass research data as lists directly to match DesignSignature
     research_doc_paths = list(research_paths)
@@ -186,7 +198,7 @@ def stage_design(
             ask_questions,
         ],
         signature=signature,
-        max_iters=max_iters,
+        max_iters=ctx.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
@@ -197,7 +209,7 @@ def stage_design(
         )
 
     # Use tracked plan path from tool calls (ignore LM output - may hallucinate)
-    plan_paths = ctx.extracted_paths.get(Command.CREATE_PLAN, set())
+    plan_paths = ctx.extracted_paths.get(DocType.PLAN, set())
     if not plan_paths:
         msg = "Design did not produce a plan document"
         raise ValueError(msg)
@@ -253,28 +265,26 @@ def _get_git_commit_hash(*, cwd: Path) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+@require_lm
 def stage_execute(
     *,
     plan_doc: PlanDocPath,
     objective: str,
-    lm: BaseLM,
-    max_iters: int = WORKFLOW.max_iters,
 ) -> ExecuteResult:
     """Execute stage using ReAct agent.
 
     Args:
         plan_doc: Validated PlanDocPath from design stage.
         objective: The original objective.
-        lm: DSPy language model for ReAct agent.
-        max_iters: Maximum ReAct iterations.
 
     Returns:
         ExecuteResult from signature outputs.
     """
-    # Set context for ask_questions
     ctx = get_ctx()
-    ctx.extracted_paths.setdefault(Command.IMPLEMENT_PLAN, set()).add(plan_doc.path)
-    ctx.current_stage = "execute"
+    lm = ctx.lm
+
+    ctx.current_stage = WorkflowStage.EXECUTE
+    ctx.implementing_plan = plan_doc.path
     ctx.objective = objective
 
     # Wrap signature with codebase context (from shared ExecutionContext)
@@ -287,7 +297,7 @@ def stage_execute(
             ask_questions,
         ],
         signature=signature,
-        max_iters=max_iters,
+        max_iters=ctx.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):

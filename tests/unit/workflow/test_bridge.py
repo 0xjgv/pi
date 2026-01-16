@@ -11,6 +11,7 @@ from claude_agent_sdk.types import (
 )
 
 from π.core import AgentExecutionError
+from π.core.enums import Command, DocType
 from π.workflow.bridge import (
     COMMAND_DOC_TYPE,
     SessionWriteTracker,
@@ -22,7 +23,7 @@ from π.workflow.bridge import (
     execute_claude_task,
     workflow_tool,
 )
-from π.workflow.context import Command, get_event_loop
+from π.workflow.context import get_event_loop
 
 
 class TestSessionWriteTracker:
@@ -547,7 +548,7 @@ class TestWorkflowToolDecorator:
         def success_tool(**kwargs):
             return ("Tool result", "new-session-123", tracker)
 
-        with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
+        with patch("π.workflow.bridge.timed_phase"):
             success_tool()
 
         assert mock_ctx.session_ids[Command.RESEARCH_CODEBASE] == "new-session-123"
@@ -573,15 +574,14 @@ class TestWorkflowToolDecorator:
 
         with (
             patch("π.workflow.bridge.timed_phase"),
-            patch("π.workflow.bridge.speak"),
             patch("π.workflow.bridge.get_project_root", return_value=tmp_path),
         ):
             result = research_tool()
 
         assert "<doc_path>" in result
         assert "2026-01-05-test.md" in result
-        assert "research" in mock_ctx.extracted_paths
-        paths = mock_ctx.extracted_paths["research"]
+        assert DocType.RESEARCH in mock_ctx.extracted_paths
+        paths = mock_ctx.extracted_paths[DocType.RESEARCH]
         assert any("2026-01-05-test.md" in p for p in paths)
 
     def test_validates_and_injects_plan_path(self, mock_ctx):
@@ -597,7 +597,7 @@ class TestWorkflowToolDecorator:
             captured_kwargs.update(kwargs)
             return ("Implemented", "sess-1", tracker)
 
-        with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
+        with patch("π.workflow.bridge.timed_phase"):
             implement_tool(plan_document_path="/path/to/plan.md")
 
         mock_ctx.get_or_validate_plan_path.assert_called_once_with("/path/to/plan.md")
@@ -616,7 +616,7 @@ class TestWorkflowToolDecorator:
             captured_kwargs.update(kwargs)
             return ("Implemented", "sess-1", tracker)
 
-        with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
+        with patch("π.workflow.bridge.timed_phase"):
             implement_tool(query="test")  # No plan_document_path
 
         mock_ctx.get_or_validate_plan_path.assert_called_once_with(None)
@@ -703,7 +703,6 @@ class TestSessionClearingOnDocExtraction:
 
         with (
             patch("π.workflow.bridge.timed_phase"),
-            patch("π.workflow.bridge.speak"),
             patch("π.workflow.bridge.get_project_root", return_value=tmp_path),
         ):
             research_tool()
@@ -723,10 +722,7 @@ class TestSessionClearingOnDocExtraction:
                 tracker,
             )
 
-        with (
-            patch("π.workflow.bridge.timed_phase"),
-            patch("π.workflow.bridge.speak"),
-        ):
+        with patch("π.workflow.bridge.timed_phase"):
             research_tool()
 
         # Session should still be stored (for clarification flow)
@@ -753,7 +749,6 @@ class TestSessionClearingOnDocExtraction:
 
         with (
             patch("π.workflow.bridge.timed_phase"),
-            patch("π.workflow.bridge.speak"),
             patch("π.workflow.bridge.get_project_root", return_value=tmp_path),
         ):
             research_tool()

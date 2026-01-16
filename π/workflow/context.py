@@ -10,14 +10,15 @@ import asyncio
 import logging
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from π.core.enums import Command, DocType
 from π.workflow.types import PlanDocPath
 
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeAgentOptions
+    from dspy.clients.base_lm import BaseLM
 
     from π.support.aitl import QuestionAnswerer
 
@@ -25,17 +26,6 @@ logger = logging.getLogger(__name__)
 
 # Project root for command discovery
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-
-
-class Command(StrEnum):
-    """Workflow stage commands."""
-
-    RESEARCH_CODEBASE = "research_codebase"
-    REVIEW_PLAN = "review_plan"
-    CREATE_PLAN = "create_plan"
-    IMPLEMENT_PLAN = "implement_plan"
-    COMMIT = "commit"
-    WRITE_CLAUDE_MD = "write_claude_md"  # Non-numbered command
 
 
 def build_command_map(
@@ -79,7 +69,7 @@ class ExecutionContext:
     agent_options: ClaudeAgentOptions | None = None
     event_loop: asyncio.AbstractEventLoop | None = None
     session_ids: dict[Command, str] = field(default_factory=dict)
-    extracted_paths: dict[Command, set[str]] = field(default_factory=dict)
+    extracted_paths: dict[DocType, set[str]] = field(default_factory=dict)
     extracted_results: dict[str, str] = field(default_factory=dict)
     # Auto-answer support fields
     objective: str | None = None
@@ -87,6 +77,12 @@ class ExecutionContext:
     input_provider: QuestionAnswerer | None = None  # type: ignore[name-defined]
     # Codebase context (loaded once, shared across stages)
     codebase_context: str | None = None
+    # LM configuration (set by orchestrator, used by stage functions)
+    lm: BaseLM | None = None  # type: ignore[name-defined]
+    # ReAct agent iteration limit (set by orchestrator)
+    max_iters: int = 5
+    # Plan being executed (separate from produced docs)
+    implementing_plan: str | None = None
 
     def get_or_validate_plan_path(
         self,
@@ -95,7 +91,7 @@ class ExecutionContext:
         """Get plan path from context or validate provided path.
 
         If no path provided, auto-selects the most recently modified plan
-        from extracted_paths["plan"]. Validates using PlanDocPath which
+        from extracted_paths[DocType.PLAN]. Validates using PlanDocPath which
         checks directory, extension, existence, and date prefix.
 
         Args:
@@ -108,7 +104,7 @@ class ExecutionContext:
             ValueError: If no plan available or path is invalid.
         """
         if plan_path is None:
-            plan_paths = self.extracted_paths.get("plan", set())
+            plan_paths = self.extracted_paths.get(DocType.PLAN, set())
             if not plan_paths:
                 raise ValueError("No plan document available. Run create_plan first.")
             # Select most recently modified plan

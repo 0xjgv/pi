@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 
 from π.cli.live_display import LiveArtifactDisplay
+from π.cli.speech import SpeechNotifier
 from π.console import console
 from π.core import Tier, get_lm
 from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
@@ -135,10 +136,13 @@ def run_workflow_mode(
     workflow = StagedWorkflow(lm=lm, checkpoint=checkpoint, max_iters=max_iters)
 
     display = LiveArtifactDisplay()
+    speech = SpeechNotifier()
     display.start()
+    speech.start()
     try:
         result = workflow(objective=objective, resume_state=resume_state)
     finally:
+        speech.stop()
         display.stop()
 
     # Build summary content

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from claude_agent_sdk.types import HookJSONOutput
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,7 +26,7 @@ class Block:
 type HookResult = PassThrough | Block
 
 
-def to_pre_hook_output(result: HookResult) -> dict:
+def to_pre_hook_output(result: HookResult) -> HookJSONOutput:
     """Convert HookResult to PreToolUse hook output format.
 
     Args:
@@ -42,7 +46,7 @@ def to_pre_hook_output(result: HookResult) -> dict:
     }
 
 
-def to_post_hook_output(result: HookResult, *, file_name: str = "") -> dict:
+def to_post_hook_output(result: HookResult, *, file_name: str = "") -> HookJSONOutput:
     """Convert HookResult to PostToolUse hook output format.
 
     Args:

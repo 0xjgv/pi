@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from π.core.enums import DocType
+
 # Suppress warnings from third-party libraries (litellm via dspy)
 # Note: RuntimeWarning about 'close_litellm_async_clients' may still appear
 # during interpreter shutdown - this is a known litellm issue and cannot be
@@ -465,8 +467,8 @@ def execution_context_with_docs(
     plan_doc.write_text("# Test Plan\n\nPlan content.")
 
     # Store paths
-    fresh_execution_context.extracted_paths["research"] = {str(research_doc)}
-    fresh_execution_context.extracted_paths["plan"] = {str(plan_doc)}
+    fresh_execution_context.extracted_paths[DocType.RESEARCH] = {str(research_doc)}
+    fresh_execution_context.extracted_paths[DocType.PLAN] = {str(plan_doc)}
     fresh_execution_context.extracted_results = {}
 
     return fresh_execution_context

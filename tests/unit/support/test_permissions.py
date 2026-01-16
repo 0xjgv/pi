@@ -62,8 +62,9 @@ class TestCanUseTool:
             )
 
         assert isinstance(result, PermissionResultAllow)
-        assert result.updated_input["questions"] == [question]
+        assert result.updated_input is not None
         assert result.updated_input["answers"] == {"What is your goal?": "Option A"}
+        assert result.updated_input["questions"] == [question]
 
     @pytest.mark.asyncio
     async def test_askuserquestion_displays_question_and_options(self):
@@ -157,6 +158,8 @@ class TestCanUseTool:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         assert result.updated_input["questions"] == []
         assert "" in result.updated_input["answers"]
         print_calls = str(mock_console.print.call_args_list)
@@ -199,6 +202,8 @@ class TestAskUserQuestionOptions:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         assert result.updated_input["answers"]["Pick one?"] == "Option B"
 
     @pytest.mark.asyncio
@@ -218,6 +223,8 @@ class TestAskUserQuestionOptions:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         assert result.updated_input["answers"]["What feature?"] == "Auth"
 
     @pytest.mark.asyncio
@@ -237,6 +244,8 @@ class TestAskUserQuestionOptions:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         answers = result.updated_input["answers"]
         assert answers["Select features?"] == "Option A, Option B"
 
@@ -260,6 +269,8 @@ class TestAskUserQuestionOptions:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         assert result.updated_input["answers"]["Pick one?"] == "Custom answer"
 
     @pytest.mark.asyncio
@@ -282,6 +293,8 @@ class TestAskUserQuestionOptions:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         assert result.updated_input["answers"]["First?"] == "Option A"
         assert result.updated_input["answers"]["Second?"] == "Option B"
 
@@ -307,6 +320,8 @@ class TestAskUserQuestionValidation:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         assert result.updated_input["answers"]["Test?"] == "[No response provided]"
 
     @pytest.mark.asyncio
@@ -327,6 +342,8 @@ class TestAskUserQuestionValidation:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         assert "[No response - timed out]" in result.updated_input["answers"]["Test?"]
 
     @pytest.mark.asyncio
@@ -349,4 +366,6 @@ class TestAskUserQuestionValidation:
                 context=MagicMock(),
             )
 
+        assert isinstance(result, PermissionResultAllow)
+        assert result.updated_input is not None
         assert result.updated_input["answers"]["Pick?"] == "[Invalid selection]"
