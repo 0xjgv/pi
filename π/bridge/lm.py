@@ -103,8 +103,8 @@ class ClaudeCodeLM(BaseLM):
         """Async query to Claude Code."""
         parts: list[str] = []
         async for message in query(prompt=prompt, options=self._options):
-            if hasattr(message, "content"):
-                for block in message.content:
-                    if hasattr(block, "text"):
-                        parts.append(block.text)
+            if (content := getattr(message, "content", None)) is not None:
+                for block in content:
+                    if (text := getattr(block, "text", None)) is not None:
+                        parts.append(text)
         return "".join(parts)
