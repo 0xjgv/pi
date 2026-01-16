@@ -1,6 +1,7 @@
 """CLI entry point for the π workflow agent."""
 
 import argparse
+import asyncio
 import logging
 import os
 import sys
@@ -13,11 +14,13 @@ from rich.prompt import Confirm
 
 from π.cli.live_display import LiveArtifactDisplay
 from π.cli.speech import SpeechNotifier
+from π.config import WORKFLOW_ENGINE
 from π.console import console
 from π.core import Tier, get_lm
 from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
 from π.utils import prevent_sleep, setup_logging, speak
 from π.workflow import CheckpointManager, CheckpointState, StagedWorkflow
+from π.workflow_sdk import QueueOrchestrator, WorkflowResult
 
 logger = logging.getLogger(__name__)
 VERSION = get_version("pi-rpi")
@@ -112,26 +115,55 @@ def _check_resume(
     return None
 
 
-def run_workflow_mode(
+def _run_queue_workflow(objective: str) -> None:
+    """Execute objective using new queue-based SDK workflow."""
+
+    async def _async_run() -> WorkflowResult:
+        orchestrator = QueueOrchestrator(objective=objective)
+        return await orchestrator.run()
+
+    display = LiveArtifactDisplay()
+    speech = SpeechNotifier()
+    display.start()
+    speech.start()
+    try:
+        result = asyncio.run(_async_run())
+    finally:
+        speech.stop()
+        display.stop()
+
+    # Build summary content
+    lines = [f"[success]Status:[/success] {result.status}"]
+    if result.research.reason:
+        lines.append(f"[muted]Reason:[/muted] {result.research.reason}")
+    if result.research.research_docs:
+        research_path = result.research.research_docs[0]
+        lines.append(f"[muted]Research:[/muted] [path]{research_path}[/]")
+    if result.design:
+        lines.append(f"[muted]Plan:[/muted] [path]{result.design.plan_path}[/]")
+    if result.execute and result.execute.files_changed:
+        lines.append(f"[muted]Files:[/muted] {', '.join(result.execute.files_changed)}")
+    if result.execute and result.execute.commit_hash:
+        lines.append(f"[muted]Commit:[/muted] [path]{result.execute.commit_hash}[/]")
+
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="[success]Workflow Complete[/success]",
+            border_style="green",
+        )
+    )
+
+
+def _run_dspy_workflow(
     objective: str,
     *,
-    tier: Tier = Tier.HIGH,
-    max_iters: int = 5,
-    max_retries: int = 3,
-    checkpoint_path: Path | None = None,
-    no_resume: bool = False,
+    tier: Tier,
+    max_iters: int,
+    checkpoint: CheckpointManager,
+    resume_state: CheckpointState | None,
 ) -> None:
-    """Execute objective using StagedWorkflow pipeline."""
-    checkpoint = CheckpointManager(
-        checkpoint_path=checkpoint_path,
-        max_retries=max_retries,
-    )
-    resume_state = None
-
-    # Check for existing checkpoint
-    if not no_resume and checkpoint.has_checkpoint():
-        resume_state = _check_resume(checkpoint, objective)
-
+    """Execute objective using DSPy StagedWorkflow pipeline."""
     lm = get_lm(tier)
     workflow = StagedWorkflow(lm=lm, checkpoint=checkpoint, max_iters=max_iters)
 
@@ -164,6 +196,42 @@ def run_workflow_mode(
             title="[success]Workflow Complete[/success]",
             border_style="green",
         )
+    )
+
+
+def run_workflow_mode(
+    objective: str,
+    *,
+    tier: Tier = Tier.HIGH,
+    max_iters: int = 5,
+    max_retries: int = 3,
+    checkpoint_path: Path | None = None,
+    no_resume: bool = False,
+) -> None:
+    """Execute objective using configured workflow engine."""
+    # Use queue-based workflow if enabled
+    if WORKFLOW_ENGINE == "queue":
+        logger.info("Using queue-based workflow engine")
+        _run_queue_workflow(objective)
+        return
+
+    # Default: DSPy workflow
+    checkpoint = CheckpointManager(
+        checkpoint_path=checkpoint_path,
+        max_retries=max_retries,
+    )
+    resume_state = None
+
+    # Check for existing checkpoint
+    if not no_resume and checkpoint.has_checkpoint():
+        resume_state = _check_resume(checkpoint, objective)
+
+    _run_dspy_workflow(
+        objective,
+        tier=tier,
+        max_iters=max_iters,
+        checkpoint=checkpoint,
+        resume_state=resume_state,
     )
 
 

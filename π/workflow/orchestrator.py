@@ -46,11 +46,11 @@ def _timed_stage(stage: WorkflowStage, index: int, total: int = 3) -> Iterator[N
     """Context manager that emits stage_start/stage_end events with timing."""
     emit_artifact_event(
         ArtifactEvent(
-            event_type="stage_start",
+            phase_count=_STAGE_PHASE_COUNTS.get(stage),
             stage=stage.value.title(),
+            event_type="stage_start",
             stage_index=index,
             stage_total=total,
-            phase_count=_STAGE_PHASE_COUNTS.get(stage),
         )
     )
     start = time.monotonic()
