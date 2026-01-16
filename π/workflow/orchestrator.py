@@ -154,12 +154,14 @@ class StagedWorkflow(dspy.Module):
         lm: BaseLM,
         *,
         checkpoint: CheckpointManager | None = None,
+        max_iters: int = WORKFLOW.max_iters,
     ) -> None:
         super().__init__()
         self.checkpoint = checkpoint or CheckpointManager()
         self.ctx = get_ctx()
         # Store LM in context for stage functions
         self.ctx.lm = lm
+        self.ctx.max_iters = max_iters
 
     def forward(
         self,

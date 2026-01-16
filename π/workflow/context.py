@@ -79,6 +79,8 @@ class ExecutionContext:
     codebase_context: str | None = None
     # LM configuration (set by orchestrator, used by stage functions)
     lm: BaseLM | None = None  # type: ignore[name-defined]
+    # ReAct agent iteration limit (set by orchestrator)
+    max_iters: int = 5
     # Plan being executed (separate from produced docs)
     implementing_plan: str | None = None
 

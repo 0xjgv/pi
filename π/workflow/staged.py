@@ -11,7 +11,6 @@ from pathlib import Path
 
 import dspy
 
-from π.core.constants import WORKFLOW
 from π.core.enums import DocType, WorkflowStage
 from π.support.directory import get_project_root
 from π.workflow.callbacks import react_logging_callback
@@ -98,7 +97,7 @@ def stage_research(*, objective: str) -> ResearchResult:
     agent = dspy.ReAct(
         tools=[research_codebase, ask_questions],
         signature=signature,
-        max_iters=WORKFLOW.max_iters,
+        max_iters=ctx.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
@@ -184,7 +183,7 @@ def stage_design(
             ask_questions,
         ],
         signature=signature,
-        max_iters=WORKFLOW.max_iters,
+        max_iters=ctx.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
@@ -285,7 +284,7 @@ def stage_execute(
             ask_questions,
         ],
         signature=signature,
-        max_iters=WORKFLOW.max_iters,
+        max_iters=ctx.max_iters,
     )
 
     with dspy.context(lm=lm, callbacks=[react_logging_callback]):
