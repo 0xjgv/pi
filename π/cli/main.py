@@ -122,8 +122,8 @@ def run_workflow_mode(
 ) -> None:
     """Execute objective using StagedWorkflow pipeline."""
     checkpoint = CheckpointManager(
-        max_retries=max_retries,
         checkpoint_path=checkpoint_path,
+        max_retries=max_retries,
     )
     resume_state = None
 

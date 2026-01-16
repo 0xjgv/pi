@@ -8,7 +8,10 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from dspy.clients.base_lm import BaseLM
 import dspy
 
 from π.core.constants import WORKFLOW
@@ -71,7 +74,7 @@ Strategy:
 
 
 def stage_research(
-    *, objective: str, lm: dspy.LM, max_iters: int = WORKFLOW.max_iters
+    *, objective: str, lm: BaseLM, max_iters: int = WORKFLOW.max_iters
 ) -> ResearchResult:
     """Research stage using ReAct agent.
 
@@ -143,7 +146,7 @@ def stage_design(
     *,
     research: ResearchResult,
     objective: str,
-    lm: dspy.LM,
+    lm: BaseLM,
     max_iters: int = WORKFLOW.max_iters,
 ) -> DesignResult:
     """Design stage using ReAct agent.
@@ -254,7 +257,7 @@ def stage_execute(
     *,
     plan_doc: PlanDocPath,
     objective: str,
-    lm: dspy.LM,
+    lm: BaseLM,
     max_iters: int = WORKFLOW.max_iters,
 ) -> ExecuteResult:
     """Execute stage using ReAct agent.

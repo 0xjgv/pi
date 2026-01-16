@@ -29,6 +29,8 @@ from π.workflow.types import DesignResult, ExecuteResult, ResearchResult
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
+    from dspy.clients.base_lm import BaseLM
+
 logger = logging.getLogger(__name__)
 
 # Phase counts per stage for progress display
@@ -149,15 +151,16 @@ class StagedWorkflow(dspy.Module):
 
     def __init__(
         self,
-        lm: dspy.LM,
+        lm: BaseLM,
         *,
         checkpoint: CheckpointManager | None = None,
         max_iters: int = 5,
     ) -> None:
         super().__init__()
-        self.lm = lm
         self.checkpoint = checkpoint or CheckpointManager()
         self.max_iters = max_iters
+        self.ctx = get_ctx()
+        self.lm = lm
 
     def forward(
         self,
@@ -175,23 +178,22 @@ class StagedWorkflow(dspy.Module):
             dspy.Prediction with workflow results.
         """
         # Configure explicit agent-based question answering
-        ctx = get_ctx()
-        ctx.input_provider = AgentQuestionAnswerer()
+        self.ctx.input_provider = AgentQuestionAnswerer()
 
         # Load codebase context ONCE for all stages
-        if ctx.codebase_context is None:
-            ctx.codebase_context = load_codebase_context()
+        if self.ctx.codebase_context is None:
+            self.ctx.codebase_context = load_codebase_context()
 
         # Determine starting point
         if resume_state:
+            start_stage = self.checkpoint.get_resume_stage()
             research = resume_state.research_result
             design = resume_state.design_result
-            start_stage = self.checkpoint.get_resume_stage()
             logger.info("Resuming from checkpoint: next_stage=%s", start_stage)
         else:
+            start_stage = WorkflowStage.RESEARCH
             research = None
             design = None
-            start_stage = WorkflowStage.RESEARCH
 
         # Stage 1: Research (triage gate)
         if start_stage == WorkflowStage.RESEARCH:
@@ -200,7 +202,9 @@ class StagedWorkflow(dspy.Module):
                 try:
                     research = _run_with_retry(
                         stage_fn=lambda: stage_research(
-                            objective=objective, lm=self.lm, max_iters=self.max_iters
+                            max_iters=self.max_iters,
+                            objective=objective,
+                            lm=self.lm,
                         ),
                         stage=WorkflowStage.RESEARCH,
                         checkpoint=self.checkpoint,
