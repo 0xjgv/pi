@@ -548,7 +548,7 @@ class TestWorkflowToolDecorator:
         def success_tool(**kwargs):
             return ("Tool result", "new-session-123", tracker)
 
-        with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
+        with patch("π.workflow.bridge.timed_phase"):
             success_tool()
 
         assert mock_ctx.session_ids[Command.RESEARCH_CODEBASE] == "new-session-123"
@@ -574,7 +574,6 @@ class TestWorkflowToolDecorator:
 
         with (
             patch("π.workflow.bridge.timed_phase"),
-            patch("π.workflow.bridge.speak"),
             patch("π.workflow.bridge.get_project_root", return_value=tmp_path),
         ):
             result = research_tool()
@@ -598,7 +597,7 @@ class TestWorkflowToolDecorator:
             captured_kwargs.update(kwargs)
             return ("Implemented", "sess-1", tracker)
 
-        with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
+        with patch("π.workflow.bridge.timed_phase"):
             implement_tool(plan_document_path="/path/to/plan.md")
 
         mock_ctx.get_or_validate_plan_path.assert_called_once_with("/path/to/plan.md")
@@ -617,7 +616,7 @@ class TestWorkflowToolDecorator:
             captured_kwargs.update(kwargs)
             return ("Implemented", "sess-1", tracker)
 
-        with patch("π.workflow.bridge.timed_phase"), patch("π.workflow.bridge.speak"):
+        with patch("π.workflow.bridge.timed_phase"):
             implement_tool(query="test")  # No plan_document_path
 
         mock_ctx.get_or_validate_plan_path.assert_called_once_with(None)
@@ -704,7 +703,6 @@ class TestSessionClearingOnDocExtraction:
 
         with (
             patch("π.workflow.bridge.timed_phase"),
-            patch("π.workflow.bridge.speak"),
             patch("π.workflow.bridge.get_project_root", return_value=tmp_path),
         ):
             research_tool()
@@ -724,10 +722,7 @@ class TestSessionClearingOnDocExtraction:
                 tracker,
             )
 
-        with (
-            patch("π.workflow.bridge.timed_phase"),
-            patch("π.workflow.bridge.speak"),
-        ):
+        with patch("π.workflow.bridge.timed_phase"):
             research_tool()
 
         # Session should still be stored (for clarification flow)
@@ -754,7 +749,6 @@ class TestSessionClearingOnDocExtraction:
 
         with (
             patch("π.workflow.bridge.timed_phase"),
-            patch("π.workflow.bridge.speak"),
             patch("π.workflow.bridge.get_project_root", return_value=tmp_path),
         ):
             research_tool()

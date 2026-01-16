@@ -34,7 +34,6 @@ from π.state import (
     set_current_status,
 )
 from π.support.directory import get_project_root
-from π.utils import speak
 from π.workflow.context import (
     COMMAND_MAP,
     get_ctx,
@@ -538,7 +537,6 @@ def workflow_tool(
                     )
 
                 session.session_ids[command] = last_session_id
-                speak(f"{phase_name.lower()} complete")
 
                 if doc_type:
                     tracked_paths = tracker.get_paths()
