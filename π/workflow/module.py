@@ -35,7 +35,13 @@ class ResearchSignature(dspy.Signature):
 class DesignSignature(dspy.Signature):
     """Design stage: create and review an implementation plan.
 
-    Call create_plan and review_plan tools to complete this stage.
+    Workflow:
+    1. Call create_plan ONCE to produce initial plan
+    2. Call review_plan to get feedback
+    3. If review has issues, call iterate_plan with the review feedback
+    4. Repeat review -> iterate until approved
+
+    Never call create_plan twice. Use iterate_plan to address review feedback.
     """
 
     objective: str = dspy.InputField(desc="The clarified objective to design for")
@@ -49,6 +55,9 @@ class DesignSignature(dspy.Signature):
     stage: str = dspy.OutputField(desc="Always 'design'")
     plan_doc_path: str = dspy.OutputField(desc="Path to the final plan document")
     plan_summary: str = dspy.OutputField(desc="Summary of the design and iterations")
+    iterations: int = dspy.OutputField(
+        desc="Number of review->iterate cycles (0 if review passed immediately)"
+    )
 
 
 class ExecuteSignature(dspy.Signature):

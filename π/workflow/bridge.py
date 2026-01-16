@@ -48,6 +48,7 @@ COMMAND_DOC_TYPE: dict[Command, DocType] = {
     Command.RESEARCH_CODEBASE: DocType.RESEARCH,
     Command.CREATE_PLAN: DocType.PLAN,
     Command.REVIEW_PLAN: DocType.PLAN,
+    Command.ITERATE_PLAN: DocType.PLAN,
 }
 
 logger = logging.getLogger(__name__)
@@ -234,7 +235,11 @@ _FULL_LOG_TOOLS = frozenset({"Skill", "Task", "Write", "Edit"})
 _MAX_PAYLOAD_SIZE = 10 * 1024
 
 # Commands that involve planning (not execution)
-_PLANNING_COMMANDS = frozenset({Command.CREATE_PLAN, Command.REVIEW_PLAN})
+_PLANNING_COMMANDS = frozenset({
+    Command.CREATE_PLAN,
+    Command.REVIEW_PLAN,
+    Command.ITERATE_PLAN,
+})
 
 
 @dataclass
