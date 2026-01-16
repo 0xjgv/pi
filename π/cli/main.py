@@ -71,10 +71,6 @@ def _create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# Load environment variables
-load_dotenv()
-
-
 def _check_resume(
     checkpoint: CheckpointManager,
     objective: str,
@@ -170,6 +166,7 @@ def run_workflow_mode(
 @prevent_sleep
 def main(argv: list[str] | None = None) -> None:
     """Run the π agent with the given OBJECTIVE."""
+    load_dotenv()
     parser = _create_parser()
     args = parser.parse_args(argv)
 
@@ -212,8 +209,6 @@ def main(argv: list[str] | None = None) -> None:
     log_path = setup_logging(logs_dir, verbose=args.verbose)
 
     logger.info("Objective: %s", objective)
-
-    console.print(f"[muted]Logging to:[/muted] [path]{log_path}[/path]")
 
     run_workflow_mode(
         objective,

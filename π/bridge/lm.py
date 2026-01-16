@@ -1,11 +1,17 @@
 """Direct Claude Code LM for DSPy - no HTTP required."""
 
 import asyncio
+import logging
+from functools import lru_cache
 from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 from dspy.clients.base_lm import BaseLM
 from litellm.types.utils import Choices, Message, ModelResponse
+
+from π.core.enums import Tier
+
+logger = logging.getLogger(__name__)
 
 SUPPORTED_MODELS = [
     "claude-haiku-4-5-20251001",
@@ -13,6 +19,28 @@ SUPPORTED_MODELS = [
     "claude-opus-4-5-20251101",
 ]
 DEFAULT_MODEL = "claude-opus-4-5-20251101"
+
+# Tier → Model mapping
+TIER_TO_MODEL: dict[Tier, str] = {
+    Tier.LOW: "claude-haiku-4-5-20251001",
+    Tier.MED: "claude-sonnet-4-5-20250929",
+    Tier.HIGH: "claude-opus-4-5-20251101",
+}
+
+
+@lru_cache(maxsize=3)
+def get_lm(tier: Tier) -> "ClaudeCodeLM":
+    """Get cached ClaudeCodeLM instance for tier.
+
+    Args:
+        tier: Model tier (low, med, high)
+
+    Returns:
+        Configured ClaudeCodeLM instance
+    """
+    model = TIER_TO_MODEL[tier]
+    logger.debug("Creating ClaudeCodeLM: tier=%s → model=%s", tier, model)
+    return ClaudeCodeLM(model=model)
 
 
 class ClaudeCodeLM(BaseLM):
@@ -43,10 +71,8 @@ class ClaudeCodeLM(BaseLM):
     ) -> ModelResponse:
         """Sync completion via Claude Code SDK."""
         formatted = self._format_messages(messages) if messages else prompt or ""
-        # We could intercept the messages that dspy here
         loop = self._get_event_loop()
         response_text = loop.run_until_complete(self._query(formatted))
-        # We could also intercept the response text here
         return ModelResponse(
             id=f"claude-code-{id(self)}",
             model=self._model,
@@ -75,10 +101,10 @@ class ClaudeCodeLM(BaseLM):
 
     async def _query(self, prompt: str) -> str:
         """Async query to Claude Code."""
-        response_text = ""
+        parts: list[str] = []
         async for message in query(prompt=prompt, options=self._options):
             if hasattr(message, "content"):
                 for block in message.content:
                     if hasattr(block, "text"):
-                        response_text += block.text
-        return response_text
+                        parts.append(block.text)
+        return "".join(parts)

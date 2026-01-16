@@ -7,13 +7,12 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
 import dspy
 
-from π.core import MAX_ITERS
-from π.core.constants import DOC_SYNC
+from π.core.constants import DOC_SYNC, WORKFLOW
 from π.support.directory import get_project_root
 from π.workflow.tools import ask_questions, write_claude_md
 
@@ -81,17 +80,7 @@ class DocSyncState:
         """Persist state to file."""
         state_path = get_project_root() / DOC_SYNC_STATE_FILE
         state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(
-            json.dumps(
-                {
-                    "last_sync_commit": self.last_sync_commit,
-                    "last_sync_timestamp": self.last_sync_timestamp,
-                    "files_changed_since_sync": self.files_changed_since_sync,
-                    "files_threshold": self.files_threshold,
-                },
-                indent=2,
-            )
-        )
+        state_path.write_text(json.dumps(asdict(self), indent=2))
 
     def mark_synced(self, commit_hash: str) -> None:
         """Mark current state as synced."""
@@ -129,7 +118,7 @@ def stage_doc_sync(
     agent = dspy.ReAct(
         tools=[write_claude_md, ask_questions],
         signature=DocSyncSignature,
-        max_iters=MAX_ITERS,
+        max_iters=WORKFLOW.max_iters,
     )
 
     with dspy.context(lm=lm):

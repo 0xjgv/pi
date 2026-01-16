@@ -1,7 +1,5 @@
 """Environment variable validation."""
 
-from __future__ import annotations
-
 
 def validate_required_env() -> None:
     """Validate required environment variables at startup.

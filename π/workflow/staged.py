@@ -11,7 +11,7 @@ from pathlib import Path
 
 import dspy
 
-from π.core import MAX_ITERS
+from π.core.constants import WORKFLOW
 from π.support.directory import get_project_root
 from π.workflow.callbacks import react_logging_callback
 from π.workflow.context import get_ctx
@@ -71,7 +71,7 @@ Strategy:
 
 
 def stage_research(
-    *, objective: str, lm: dspy.LM, max_iters: int = MAX_ITERS
+    *, objective: str, lm: dspy.LM, max_iters: int = WORKFLOW.max_iters
 ) -> ResearchResult:
     """Research stage using ReAct agent.
 
@@ -144,7 +144,7 @@ def stage_design(
     research: ResearchResult,
     objective: str,
     lm: dspy.LM,
-    max_iters: int = MAX_ITERS,
+    max_iters: int = WORKFLOW.max_iters,
 ) -> DesignResult:
     """Design stage using ReAct agent.
 
@@ -255,7 +255,7 @@ def stage_execute(
     plan_doc: PlanDocPath,
     objective: str,
     lm: dspy.LM,
-    max_iters: int = MAX_ITERS,
+    max_iters: int = WORKFLOW.max_iters,
 ) -> ExecuteResult:
     """Execute stage using ReAct agent.
 

@@ -43,7 +43,7 @@ class TestGetLm:
 
     def test_returns_cached_lm(self):
         """Should return cached LM instances."""
-        with patch("π.core.models.ClaudeCodeLM") as mock_claude_code_lm:
+        with patch("π.bridge.lm.ClaudeCodeLM") as mock_claude_code_lm:
             mock_claude_code_lm.return_value = MagicMock()
 
             lm1 = get_lm(Tier.LOW)
@@ -54,7 +54,7 @@ class TestGetLm:
 
     def test_different_tiers_return_different_lms(self):
         """Different tiers should return different LM instances."""
-        with patch("π.core.models.ClaudeCodeLM") as mock_claude_code_lm:
+        with patch("π.bridge.lm.ClaudeCodeLM") as mock_claude_code_lm:
             mock_claude_code_lm.side_effect = [MagicMock(), MagicMock()]
 
             lm_low = get_lm(Tier.LOW)

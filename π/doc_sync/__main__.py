@@ -18,13 +18,10 @@ from π.support.directory import get_project_root
 logger = logging.getLogger(__name__)
 
 
-def get_git_diff(since_commit: str | None = None) -> str:
-    """Get git diff since commit or since last sync."""
-    cmd = ["git", "diff", "--stat"]
-    if since_commit:
-        cmd.append(f"{since_commit}..HEAD")
+def _run_git(*args: str) -> str:
+    """Run git command and return stdout."""
     result = subprocess.run(
-        cmd,
+        ["git", *args],
         capture_output=True,
         text=True,
         check=False,
@@ -33,28 +30,22 @@ def get_git_diff(since_commit: str | None = None) -> str:
     return result.stdout
 
 
+def get_git_diff(since_commit: str | None = None) -> str:
+    """Get git diff since commit or since last sync."""
+    if since_commit:
+        return _run_git("diff", "--stat", f"{since_commit}..HEAD")
+    return _run_git("diff", "--stat")
+
+
 def get_current_commit() -> str:
     """Get current HEAD commit hash."""
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=get_project_root(),
-    )
-    return result.stdout.strip()
+    return _run_git("rev-parse", "HEAD").strip()
 
 
 def count_files_in_commit() -> int:
     """Count files changed in the most recent commit."""
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=get_project_root(),
-    )
-    return len([f for f in result.stdout.strip().split("\n") if f])
+    output = _run_git("diff", "--name-only", "HEAD~1", "HEAD")
+    return len(list(filter(None, output.strip().split("\n"))))
 
 
 def read_claude_md() -> str:

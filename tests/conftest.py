@@ -310,7 +310,7 @@ def mock_lm(
     Note: Depends on clear_lm_cache to ensure LRU cache is cleared before
     patching. This prevents test pollution from cached LM instances.
     """
-    with patch("π.core.models.ClaudeCodeLM") as mock_class:
+    with patch("π.bridge.lm.ClaudeCodeLM") as mock_class:
         mock_instance = MagicMock()
         mock_instance.return_value = [mock_lm_response["output"]]
         mock_instance.inspect_history.return_value = []
