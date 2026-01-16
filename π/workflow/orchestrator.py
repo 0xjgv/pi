@@ -186,7 +186,7 @@ class StagedWorkflow(dspy.Module):
 
         # Determine starting point
         if resume_state:
-            start_stage = self.checkpoint.get_resume_stage()
+            start_stage = self.checkpoint.get_resume_stage() or WorkflowStage.RESEARCH
             research = resume_state.research_result
             design = resume_state.design_result
             logger.info("Resuming from checkpoint: next_stage=%s", start_stage)
