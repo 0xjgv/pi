@@ -4,7 +4,9 @@ Core enums, models, and LM factory are in π.core (leaf module).
 This module re-exports them for backwards compatibility.
 """
 
+import os
 from pathlib import Path
+from typing import Literal
 
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
@@ -19,6 +21,10 @@ from π.core.constants import WORKFLOW
 from π.hooks import check_bash_command, check_file_format
 from π.support import can_use_tool
 from π.support.directory import get_project_root
+
+# Workflow engine selection (dspy = existing DSPy ReAct, queue = new SDK queue-based)
+WorkflowEngine = Literal["dspy", "queue"]
+WORKFLOW_ENGINE: WorkflowEngine = os.environ.get("PI_WORKFLOW_ENGINE", "dspy")  # type: ignore[assignment]
 
 # https://code.claude.com/docs/en/settings#tools-available-to-claude
 AVAILABLE_TOOLS = [
@@ -72,7 +78,9 @@ __all__ = [
     "STAGE_TIERS",
     "TIER_TO_MODEL",
     "WORKFLOW",
+    "WORKFLOW_ENGINE",
     "Tier",
+    "WorkflowEngine",
     "WorkflowStage",
     "get_agent_options",
     "get_lm",
