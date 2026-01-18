@@ -131,7 +131,6 @@ class LoggingObserver:
         entry = f"[{timestamp}] {event}\n"
         if details:
             entry += f"{details}\n"
-        entry += "\n"
 
         with self.log_path.open("a") as f:
             f.write(entry)

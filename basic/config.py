@@ -139,7 +139,6 @@ def _get_base_options(*, cwd: Path | None = None) -> ClaudeAgentOptions:
             ],
         },
         permission_mode="acceptEdits",
-        setting_sources=["project"],
         can_use_tool=can_use_tool,
         cwd=cwd,
     )
