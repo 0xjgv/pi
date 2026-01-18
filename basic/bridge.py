@@ -7,6 +7,7 @@ No context access - all inputs are explicit parameters.
 from __future__ import annotations
 
 import logging
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -47,6 +48,48 @@ _PLANNING_COMMANDS = frozenset({
 _cached_options: ClaudeAgentOptions | None = None
 
 
+def get_git_commit_hash(*, cwd: Path | None = None) -> str | None:
+    """Get the latest commit hash from git.
+
+    Args:
+        cwd: Working directory for git command.
+
+    Returns:
+        Short commit hash or None if git fails.
+    """
+    cwd = cwd or get_project_root()
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        check=False,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def get_git_changed_files(*, cwd: Path | None = None) -> list[str]:
+    """Get files changed in the latest commit.
+
+    Args:
+        cwd: Working directory for git command.
+
+    Returns:
+        List of changed file paths.
+    """
+    cwd = cwd or get_project_root()
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "HEAD~1"],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    return [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
+
+
 def _get_default_options() -> ClaudeAgentOptions:
     """Get or create cached options for stage agents.
 
@@ -64,7 +107,8 @@ class WriteTracker:
     """Tracks file writes during a single SDK session."""
 
     command: Command
-    writes: list[str] = field(default_factory=list)
+    doc_writes: list[str] = field(default_factory=list)
+    all_writes: list[str] = field(default_factory=list)
 
     @property
     def doc_type(self) -> DocType | None:
@@ -73,17 +117,22 @@ class WriteTracker:
 
     def on_tool_use(self, file_path: str) -> None:
         """Record write from ToolUseBlock."""
+        self.all_writes.append(file_path)
         if self.doc_type and "thoughts/shared/" in file_path:
-            self.writes.append(file_path)
+            self.doc_writes.append(file_path)
 
-    def get_path(self) -> str | None:
-        """Get the last tracked path that exists on disk."""
-        for p in reversed(self.writes):
+    def get_doc_path(self) -> str | None:
+        """Get the last tracked doc path that exists on disk."""
+        for p in reversed(self.doc_writes):
             path = Path(p)
             full_path = path if path.is_absolute() else get_project_root() / p
             if full_path.exists():
                 return str(full_path)
         return None
+
+    def get_files_changed(self) -> list[str]:
+        """Get all files that were written during this session."""
+        return list(self.all_writes)
 
 
 def _process_message(
@@ -113,7 +162,7 @@ async def run_claude_session(
     document: Path | None = None,
     tool_command: Command,
     query: str,
-) -> tuple[str, str, str | None]:
+) -> tuple[str, str, str | None, list[str]]:
     """Execute a Claude agent session asynchronously.
 
     Pure execution function - no context access. All inputs are explicit.
@@ -127,7 +176,7 @@ async def run_claude_session(
         options: Optional agent options override (for testing).
 
     Returns:
-        Tuple of (result content, new session_id, doc_path or None).
+        Tuple of (result content, new session_id, doc_path or None, files_changed).
 
     Raises:
         ValueError: If tool_command is not in COMMAND_MAP.
@@ -192,7 +241,13 @@ async def run_claude_session(
             logger.exception("Agent execution failed")
             raise RuntimeError(f"Agent execution failed: {e}") from e
 
-    doc_path = tracker.get_path()
-    logger.debug("Session result: session_id=%s, doc_path=%s", new_session_id, doc_path)
+    doc_path = tracker.get_doc_path()
+    files_changed = tracker.get_files_changed()
+    logger.debug(
+        "Session result: session_id=%s, doc_path=%s, files_changed=%d",
+        new_session_id,
+        doc_path,
+        len(files_changed),
+    )
 
-    return (result_content or last_text, new_session_id, doc_path)
+    return (result_content or last_text, new_session_id, doc_path, files_changed)

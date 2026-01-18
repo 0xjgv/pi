@@ -3,18 +3,30 @@
 This module defines MCP tools that expose workflow commands (research, plan,
 implement, etc.) as callable tools via the Claude Agent SDK's native MCP support.
 
-Tools handle all context management. Bridge is pure execution.
+Tools return JSON with fields that map to WorkflowOutput schema:
+- research_codebase → doc_path, summary
+- create_plan → doc_path
+- review_plan → doc_path, approved
+- iterate_plan → doc_path
+- implement_plan → files_changed
+- commit_changes → commit_hash
 
 Tool naming convention: mcp__workflow__{tool_name}
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from basic.bridge import COMMAND_DOC_TYPE, run_claude_session
+from basic.bridge import (
+    COMMAND_DOC_TYPE,
+    get_git_changed_files,
+    get_git_commit_hash,
+    run_claude_session,
+)
 from basic.context import get_workflow_ctx
 from π.core.enums import Command
 
@@ -24,7 +36,8 @@ from π.core.enums import Command
 @tool(
     name="research_codebase",
     description="Research the codebase and document findings. Use this to explore "
-    "and understand code structure, patterns, and implementations.",
+    "and understand code structure, patterns, and implementations. "
+    "Returns JSON with doc_path and summary for WorkflowOutput.",
     input_schema={"query": str},
 )
 async def research_codebase(args: dict) -> dict:
@@ -32,7 +45,7 @@ async def research_codebase(args: dict) -> dict:
     ctx = get_workflow_ctx()
     cmd = Command.RESEARCH_CODEBASE
 
-    result, session_id, doc_path = await run_claude_session(
+    result, session_id, doc_path, _ = await run_claude_session(
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
@@ -44,20 +57,20 @@ async def research_codebase(args: dict) -> dict:
     if doc_path and (doc_type := COMMAND_DOC_TYPE.get(cmd)):
         ctx.doc_paths[doc_type] = doc_path
 
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": f"<doc_path>{doc_path}</doc_path>\n<result>{result}</result>",
-            }
-        ]
+    # Return JSON for structured output compatibility
+    output = {
+        "doc_path": doc_path,
+        "summary": result,
+        "needs_implementation": True,  # Default, orchestrator determines final value
     }
+    return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
 @tool(
     name="create_plan",
     description="Create a detailed implementation plan based on a research document. "
-    "Requires path to research document produced by research_codebase.",
+    "Requires path to research document produced by research_codebase. "
+    "Returns JSON with doc_path for WorkflowOutput.",
     input_schema={"query": str, "research_path": str},
 )
 async def create_plan(args: dict) -> dict:
@@ -65,7 +78,7 @@ async def create_plan(args: dict) -> dict:
     ctx = get_workflow_ctx()
     cmd = Command.CREATE_PLAN
 
-    result, session_id, doc_path = await run_claude_session(
+    result, session_id, doc_path, _ = await run_claude_session(
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
@@ -78,20 +91,16 @@ async def create_plan(args: dict) -> dict:
     if doc_path and (doc_type := COMMAND_DOC_TYPE.get(cmd)):
         ctx.doc_paths[doc_type] = doc_path
 
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": f"<doc_path>{doc_path}</doc_path>\n<result>{result}</result>",
-            }
-        ]
-    }
+    # Return JSON for structured output compatibility
+    output = {"doc_path": doc_path, "summary": result}
+    return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
 @tool(
     name="review_plan",
     description="Review and critique an existing plan document. "
-    "Identifies issues, gaps, and areas for improvement.",
+    "Identifies issues, gaps, and areas for improvement. "
+    "Returns JSON with approved boolean for WorkflowOutput.",
     input_schema={"query": str, "plan_path": str},
 )
 async def review_plan(args: dict) -> dict:
@@ -99,7 +108,7 @@ async def review_plan(args: dict) -> dict:
     ctx = get_workflow_ctx()
     cmd = Command.REVIEW_PLAN
 
-    result, session_id, doc_path = await run_claude_session(
+    result, session_id, doc_path, _ = await run_claude_session(
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
@@ -112,20 +121,22 @@ async def review_plan(args: dict) -> dict:
     if doc_path and (doc_type := COMMAND_DOC_TYPE.get(cmd)):
         ctx.doc_paths[doc_type] = doc_path
 
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": f"<doc_path>{doc_path}</doc_path>\n<result>{result}</result>",
-            }
-        ]
-    }
+    # Determine approval from result (heuristic: no critical issues found)
+    result_lower = result.lower()
+    approved = not any(
+        word in result_lower for word in ["issue", "problem", "fix", "change", "revise"]
+    )
+
+    # Return JSON for structured output compatibility
+    output = {"doc_path": doc_path, "approved": approved, "feedback": result}
+    return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
 @tool(
     name="iterate_plan",
     description="Iterate on a plan based on review feedback. "
-    "Updates the plan document to address identified issues.",
+    "Updates the plan document to address identified issues. "
+    "Returns JSON with updated doc_path for WorkflowOutput.",
     input_schema={"query": str, "plan_path": str, "feedback": str},
 )
 async def iterate_plan(args: dict) -> dict:
@@ -138,7 +149,7 @@ async def iterate_plan(args: dict) -> dict:
         f"## Additional Instructions\n{args['query']}"
     )
 
-    result, session_id, doc_path = await run_claude_session(
+    result, session_id, doc_path, _ = await run_claude_session(
         tool_command=cmd,
         query=full_query,
         session_id=ctx.session_ids.get(cmd),
@@ -151,20 +162,16 @@ async def iterate_plan(args: dict) -> dict:
     if doc_path and (doc_type := COMMAND_DOC_TYPE.get(cmd)):
         ctx.doc_paths[doc_type] = doc_path
 
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": f"<doc_path>{doc_path}</doc_path>\n<result>{result}</result>",
-            }
-        ]
-    }
+    # Return JSON for structured output compatibility
+    output = {"doc_path": doc_path, "summary": result}
+    return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
 @tool(
     name="implement_plan",
     description="Implement a plan by executing all phases. "
-    "Makes actual code changes according to the plan document.",
+    "Makes actual code changes according to the plan document. "
+    "Returns JSON with files_changed list for WorkflowOutput.",
     input_schema={"query": str, "plan_path": str},
 )
 async def implement_plan(args: dict) -> dict:
@@ -172,7 +179,7 @@ async def implement_plan(args: dict) -> dict:
     ctx = get_workflow_ctx()
     cmd = Command.IMPLEMENT_PLAN
 
-    result, session_id, _ = await run_claude_session(
+    result, session_id, _, files_changed = await run_claude_session(
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
@@ -183,13 +190,16 @@ async def implement_plan(args: dict) -> dict:
     # Update context
     ctx.session_ids[cmd] = session_id
 
-    return {"content": [{"type": "text", "text": f"<result>{result}</result>"}]}
+    # Return JSON for structured output compatibility
+    output = {"files_changed": files_changed, "summary": result}
+    return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
 @tool(
     name="commit_changes",
     description="Commit the changes made during implementation. "
-    "Creates a git commit with appropriate message.",
+    "Creates a git commit with appropriate message. "
+    "Returns JSON with commit_hash for WorkflowOutput.",
     input_schema={"query": str},
 )
 async def commit_changes(args: dict) -> dict:
@@ -197,7 +207,7 @@ async def commit_changes(args: dict) -> dict:
     ctx = get_workflow_ctx()
     cmd = Command.COMMIT
 
-    result, session_id, _ = await run_claude_session(
+    result, session_id, _, _ = await run_claude_session(
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
@@ -207,7 +217,17 @@ async def commit_changes(args: dict) -> dict:
     # Update context
     ctx.session_ids[cmd] = session_id
 
-    return {"content": [{"type": "text", "text": f"<result>{result}</result>"}]}
+    # Get actual commit hash from git (ground truth)
+    commit_hash = get_git_commit_hash()
+    files_changed = get_git_changed_files()
+
+    # Return JSON for structured output compatibility
+    output = {
+        "commit_hash": commit_hash,
+        "files_changed": files_changed,
+        "summary": result,
+    }
+    return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
 @tool(
@@ -227,7 +247,7 @@ async def write_claude_md(args: dict) -> dict:
         f"## Update Instructions\n{args['query']}"
     )
 
-    result, session_id, _ = await run_claude_session(
+    result, session_id, _, files_changed = await run_claude_session(
         tool_command=cmd,
         query=full_query,
         session_id=ctx.session_ids.get(cmd),
@@ -237,7 +257,9 @@ async def write_claude_md(args: dict) -> dict:
     # Update context
     ctx.session_ids[cmd] = session_id
 
-    return {"content": [{"type": "text", "text": f"<result>{result}</result>"}]}
+    # Return JSON for structured output compatibility
+    output = {"files_changed": files_changed, "summary": result}
+    return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
 # --- MCP Server ---
