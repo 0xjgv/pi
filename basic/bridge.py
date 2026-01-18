@@ -235,8 +235,8 @@ async def run_claude_session(
             logger.exception("Agent execution failed")
             raise RuntimeError(f"Agent execution failed: {e}") from e
 
-    doc_path = tracker.get_doc_path()
     files_changed = tracker.get_files_changed()
+    doc_path = tracker.get_doc_path()
     logger.debug(
         "Session result: session_id=%s, doc_path=%s, files_changed=%d",
         new_session_id,

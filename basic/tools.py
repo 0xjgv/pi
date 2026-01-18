@@ -23,8 +23,6 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from basic.bridge import (
     COMMAND_DOC_TYPE,
-    get_git_changed_files,
-    get_git_commit_hash,
     run_claude_session,
 )
 from basic.context import get_workflow_ctx
@@ -57,11 +55,7 @@ async def research_codebase(args: dict) -> dict:
         ctx.doc_paths[doc_type] = doc_path
 
     # Return JSON for structured output compatibility
-    output = {
-        "doc_path": doc_path,
-        "summary": result,
-        "needs_implementation": True,  # Default, orchestrator determines final value
-    }
+    output = {"doc_path": doc_path, "summary": result}
     return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
@@ -90,7 +84,7 @@ async def create_plan(args: dict) -> dict:
         ctx.doc_paths[doc_type] = doc_path
 
     # Return JSON for structured output compatibility
-    output = {"doc_path": doc_path, "summary": result}
+    output = {"doc_path": doc_path, "result": result}
     return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
@@ -159,7 +153,7 @@ async def iterate_plan(args: dict) -> dict:
         ctx.doc_paths[doc_type] = doc_path
 
     # Return JSON for structured output compatibility
-    output = {"doc_path": doc_path, "summary": result}
+    output = {"doc_path": doc_path, "result": result}
     return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
@@ -176,17 +170,17 @@ async def implement_plan(args: dict) -> dict:
     cmd = Command.IMPLEMENT_PLAN
 
     result, session_id, _, files_changed = await run_claude_session(
-        tool_command=cmd,
-        query=args["query"],
         session_id=ctx.session_ids.get(cmd),
         document=Path(args["plan_path"]),
+        query=args["query"],
+        tool_command=cmd,
     )
 
     # Update context
     ctx.session_ids[cmd] = session_id
 
     # Return JSON for structured output compatibility
-    output = {"files_changed": files_changed, "summary": result}
+    output = {"files_changed": files_changed, "result": result}
     return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
@@ -211,16 +205,7 @@ async def commit_changes(args: dict) -> dict:
     # Update context
     ctx.session_ids[cmd] = session_id
 
-    # Get actual commit hash from git (ground truth)
-    commit_hash = get_git_commit_hash()
-    files_changed = get_git_changed_files()
-
-    # Return JSON for structured output compatibility
-    output = {
-        "commit_hash": commit_hash,
-        "files_changed": files_changed,
-        "summary": result,
-    }
+    output = {"result": result}
     return {"content": [{"type": "text", "text": json.dumps(output, indent=2)}]}
 
 
@@ -242,9 +227,9 @@ async def write_claude_md(args: dict) -> dict:
     )
 
     result, session_id, _, files_changed = await run_claude_session(
+        session_id=ctx.session_ids.get(cmd),
         tool_command=cmd,
         query=full_query,
-        session_id=ctx.session_ids.get(cmd),
     )
 
     # Update context
