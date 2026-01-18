@@ -135,7 +135,7 @@ def main(objective: str | None = None, *, verbose: bool = False) -> None:
 
 if __name__ == "__main__":
     main(
-        "How would you move this basic directory to the root of the project "
+        "How would you move the basic directory to the root of the project "
         "while removing everything else that is not needed? "
         "Our goal is to replace the CLI with our basic main approach"
     )

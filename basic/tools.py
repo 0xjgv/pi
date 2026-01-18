@@ -49,7 +49,6 @@ async def research_codebase(args: dict) -> dict:
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
-        objective=ctx.objective,
     )
 
     # Update context
@@ -82,7 +81,6 @@ async def create_plan(args: dict) -> dict:
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
-        objective=ctx.objective,
         document=Path(args["research_path"]),
     )
 
@@ -112,7 +110,6 @@ async def review_plan(args: dict) -> dict:
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
-        objective=ctx.objective,
         document=Path(args["plan_path"]),
     )
 
@@ -153,7 +150,6 @@ async def iterate_plan(args: dict) -> dict:
         tool_command=cmd,
         query=full_query,
         session_id=ctx.session_ids.get(cmd),
-        objective=ctx.objective,
         document=Path(args["plan_path"]),
     )
 
@@ -183,7 +179,6 @@ async def implement_plan(args: dict) -> dict:
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
-        objective=ctx.objective,
         document=Path(args["plan_path"]),
     )
 
@@ -211,7 +206,6 @@ async def commit_changes(args: dict) -> dict:
         tool_command=cmd,
         query=args["query"],
         session_id=ctx.session_ids.get(cmd),
-        objective=ctx.objective,
     )
 
     # Update context
@@ -251,7 +245,6 @@ async def write_claude_md(args: dict) -> dict:
         tool_command=cmd,
         query=full_query,
         session_id=ctx.session_ids.get(cmd),
-        objective=ctx.objective,
     )
 
     # Update context

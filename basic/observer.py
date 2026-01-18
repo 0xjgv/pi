@@ -8,16 +8,18 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
+
+from claude_agent_sdk.types import (
+    AssistantMessage,
+    ResultMessage,
+    SystemMessage,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from claude_agent_sdk.types import (
-        AssistantMessage,
-        Message,
-    )
+    from claude_agent_sdk.types import Message
 
 
 class WorkflowObserver(Protocol):
@@ -69,6 +71,15 @@ class WorkflowObserver(Protocol):
             turns: Number of conversation turns.
             cost: Total cost in USD.
             duration_ms: Total duration in milliseconds.
+        """
+        ...
+
+    def on_system(self, subtype: str, data: dict) -> None:
+        """Called when a system message is received.
+
+        Args:
+            subtype: The system message subtype ('init', 'compact_boundary').
+            data: The full system message data dict.
         """
         ...
 
@@ -164,6 +175,25 @@ class LoggingObserver:
         with self.log_path.open("a") as f:
             f.write("=" * 80 + "\n")
 
+    def on_system(self, subtype: str, data: dict) -> None:
+        """Log system message event."""
+        if subtype == "init":
+            # Log key initialization fields
+            fields = ["session_id", "model", "tools", "mcp_servers", "cwd"]
+            details = {k: data.get(k) for k in fields if k in data}
+            self._log("SYSTEM_INIT:", json.dumps(details, indent=2, default=str))
+        elif subtype == "compact_boundary":
+            meta = data.get("compact_metadata", {})
+            self._log(
+                f"SYSTEM_COMPACT: trigger={meta.get('trigger')}, "
+                f"pre_tokens={meta.get('pre_tokens')}"
+            )
+        else:
+            self._log(
+                f"SYSTEM_{subtype.upper()}:",
+                json.dumps(data, indent=2, default=str),
+            )
+
 
 class CompositeObserver:
     """Dispatches events to multiple observers.
@@ -205,6 +235,11 @@ class CompositeObserver:
         for obs in self.observers:
             obs.on_complete(turns, cost, duration_ms)
 
+    def on_system(self, subtype: str, data: dict) -> None:
+        """Dispatch system message to all observers."""
+        for obs in self.observers:
+            obs.on_system(subtype, data)
+
 
 def dispatch_message(message: Message, observer: WorkflowObserver) -> None:
     """Dispatch SDK message to appropriate observer method.
@@ -213,12 +248,6 @@ def dispatch_message(message: Message, observer: WorkflowObserver) -> None:
         message: The SDK message to dispatch.
         observer: The observer to receive events.
     """
-    # Import here to avoid circular imports and for isinstance checks
-    from claude_agent_sdk.types import (  # noqa: PLC0415
-        AssistantMessage,
-        ResultMessage,
-    )
-
     if isinstance(message, AssistantMessage):
         _dispatch_assistant_message(message, observer)
     elif isinstance(message, ResultMessage):
@@ -227,6 +256,8 @@ def dispatch_message(message: Message, observer: WorkflowObserver) -> None:
             cost=message.total_cost_usd or 0.0,
             duration_ms=message.duration_ms,
         )
+    elif isinstance(message, SystemMessage):
+        observer.on_system(subtype=message.subtype, data=message.data)
 
 
 def _dispatch_assistant_message(

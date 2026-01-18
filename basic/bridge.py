@@ -158,7 +158,6 @@ async def run_claude_session(
     *,
     options: ClaudeAgentOptions | None = None,
     session_id: str | None = None,
-    objective: str | None = None,
     document: Path | None = None,
     tool_command: Command,
     query: str,
@@ -171,7 +170,6 @@ async def run_claude_session(
         tool_command: The Command enum for tracking writes.
         query: The query/instruction for the agent.
         session_id: Optional session ID for resumption.
-        objective: Optional workflow objective to prefix command.
         document: Optional document path to include.
         options: Optional agent options override (for testing).
 
@@ -188,10 +186,6 @@ async def run_claude_session(
     command = COMMAND_MAP.get(tool_command)
     if not command:
         raise ValueError(f"Invalid tool command: {tool_command}")
-
-    # Prefix command with objective (only on initial calls)
-    if objective and not session_id:
-        command = f"{command}\n<objective>{objective}</objective>"
 
     # Add document path if provided
     if document:

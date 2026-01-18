@@ -117,6 +117,12 @@ class LiveObserver:
 
         self._print_summary(turns, cost, duration_ms)
 
+    def on_system(self, subtype: str, data: dict) -> None:
+        """Handle system message event.
+
+        System messages are logged but not displayed in the live view.
+        """
+
     def _refresh(self) -> None:
         """Refresh the live display."""
         if self.live:
