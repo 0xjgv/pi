@@ -25,40 +25,52 @@ LOGS_DIR_NAME = ".π/logs"
 # Project root for command discovery
 PROJECT_ROOT = Path(__file__).parent.parent
 
-# https://code.claude.com/docs/en/settings#tools-available-to-claude
-ALL_AVAILABLE_TOOLS = [
-    "AskUserQuestion",
+# =============================================================================
+# Tool Configuration
+# =============================================================================
+# Reference: https://code.claude.com/docs/en/settings#tools-available-to-claude
+
+# --- Orchestrator Tools (7 tools) ---
+# The orchestrator coordinates stage agents via MCP workflow tools.
+# Limited to read-only access - delegates actual work to stage agents.
+ORCHESTRATOR_TOOLS = [
+    # Search & Read
+    "Glob",
+    "Grep",
+    "Read",
+    # MCP discovery
+    "MCPSearch",
+    # Task management
+    "Task",
+    "TaskOutput",
+    "TodoWrite",
+]
+
+# --- Stage Agent Tools (16 tools) ---
+# Stage agents execute actual work (research, planning, implementation).
+# Full tool access EXCEPT AskUserQuestion (questions bubble up to orchestrator).
+STAGE_AGENT_TOOLS = [
+    # File operations
     "Bash",
     "Edit",
-    "ExitPlanMode",
     "Glob",
     "Grep",
     "KillShell",
-    "MCPSearch",
     "NotebookEdit",
     "Read",
-    "Skill",
-    "Task",
-    "TaskOutput",
-    "TodoWrite",
+    "Write",
+    # Search & fetch
+    "MCPSearch",
     "WebFetch",
     "WebSearch",
-    "Write",
-]
-
-ORCHESTRATOR_TOOLS = [
-    "MCPSearch",
-    "Grep",
-    "Glob",
-    "Read",
+    # Task management
     "Skill",
     "Task",
     "TaskOutput",
     "TodoWrite",
+    # Mode control
+    "ExitPlanMode",
 ]
-
-
-STAGE_AGENT_TOOLS = [t for t in ALL_AVAILABLE_TOOLS if t not in "AskUserQuestion"]
 
 
 def build_command_map(
@@ -107,19 +119,14 @@ def build_command_map(
 COMMAND_MAP: dict[Command, str] = build_command_map()
 
 
-def get_agent_options(
-    *,
-    system_prompt: str | None = None,
-    cwd: Path | None = None,
-) -> ClaudeAgentOptions:
-    """Get Claude agent options with hooks and permissions configured.
+def _get_base_options(*, cwd: Path | None = None) -> ClaudeAgentOptions:
+    """Internal: shared options for all agent types.
 
     Args:
-        system_prompt: Optional system prompt override.
         cwd: Working directory for the agent. Defaults to project root.
 
     Returns:
-        Configured ClaudeAgentOptions instance.
+        Base ClaudeAgentOptions with hooks and permissions configured.
     """
     cwd = cwd or get_project_root()
     return ClaudeAgentOptions(
@@ -132,12 +139,51 @@ def get_agent_options(
             ],
         },
         permission_mode="acceptEdits",
-        allowed_tools=ALL_AVAILABLE_TOOLS,
-        system_prompt=system_prompt,
         setting_sources=["project"],
         can_use_tool=can_use_tool,
         cwd=cwd,
     )
+
+
+def get_orchestrator_options(
+    *,
+    system_prompt: str | None = None,
+    cwd: Path | None = None,
+) -> ClaudeAgentOptions:
+    """Get options for the orchestrator agent.
+
+    The orchestrator coordinates stage agents via MCP workflow tools.
+    Limited to read-only tools (7) - delegates actual work to stage agents.
+    MCP workflow tools are added by the caller.
+
+    Args:
+        system_prompt: Optional system prompt override.
+        cwd: Working directory for the agent. Defaults to project root.
+
+    Returns:
+        Configured ClaudeAgentOptions for orchestrator.
+    """
+    options = _get_base_options(cwd=cwd)
+    options.allowed_tools = ORCHESTRATOR_TOOLS
+    options.system_prompt = system_prompt
+    return options
+
+
+def get_stage_agent_options(*, cwd: Path | None = None) -> ClaudeAgentOptions:
+    """Get options for stage agents (research, plan, implement).
+
+    Stage agents execute actual work with full tool access (16 tools).
+    AskUserQuestion excluded - questions bubble up to orchestrator.
+
+    Args:
+        cwd: Working directory for the agent. Defaults to project root.
+
+    Returns:
+        Configured ClaudeAgentOptions for stage agents.
+    """
+    options = _get_base_options(cwd=cwd)
+    options.allowed_tools = STAGE_AGENT_TOOLS
+    return options
 
 
 def get_logs_dir() -> Path:

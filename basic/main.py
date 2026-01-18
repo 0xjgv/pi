@@ -10,7 +10,7 @@ import logging
 
 from claude_agent_sdk import ClaudeSDKClient
 
-from basic.config import get_agent_options, get_logs_dir, setup_logging
+from basic.config import get_logs_dir, get_orchestrator_options, setup_logging
 from basic.context import get_workflow_ctx, reset_workflow_ctx
 from basic.display import LiveObserver
 from basic.observer import CompositeObserver, LoggingObserver, dispatch_message
@@ -35,19 +35,19 @@ async def run(objective: str, *, verbose: bool = False) -> None:
     ctx = get_workflow_ctx()
     ctx.objective = objective
 
-    # Get configured options and extend with MCP tools
-    options = get_agent_options(cwd=get_project_root())
+    # Get orchestrator options and extend with MCP workflow tools
+    options = get_orchestrator_options(cwd=get_project_root())
     options.mcp_servers = {"workflow": workflow_server}
     options.allowed_tools += WORKFLOW_TOOLS
 
     # Create observers: Live display + File logging
-    live_observer = LiveObserver()
     system_prompt = str(options.system_prompt) if options.system_prompt else None
     log_observer = LoggingObserver(
         log_path,
-        objective=objective,
         system_prompt=system_prompt,
+        objective=objective,
     )
+    live_observer = LiveObserver()
     observer = CompositeObserver([live_observer, log_observer])
 
     async with ClaudeSDKClient(options=options) as client:

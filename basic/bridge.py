@@ -19,7 +19,7 @@ from claude_agent_sdk.types import (
     ToolUseBlock,
 )
 
-from basic.config import COMMAND_MAP, STAGE_AGENT_TOOLS, get_agent_options
+from basic.config import COMMAND_MAP, get_stage_agent_options
 from π.core.enums import Command, DocType
 from π.support.directory import get_project_root
 
@@ -48,15 +48,14 @@ _cached_options: ClaudeAgentOptions | None = None
 
 
 def _get_default_options() -> ClaudeAgentOptions:
-    """Get or create default agent options for sub-agents.
+    """Get or create cached options for stage agents.
 
-    Sub-agents use SUBAGENT_TOOLS (no AskUserQuestion) so questions
+    Stage agents use STAGE_AGENT_TOOLS (no AskUserQuestion) so questions
     pass through to the orchestrator instead of blocking.
     """
     global _cached_options  # noqa: PLW0603
     if _cached_options is None:
-        _cached_options = get_agent_options(cwd=get_project_root())
-        _cached_options.allowed_tools = STAGE_AGENT_TOOLS
+        _cached_options = get_stage_agent_options(cwd=get_project_root())
     return _cached_options
 
 
