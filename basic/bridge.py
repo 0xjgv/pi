@@ -1,0 +1,199 @@
+"""Async bridge for Claude Agent SDK integration.
+
+This module provides a pure execution bridge for MCP tools.
+No context access - all inputs are explicit parameters.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk.types import (
+    AssistantMessage,
+    ResultMessage,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
+
+from basic.config import COMMAND_MAP, STAGE_AGENT_TOOLS, get_agent_options
+from π.core.enums import Command, DocType
+from π.support.directory import get_project_root
+
+logger = logging.getLogger(__name__)
+
+# Command → DocType mapping (only commands that produce tracked documents)
+COMMAND_DOC_TYPE: dict[Command, DocType] = {
+    Command.RESEARCH_CODEBASE: DocType.RESEARCH,
+    Command.CREATE_PLAN: DocType.PLAN,
+    Command.REVIEW_PLAN: DocType.PLAN,
+    Command.ITERATE_PLAN: DocType.PLAN,
+}
+
+# Tools that create/modify files
+_FILE_WRITE_TOOLS = frozenset({"Write", "Edit"})
+
+# Commands that involve planning (not execution)
+_PLANNING_COMMANDS = frozenset({
+    Command.CREATE_PLAN,
+    Command.REVIEW_PLAN,
+    Command.ITERATE_PLAN,
+})
+
+# Module-level options cache (config, not workflow state)
+_cached_options: ClaudeAgentOptions | None = None
+
+
+def _get_default_options() -> ClaudeAgentOptions:
+    """Get or create default agent options for sub-agents.
+
+    Sub-agents use SUBAGENT_TOOLS (no AskUserQuestion) so questions
+    pass through to the orchestrator instead of blocking.
+    """
+    global _cached_options  # noqa: PLW0603
+    if _cached_options is None:
+        _cached_options = get_agent_options(cwd=get_project_root())
+        _cached_options.allowed_tools = STAGE_AGENT_TOOLS
+    return _cached_options
+
+
+@dataclass
+class WriteTracker:
+    """Tracks file writes during a single SDK session."""
+
+    command: Command
+    writes: list[str] = field(default_factory=list)
+
+    @property
+    def doc_type(self) -> DocType | None:
+        """Get doc_type for this command (if any)."""
+        return COMMAND_DOC_TYPE.get(self.command)
+
+    def on_tool_use(self, file_path: str) -> None:
+        """Record write from ToolUseBlock."""
+        if self.doc_type and "thoughts/shared/" in file_path:
+            self.writes.append(file_path)
+
+    def get_path(self) -> str | None:
+        """Get the last tracked path that exists on disk."""
+        for p in reversed(self.writes):
+            path = Path(p)
+            full_path = path if path.is_absolute() else get_project_root() / p
+            if full_path.exists():
+                return str(full_path)
+        return None
+
+
+def _process_message(
+    message: AssistantMessage,
+    tracker: WriteTracker,
+) -> str:
+    """Process assistant message and return accumulated text."""
+    block_text = ""
+    for block in message.content:
+        if isinstance(block, TextBlock):
+            block_text += block.text
+        elif isinstance(block, ToolUseBlock):
+            if block.name in _FILE_WRITE_TOOLS and (
+                file_path := block.input.get("file_path")
+            ):
+                tracker.on_tool_use(file_path)
+        elif isinstance(block, ToolResultBlock) and block.is_error:
+            logger.warning("Tool error: %s", block.content)
+    return block_text
+
+
+async def run_claude_session(
+    *,
+    options: ClaudeAgentOptions | None = None,
+    session_id: str | None = None,
+    objective: str | None = None,
+    document: Path | None = None,
+    tool_command: Command,
+    query: str,
+) -> tuple[str, str, str | None]:
+    """Execute a Claude agent session asynchronously.
+
+    Pure execution function - no context access. All inputs are explicit.
+
+    Args:
+        tool_command: The Command enum for tracking writes.
+        query: The query/instruction for the agent.
+        session_id: Optional session ID for resumption.
+        objective: Optional workflow objective to prefix command.
+        document: Optional document path to include.
+        options: Optional agent options override (for testing).
+
+    Returns:
+        Tuple of (result content, new session_id, doc_path or None).
+
+    Raises:
+        ValueError: If tool_command is not in COMMAND_MAP.
+        RuntimeError: If agent execution fails.
+    """
+    tracker = WriteTracker(command=tool_command)
+
+    # Build command string from slash command
+    command = COMMAND_MAP.get(tool_command)
+    if not command:
+        raise ValueError(f"Invalid tool command: {tool_command}")
+
+    # Prefix command with objective (only on initial calls)
+    if objective and not session_id:
+        command = f"{command}\n<objective>{objective}</objective>"
+
+    # Add document path if provided
+    if document:
+        command += f" {document}"
+
+    command += f" {query}"
+
+    # Handle session resumption
+    if session_id:
+        logger.debug("Resuming session: %s", session_id)
+        if tool_command in _PLANNING_COMMANDS:
+            command = (
+                f"Based on this feedback, continue with your planning task "
+                f"(write or update the plan document, do NOT implement): {query}"
+            )
+        else:
+            command = query
+
+    logger.debug("Executing command: %s", command[:200])
+
+    # Execute session
+    effective_options = options or _get_default_options()
+    result_content = ""
+    new_session_id = ""
+    last_text = ""
+
+    async with ClaudeSDKClient(options=effective_options) as client:
+        try:
+            await client.query(command, session_id=session_id or "default")
+
+            async for message in client.receive_response():
+                if isinstance(message, ResultMessage):
+                    if message.result:
+                        new_session_id = message.session_id
+                        result_content = message.result
+                    logger.debug(
+                        "Session complete: turns=%d, cost=$%.4f",
+                        message.num_turns,
+                        message.total_cost_usd or 0,
+                    )
+                    break
+                elif isinstance(message, AssistantMessage):
+                    text = _process_message(message, tracker)
+                    if text:
+                        last_text = text
+        except Exception as e:
+            logger.exception("Agent execution failed")
+            raise RuntimeError(f"Agent execution failed: {e}") from e
+
+    doc_path = tracker.get_path()
+    logger.debug("Session result: session_id=%s, doc_path=%s", new_session_id, doc_path)
+
+    return (result_content or last_text, new_session_id, doc_path)
