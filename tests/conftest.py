@@ -357,6 +357,7 @@ def mock_run_claude_session():
         Default returns ("Result", "session-123", "/path/doc.md", ["file.py"]).
     """
     with patch("π.workflow.tools.run_claude_session") as mock:
+
         async def default_impl(**_kwargs):
             return ("Result", "session-123", "/path/doc.md", ["file.py"])
 

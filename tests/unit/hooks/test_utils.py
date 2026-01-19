@@ -56,9 +56,7 @@ class TestRunCheckCommand:
 
     def test_success_returns_zero(self, tmp_path: Path):
         """Should return zero exit code on success."""
-        code, stdout, stderr = run_check_command(
-            tmp_path, ["echo", "hello"], "echo"
-        )
+        code, stdout, stderr = run_check_command(tmp_path, ["echo", "hello"], "echo")
 
         assert code == 0
         assert "hello" in stdout
@@ -90,9 +88,7 @@ class TestRunCheckCommand:
     def test_generic_error_returns_1(self, tmp_path: Path):
         """Should return 1 on generic exception."""
         with patch("subprocess.run", side_effect=OSError("Permission denied")):
-            code, _stdout, stderr = run_check_command(
-                tmp_path, ["some_cmd"], "test"
-            )
+            code, _stdout, stderr = run_check_command(tmp_path, ["some_cmd"], "test")
 
         assert code == 1
         assert "error" in stderr.lower()

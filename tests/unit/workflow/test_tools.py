@@ -25,8 +25,11 @@ class TestResearchCodebase:
     ):
         """Should return JSON with doc_path and summary."""
         _ = fresh_workflow_context  # Used for context setup
-        mock_run_claude_session.side_effect = (
-            lambda **_kw: ("Research summary", "sess-1", "/docs/research.md", [])
+        mock_run_claude_session.side_effect = lambda **_kw: (
+            "Research summary",
+            "sess-1",
+            "/docs/research.md",
+            [],
         )
 
         result = await research_codebase.handler({"query": "analyze the codebase"})
@@ -48,8 +51,11 @@ class TestCreatePlan:
         research_doc = tmp_path / "research.md"
         research_doc.write_text("# Research")
 
-        mock_run_claude_session.side_effect = (
-            lambda **_kw: ("Plan created", "sess-2", "/plans/plan.md", [])
+        mock_run_claude_session.side_effect = lambda **_kw: (
+            "Plan created",
+            "sess-2",
+            "/plans/plan.md",
+            [],
         )
 
         result = await create_plan.handler({
@@ -78,7 +84,10 @@ class TestReviewPlan:
         plan_doc.write_text("# Plan")
 
         mock_run_claude_session.side_effect = lambda **_kw: (
-            "Plan looks good, well structured", "sess-3", str(plan_doc), []
+            "Plan looks good, well structured",
+            "sess-3",
+            str(plan_doc),
+            [],
         )
 
         result = await review_plan.handler({
@@ -105,7 +114,10 @@ class TestReviewPlan:
         plan_doc.write_text("# Plan")
 
         mock_run_claude_session.side_effect = lambda **_kw: (
-            f"Found an {keyword} in the plan", "sess-3", str(plan_doc), []
+            f"Found an {keyword} in the plan",
+            "sess-3",
+            str(plan_doc),
+            [],
         )
 
         result = await review_plan.handler({
@@ -188,8 +200,11 @@ class TestCommitChanges:
     ):
         """Should update session_id in context."""
         _ = fresh_workflow_context  # Used for context setup
-        mock_run_claude_session.side_effect = (
-            lambda **_kw: ("Committed abc123", "sess-6", None, [])
+        mock_run_claude_session.side_effect = lambda **_kw: (
+            "Committed abc123",
+            "sess-6",
+            None,
+            [],
         )
 
         result = await commit_changes.handler({"query": "commit the changes"})
@@ -233,8 +248,11 @@ class TestWriteClaudeMd:
     ):
         """Should return files_changed and summary in output."""
         _ = fresh_workflow_context  # Used for context setup
-        mock_run_claude_session.side_effect = (
-            lambda **_kw: ("Updated CLAUDE.md", "sess-7", None, ["CLAUDE.md"])
+        mock_run_claude_session.side_effect = lambda **_kw: (
+            "Updated CLAUDE.md",
+            "sess-7",
+            None,
+            ["CLAUDE.md"],
         )
 
         result = await write_claude_md.handler({
