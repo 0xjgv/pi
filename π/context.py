@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from basic.observer import WorkflowObserver
     from π.core.enums import Command, DocType
+    from π.observer import WorkflowObserver
 
 
 @dataclass

@@ -229,8 +229,6 @@ class LoggingObserver:
         """Log system message event."""
         if subtype == "init":
             # Log key initialization fields
-            fields = ["session_id", "model", "tools", "mcp_servers", "cwd"]
-            details = {k: data.get(k) for k in fields if k in data}
             self._log(
                 "SYSTEM_INIT:",
                 json.dumps(data, indent=2, default=str),

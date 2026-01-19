@@ -95,7 +95,7 @@ class LiveObserver:
 
     def on_tool_end(
         self,
-        name: str,
+        name: str,  # noqa: ARG002
         result: str | None,
         is_error: bool,
         *,

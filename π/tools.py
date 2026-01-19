@@ -21,11 +21,11 @@ from pathlib import Path
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from basic.bridge import (
+from π.bridge.session import (
     COMMAND_DOC_TYPE,
     run_claude_session,
 )
-from basic.context import get_workflow_ctx
+from π.context import get_workflow_ctx
 from π.core.enums import Command
 
 # --- Tool Definitions ---

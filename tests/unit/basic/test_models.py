@@ -1,4 +1,4 @@
-"""Tests for basic.models structured output.
+"""Tests for π.models structured output.
 
 These tests verify that the WorkflowOutput model correctly:
 1. Validates required fields (research_doc_path, status, summary)
@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from basic.models import WorkflowOutput
+from π.models import WorkflowOutput
 
 
 class TestWorkflowOutput:

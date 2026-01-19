@@ -166,20 +166,20 @@ class TestCanUseTool:
         assert "Agent needs input" in print_calls
 
     @pytest.mark.asyncio
-    async def test_truncates_long_input_in_logs(self):
-        """Should truncate long tool inputs in debug logs (at 100 chars)."""
-        long_input = {"data": "x" * 200}
+    async def test_logs_tool_input_keys(self):
+        """Should log tool input keys for non-AskUserQuestion tools."""
+        tool_input = {"data": "test", "other": 123}
 
         with patch("π.support.permissions.logger") as mock_logger:
             await can_use_tool(
                 tool_name="Bash",
-                tool_input=long_input,
+                tool_input=tool_input,
                 context=MagicMock(),
             )
 
         log_call = str(mock_logger.debug.call_args_list[-1])
-        assert "..." in log_call
-        assert len(str(long_input)) > 100
+        assert "data" in log_call
+        assert "other" in log_call
 
 
 class TestAskUserQuestionOptions:

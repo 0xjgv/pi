@@ -1,5 +1,8 @@
 # TODO — High Leverage Actions
 
+[ ] What if we add structure output to the stage agents?
+[ ] What if we add the rdi skill to the orchestrator agent?
+
 ## 0. Get It Into Users' Hands (THIS WEEK)
 
 - [ ] **Tomorrow AM**: Message Mattia, Francesco, Marian

@@ -19,19 +19,8 @@ import pytest
 
 from π.core.enums import DocType
 
-# Suppress warnings from third-party libraries (litellm via dspy)
-# Note: RuntimeWarning about 'close_litellm_async_clients' may still appear
-# during interpreter shutdown - this is a known litellm issue and cannot be
-# suppressed from within pytest as it occurs after the test session ends.
-warnings.filterwarnings("ignore", category=ResourceWarning, module="litellm.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning, module="litellm.*")
-# Suppress Pydantic serialization warnings from LiteLLM (cosmetic, no data loss)
-# See: https://github.com/BerriAI/litellm/issues/11759
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    message=".*Pydantic serializer warnings.*",
-)
+# Suppress warnings from third-party libraries
+warnings.filterwarnings("ignore", category=ResourceWarning, module="claude_agent_sdk.*")
 
 # ============================================================================
 # Path Fixtures
@@ -72,7 +61,7 @@ def typescript_project(tmp_path: Path) -> Path:
 @pytest.fixture
 def mock_claude_client() -> Generator[MagicMock]:
     """Mock ClaudeSDKClient for workflow tests."""
-    with patch("π.workflow.bridge.ClaudeSDKClient") as mock_class:
+    with patch("π.bridge.session.ClaudeSDKClient") as mock_class:
         mock_client = AsyncMock()
         mock_class.return_value.__aenter__.return_value = mock_client
         mock_class.return_value.__aexit__.return_value = None
@@ -107,21 +96,6 @@ def mock_hook_input() -> dict[str, Any]:
         "tool_name": "Bash",
         "tool_input": {"command": "ls -la"},
     }
-
-
-# ============================================================================
-# DSPy Mocks
-# ============================================================================
-
-
-@pytest.fixture
-def mock_dspy() -> Generator[MagicMock]:
-    """Mock dspy module for CLI tests."""
-    with patch("π.cli.dspy") as mock:
-        mock_react = MagicMock()
-        mock_react.return_value = MagicMock(output="Test output")
-        mock.ReAct.return_value = mock_react
-        yield mock
 
 
 # ============================================================================
@@ -211,7 +185,7 @@ def cleanup_logging_handlers():
     """
     yield
     # Cleanup after test - close handlers before clearing to avoid ResourceWarning
-    for logger_name in ("π", "π.session", "π.workflow", "π.hooks"):
+    for logger_name in ("π", "π.session", "π.bridge", "π.hooks"):
         logger = logging.getLogger(logger_name)
         for handler in logger.handlers[:]:
             handler.close()
@@ -241,87 +215,7 @@ def mock_spinner() -> Generator[MagicMock]:
 
 
 # ============================================================================
-# DSPy LM Mocks
-# ============================================================================
-#
-# Mock Architecture Overview:
-# --------------------------
-# This test suite uses a 3-layer mocking strategy to prevent API calls:
-#
-# Layer 1 (Lowest): ClaudeCodeLM Mock
-#   - Patches ClaudeCodeLM at π.core.models to prevent any LM instantiation
-#   - Use: mock_lm fixture (depends on clear_lm_cache)
-#   - Tests: DSPy ReAct behavior, agent decision making
-#
-# Layer 2 (Middle): Claude SDK Mock
-#   - Patches ClaudeSDKClient at π.workflow.bridge
-#   - Use: mock_claude_client, mock_claude_client_with_responses fixtures
-#   - Tests: Workflow bridge, message handling, session management
-#
-# Layer 3 (Highest): Workflow Stage Mock
-#   - Patches workflow functions directly (research_codebase, create_plan, etc.)
-#   - Use: mock_workflow_stages fixture
-#   - Tests: CLI, high-level integration, stage orchestration
-#
-# Choose the layer that matches your test scope. Lower layers provide more
-# realistic behavior but require more setup. Higher layers are simpler but
-# bypass more production code.
-# ============================================================================
-
-
-@pytest.fixture
-def mock_lm_response() -> dict[str, str]:
-    """Default LM response for DSPy completions."""
-    return {
-        "rationale": "Test rationale for action selection",
-        "next_tool_name": "research_codebase",
-        "next_tool_args": '{"query": "test query"}',
-        "output": "Test output from mock LM",
-    }
-
-
-@pytest.fixture
-def clear_lm_cache():
-    """Clear LRU cache on get_lm before and after tests.
-
-    This fixture is a dependency of mock_lm to ensure the cache is always
-    cleared before patching. Can also be used independently for tests that
-    modify LM configuration.
-
-    Note: The get_lm() function uses @lru_cache(maxsize=3), so cache must
-    be cleared before mocking to prevent test pollution from cached real LMs.
-    """
-    from π.config import get_lm
-
-    get_lm.cache_clear()
-    yield
-    get_lm.cache_clear()
-
-
-@pytest.fixture
-def mock_lm(
-    clear_lm_cache,
-    mock_lm_response: dict[str, str],
-) -> Generator[MagicMock]:
-    """Mock ClaudeCodeLM to prevent API calls.
-
-    This fixture patches ClaudeCodeLM at π.core.models to return a mock that:
-    - Returns predefined completions
-    - Tracks call history for assertions
-
-    Note: Depends on clear_lm_cache to ensure LRU cache is cleared before
-    patching. This prevents test pollution from cached LM instances.
-    """
-    with patch("π.bridge.lm.ClaudeCodeLM") as mock_class:
-        mock_instance = MagicMock()
-        mock_instance.return_value = [mock_lm_response["output"]]
-        mock_instance.inspect_history.return_value = []
-        mock_class.return_value = mock_instance
-        yield mock_instance
-
-
-# ============================================================================
-# Enhanced Claude Agent SDK Mocks (Layer 2)
+# Enhanced Claude Agent SDK Mocks
 # ============================================================================
 
 
@@ -389,7 +283,7 @@ def mock_claude_client_with_responses():
 
     @contextmanager
     def _create(messages: list[MagicMock]):
-        with patch("π.workflow.bridge.ClaudeSDKClient") as mock_class:
+        with patch("π.bridge.session.ClaudeSDKClient") as mock_class:
             mock_client = AsyncMock()
             mock_class.return_value.__aenter__.return_value = mock_client
             mock_class.return_value.__aexit__.return_value = None
@@ -405,52 +299,33 @@ def mock_claude_client_with_responses():
 
 
 # ============================================================================
-# Workflow Stage Fixtures (Layer 3)
+# Workflow Context Fixtures
 # ============================================================================
 
 
 @pytest.fixture
-def fresh_execution_context():
-    """Create a fresh ExecutionContext for workflow tests.
+def fresh_workflow_context():
+    """Create a fresh WorkflowContext for workflow tests.
 
     This fixture:
-    - Creates a new ExecutionContext
+    - Creates a new WorkflowContext
     - Sets it as the current context
-    - Cleans up after the test (including closing event loop)
+    - Cleans up after the test
     """
-    from π.workflow import ExecutionContext
-    from π.workflow.context import _ctx
+    from π.context import get_workflow_ctx, reset_workflow_ctx
 
-    ctx = ExecutionContext()
-    token = _ctx.set(ctx)
+    reset_workflow_ctx()
+    ctx = get_workflow_ctx()
     yield ctx
-    # Close event loop if one was created to avoid ResourceWarning
-    if ctx.event_loop is not None and not ctx.event_loop.is_closed():
-        ctx.event_loop.close()
-    _ctx.reset(token)
+    reset_workflow_ctx()
 
 
 @pytest.fixture
-def execution_context_with_session(
-    fresh_execution_context,
-):
-    """Create an ExecutionContext with pre-populated session IDs.
-
-    Useful for testing session resumption scenarios.
-    """
-    from π.workflow import Command
-
-    for cmd in Command:
-        fresh_execution_context.session_ids[cmd] = f"session-{cmd.value}"
-    return fresh_execution_context
-
-
-@pytest.fixture
-def execution_context_with_docs(
-    fresh_execution_context,
+def workflow_context_with_docs(
+    fresh_workflow_context,
     tmp_path: Path,
 ):
-    """Create an ExecutionContext with pre-populated document paths.
+    """Create a WorkflowContext with pre-populated document paths.
 
     Creates actual temporary files for validation tests.
     """
@@ -467,75 +342,7 @@ def execution_context_with_docs(
     plan_doc.write_text("# Test Plan\n\nPlan content.")
 
     # Store paths
-    fresh_execution_context.extracted_paths[DocType.RESEARCH] = {str(research_doc)}
-    fresh_execution_context.extracted_paths[DocType.PLAN] = {str(plan_doc)}
-    fresh_execution_context.extracted_results = {}
+    fresh_workflow_context.doc_paths[DocType.RESEARCH] = str(research_doc)
+    fresh_workflow_context.doc_paths[DocType.PLAN] = str(plan_doc)
 
-    return fresh_execution_context
-
-
-@pytest.fixture
-def mock_workflow_stages():
-    """Mock all workflow stage functions.
-
-    Returns a dict mapping stage names to their mocks for configuration.
-
-    Note on @workflow_tool decorated functions:
-    The workflow functions (research_codebase, create_plan, etc.) are decorated
-    with @workflow_tool which uses @functools.wraps(func). When we patch at
-    π.workflow.tools.research_codebase, we're patching the DECORATED function
-    (the wrapper), not the inner function. This is correct behavior because:
-
-    1. @wraps preserves the function identity at the module level
-    2. Callers import and call the decorated version
-    3. The patch intercepts calls BEFORE the decorator's wrapper executes
-    4. This means session management, timing, and error handling are bypassed
-
-    If you need to test the decorator's behavior, mock at a lower level
-    (e.g., mock execute_claude_task instead).
-    """
-    stages = {
-        "research": "π.workflow.tools.research_codebase",
-        "plan": "π.workflow.tools.create_plan",
-        "review": "π.workflow.tools.review_plan",
-        "implement": "π.workflow.tools.implement_plan",
-        "commit": "π.workflow.tools.commit_changes",
-    }
-
-    mocks = {}
-    patches = []
-
-    for name, path in stages.items():
-        patcher = patch(path)
-        mock = patcher.start()
-        mock.return_value = f"[COMPLETE] {name.capitalize()} stage completed"
-        mocks[name] = mock
-        patches.append(patcher)
-
-    yield mocks
-
-    for patcher in patches:
-        patcher.stop()
-
-
-@pytest.fixture
-def mock_rpi_workflow_full():
-    """Mock StagedWorkflow with complete stage simulation.
-
-    Simulates a full workflow execution with all stages returning success.
-    Note: Must patch at π.cli.main.StagedWorkflow since that's where the CLI imports it.
-    """
-    with patch("π.cli.main.StagedWorkflow") as mock_class:
-        mock_instance = MagicMock()
-
-        # Configure return value
-        mock_result = MagicMock()
-        mock_result.status = "success"
-        mock_result.research_doc_path = "/tmp/research.md"
-        mock_result.plan_doc_path = "/tmp/plan.md"
-        mock_result.files_changed = ["test.py"]
-        mock_result.commit_hash = "abc1234"
-        mock_instance.return_value = mock_result
-
-        mock_class.return_value = mock_instance
-        yield mock_instance
+    return fresh_workflow_context

@@ -1,6 +1,6 @@
-"""Tests for π.config.stages module."""
+"""Tests for π.core.models stage configuration."""
 
-from π.config import STAGE_TIERS, WORKFLOW, WorkflowStage
+from π.core import STAGE_TIERS, WorkflowStage
 from π.core.enums import Tier
 
 
@@ -48,15 +48,3 @@ class TestStageTiers:
         """All tier values should be valid Tier enum members."""
         for stage, tier in STAGE_TIERS.items():
             assert isinstance(tier, Tier), f"{stage} has invalid tier: {tier}"
-
-
-class TestWorkflowConfig:
-    """Tests for WORKFLOW config."""
-
-    def test_max_iters_is_positive(self):
-        """max_iters should be a positive integer."""
-        assert WORKFLOW.max_iters > 0
-
-    def test_max_iters_value(self):
-        """max_iters should be 5."""
-        assert WORKFLOW.max_iters == 5

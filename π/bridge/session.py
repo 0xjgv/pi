@@ -21,13 +21,13 @@ from claude_agent_sdk.types import (
     ToolUseBlock,
 )
 
-from basic.config import COMMAND_MAP, get_stage_agent_options
-from basic.observer import dispatch_message
+from π.config import COMMAND_MAP, get_stage_agent_options
 from π.core.enums import Command, DocType
+from π.observer import dispatch_message
 from π.support.directory import get_project_root
 
 if TYPE_CHECKING:
-    from basic.observer import WorkflowObserver
+    from π.observer import WorkflowObserver
 
 logger = logging.getLogger(__name__)
 
