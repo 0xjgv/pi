@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from basic.observer import WorkflowObserver
     from π.core.enums import Command, DocType
 
 
@@ -25,11 +26,13 @@ class WorkflowContext:
         session_ids: Maps Command enum to session IDs for resumption.
         doc_paths: Maps DocType enum to produced document paths.
         objective: The workflow objective/goal being executed.
+        observer: Optional observer for logging stage agent events.
     """
 
     session_ids: dict[Command, str] = field(default_factory=dict)
     doc_paths: dict[DocType, str] = field(default_factory=dict)
     objective: str | None = None
+    observer: WorkflowObserver | None = None
 
 
 _ctx: ContextVar[WorkflowContext | None] = ContextVar("mcp_workflow_ctx", default=None)

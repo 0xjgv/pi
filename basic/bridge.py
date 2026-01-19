@@ -10,6 +10,7 @@ import logging
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import (
@@ -21,8 +22,12 @@ from claude_agent_sdk.types import (
 )
 
 from basic.config import COMMAND_MAP, get_stage_agent_options
+from basic.observer import dispatch_message
 from π.core.enums import Command, DocType
 from π.support.directory import get_project_root
+
+if TYPE_CHECKING:
+    from basic.observer import WorkflowObserver
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +162,7 @@ def _process_message(
 async def run_claude_session(
     *,
     options: ClaudeAgentOptions | None = None,
+    observer: WorkflowObserver | None = None,
     session_id: str | None = None,
     document: Path | None = None,
     tool_command: Command,
@@ -172,6 +178,7 @@ async def run_claude_session(
         session_id: Optional session ID for resumption.
         document: Optional document path to include.
         options: Optional agent options override (for testing).
+        observer: Optional observer to log stage agent events.
 
     Returns:
         Tuple of (result content, new session_id, doc_path or None, files_changed).
@@ -181,6 +188,7 @@ async def run_claude_session(
         RuntimeError: If agent execution fails.
     """
     tracker = WriteTracker(command=tool_command)
+    agent_id = f"stage:{tool_command.value}"
 
     # Build command string from slash command
     command = COMMAND_MAP.get(tool_command)
@@ -217,6 +225,10 @@ async def run_claude_session(
             await client.query(command, session_id=session_id or "default")
 
             async for message in client.receive_response():
+                # Dispatch to observer for logging (if provided)
+                if observer:
+                    dispatch_message(message, observer, agent_id=agent_id)
+
                 if isinstance(message, ResultMessage):
                     if message.result:
                         new_session_id = message.session_id

@@ -72,8 +72,16 @@ class LiveObserver:
             self.live.__exit__(exc_type, exc_val, exc_tb)
             self.live = None
 
-    def on_tool_start(self, name: str, input: dict) -> None:
-        """Handle tool start event."""
+    def on_tool_start(
+        self, name: str, input: dict, *, agent_id: str = "orchestrator"
+    ) -> None:
+        """Handle tool start event.
+
+        Only orchestrator events are displayed in the live view.
+        """
+        if agent_id != "orchestrator":
+            return  # Skip stage agent events in live display
+
         # Finish previous tool if any (in case on_tool_end wasn't called)
         if self.current_tool:
             self.current_tool.status = "done"
@@ -85,8 +93,21 @@ class LiveObserver:
         )
         self._refresh()
 
-    def on_tool_end(self, name: str, result: str | None, is_error: bool) -> None:
-        """Handle tool end event."""
+    def on_tool_end(
+        self,
+        name: str,
+        result: str | None,
+        is_error: bool,
+        *,
+        agent_id: str = "orchestrator",
+    ) -> None:
+        """Handle tool end event.
+
+        Only orchestrator events are displayed in the live view.
+        """
+        if agent_id != "orchestrator":
+            return  # Skip stage agent events in live display
+
         if self.current_tool:
             self.current_tool.status = "error" if is_error else "done"
             self.current_tool.result_preview = result[:100] if result else None
@@ -94,17 +115,36 @@ class LiveObserver:
             self.current_tool = None
             self._refresh()
 
-    def on_text(self, text: str) -> None:
-        """Handle text output event."""
+    def on_text(self, text: str, *, agent_id: str = "orchestrator") -> None:
+        """Handle text output event.
+
+        Only orchestrator events are displayed in the live view.
+        """
+        if agent_id != "orchestrator":
+            return  # Skip stage agent events in live display
+
         self.last_text = text[:200] if text else ""
         self._refresh()
 
-    def on_thinking(self, text: str) -> None:
+    def on_thinking(self, text: str, *, agent_id: str = "orchestrator") -> None:
         """Handle thinking event."""
         # Could show a thinking indicator, for now just track
 
-    def on_complete(self, turns: int, cost: float, duration_ms: int) -> None:
-        """Handle workflow completion event."""
+    def on_complete(
+        self,
+        turns: int,
+        cost: float,
+        duration_ms: int,
+        *,
+        agent_id: str = "orchestrator",
+    ) -> None:
+        """Handle workflow completion event.
+
+        Only orchestrator completion triggers summary display.
+        """
+        if agent_id != "orchestrator":
+            return  # Skip stage agent completions
+
         # Finish current tool if any
         if self.current_tool:
             self.current_tool.status = "done"
@@ -117,7 +157,9 @@ class LiveObserver:
 
         self._print_summary(turns, cost, duration_ms)
 
-    def on_system(self, subtype: str, data: dict) -> None:
+    def on_system(
+        self, subtype: str, data: dict, *, agent_id: str = "orchestrator"
+    ) -> None:
         """Handle system message event.
 
         System messages are logged but not displayed in the live view.

@@ -40,13 +40,14 @@ from π.core.enums import Command
 )
 async def research_codebase(args: dict) -> dict:
     """Research the codebase based on a query."""
-    ctx = get_workflow_ctx()
     cmd = Command.RESEARCH_CODEBASE
+    ctx = get_workflow_ctx()
 
     result, session_id, doc_path, _ = await run_claude_session(
-        tool_command=cmd,
-        query=args["query"],
         session_id=ctx.session_ids.get(cmd),
+        observer=ctx.observer,
+        query=args["query"],
+        tool_command=cmd,
     )
 
     # Update context
@@ -68,14 +69,15 @@ async def research_codebase(args: dict) -> dict:
 )
 async def create_plan(args: dict) -> dict:
     """Create a plan based on a research document."""
-    ctx = get_workflow_ctx()
     cmd = Command.CREATE_PLAN
+    ctx = get_workflow_ctx()
 
     result, session_id, doc_path, _ = await run_claude_session(
-        tool_command=cmd,
-        query=args["query"],
-        session_id=ctx.session_ids.get(cmd),
         document=Path(args["research_path"]),
+        session_id=ctx.session_ids.get(cmd),
+        query=args["query"],
+        tool_command=cmd,
+        observer=ctx.observer,
     )
 
     # Update context
@@ -97,14 +99,15 @@ async def create_plan(args: dict) -> dict:
 )
 async def review_plan(args: dict) -> dict:
     """Review a plan document."""
-    ctx = get_workflow_ctx()
     cmd = Command.REVIEW_PLAN
+    ctx = get_workflow_ctx()
 
     result, session_id, doc_path, _ = await run_claude_session(
-        tool_command=cmd,
-        query=args["query"],
         session_id=ctx.session_ids.get(cmd),
         document=Path(args["plan_path"]),
+        observer=ctx.observer,
+        query=args["query"],
+        tool_command=cmd,
     )
 
     # Update context
@@ -132,8 +135,8 @@ async def review_plan(args: dict) -> dict:
 )
 async def iterate_plan(args: dict) -> dict:
     """Iterate on a plan based on feedback."""
-    ctx = get_workflow_ctx()
     cmd = Command.ITERATE_PLAN
+    ctx = get_workflow_ctx()
 
     full_query = (
         f"## Review Feedback to Address\n{args['feedback']}\n\n"
@@ -141,10 +144,11 @@ async def iterate_plan(args: dict) -> dict:
     )
 
     result, session_id, doc_path, _ = await run_claude_session(
-        tool_command=cmd,
-        query=full_query,
         session_id=ctx.session_ids.get(cmd),
         document=Path(args["plan_path"]),
+        observer=ctx.observer,
+        tool_command=cmd,
+        query=full_query,
     )
 
     # Update context
@@ -166,12 +170,13 @@ async def iterate_plan(args: dict) -> dict:
 )
 async def implement_plan(args: dict) -> dict:
     """Implement a plan by executing all phases."""
-    ctx = get_workflow_ctx()
     cmd = Command.IMPLEMENT_PLAN
+    ctx = get_workflow_ctx()
 
     result, session_id, _, files_changed = await run_claude_session(
         session_id=ctx.session_ids.get(cmd),
         document=Path(args["plan_path"]),
+        observer=ctx.observer,
         query=args["query"],
         tool_command=cmd,
     )
@@ -197,9 +202,10 @@ async def commit_changes(args: dict) -> dict:
     cmd = Command.COMMIT
 
     result, session_id, _, _ = await run_claude_session(
-        tool_command=cmd,
-        query=args["query"],
         session_id=ctx.session_ids.get(cmd),
+        observer=ctx.observer,
+        query=args["query"],
+        tool_command=cmd,
     )
 
     # Update context
@@ -217,8 +223,8 @@ async def commit_changes(args: dict) -> dict:
 )
 async def write_claude_md(args: dict) -> dict:
     """Update CLAUDE.md based on changes."""
-    ctx = get_workflow_ctx()
     cmd = Command.WRITE_CLAUDE_MD
+    ctx = get_workflow_ctx()
 
     full_query = (
         f"Based on the following recent codebase changes, update CLAUDE.md:\n\n"
@@ -228,6 +234,7 @@ async def write_claude_md(args: dict) -> dict:
 
     result, session_id, _, files_changed = await run_claude_session(
         session_id=ctx.session_ids.get(cmd),
+        observer=ctx.observer,
         tool_command=cmd,
         query=full_query,
     )

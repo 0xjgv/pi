@@ -182,6 +182,7 @@ def get_stage_agent_options(*, cwd: Path | None = None) -> ClaudeAgentOptions:
     """
     options = _get_base_options(cwd=cwd)
     options.allowed_tools = STAGE_AGENT_TOOLS
+    options.setting_sources = ["project"]
     return options
 
 
