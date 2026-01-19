@@ -1,23 +1,33 @@
-"""CLI entry point for the π workflow agent."""
+"""CLI entry point for π workflow using Claude Agent SDK with MCP tools.
+
+Demonstrates how to use custom MCP tools (research, plan, implement, etc.)
+with the Claude SDK client. Structured output ensures the orchestrator must
+call tools to fill required fields (can't hallucinate file paths, etc.).
+"""
 
 import argparse
+import asyncio
 import logging
-import os
 import sys
 from importlib.metadata import version as get_version
-from pathlib import Path
 
+from claude_agent_sdk import ClaudeSDKClient
+from claude_agent_sdk.types import ResultMessage
 from dotenv import load_dotenv
-from rich.panel import Panel
-from rich.prompt import Confirm
 
-from π.cli.live_display import LiveArtifactDisplay
-from π.cli.speech import SpeechNotifier
+from π.cli.display import LiveObserver
+from π.config import get_logs_dir, get_orchestrator_options, setup_logging
 from π.console import console
-from π.core import Tier, get_lm
-from π.support import archive_old_documents, cleanup_old_logs, get_logs_dir
-from π.utils import prevent_sleep, setup_logging, speak
-from π.workflow import CheckpointManager, CheckpointState, StagedWorkflow
+from π.utils import get_project_root, prevent_sleep, speak
+from π.workflow import (
+    CompositeObserver,
+    LoggingObserver,
+    WorkflowOutput,
+    dispatch_message,
+    get_workflow_ctx,
+    reset_workflow_ctx,
+)
+from π.workflow.tools import WORKFLOW_TOOLS, workflow_server
 
 logger = logging.getLogger(__name__)
 VERSION = get_version("pi-rpi")
@@ -31,39 +41,6 @@ def _create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("objective", nargs="?", help="The objective for the agent")
     parser.add_argument(
-        "--tier",
-        choices=["low", "med", "high"],
-        default="high",
-        help="Model tier (default: high)",
-    )
-    parser.add_argument(
-        "--max-iters",
-        type=int,
-        default=5,
-        help="Maximum ReAct iterations per stage (default: 5)",
-    )
-    parser.add_argument(
-        "--max-retries",
-        type=int,
-        default=3,
-        help="Maximum retry attempts per stage (default: 3)",
-    )
-    parser.add_argument(
-        "--checkpoint-path",
-        type=Path,
-        help="Custom checkpoint file path (default: .π/checkpoint.json)",
-    )
-    parser.add_argument(
-        "--no-resume",
-        action="store_true",
-        help="Ignore existing checkpoint and start fresh",
-    )
-    parser.add_argument(
-        "--clear-checkpoint",
-        action="store_true",
-        help="Delete existing checkpoint and exit (does not run workflow)",
-    )
-    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -72,99 +49,99 @@ def _create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _check_resume(
-    checkpoint: CheckpointManager,
-    objective: str,
-) -> CheckpointState | None:
-    """Check for existing checkpoint and prompt for resume."""
+async def run(objective: str, *, verbose: bool = False) -> WorkflowOutput | None:
+    """Run the Claude agent with workflow MCP tools.
 
-    state = checkpoint.load()
-    if not state:
-        return None
+    The orchestrator uses structured output to ensure it must call tools
+    to satisfy required fields. Tools provide ground truth for file paths,
+    commit hashes, and other verifiable data.
 
-    # Different objective - clear and start fresh
-    if state.objective != objective:
-        console.print(
-            "[yellow]Checkpoint exists for different objective, ignoring[/yellow]"
-        )
-        checkpoint.clear()
-        return None
+    Args:
+        objective: The workflow objective/goal to execute.
+        verbose: If True, enable debug logging to console.
 
-    resume_stage = checkpoint.get_resume_stage()
-    if not resume_stage:
-        return None
+    Returns:
+        WorkflowOutput if structured output was received, None otherwise.
+    """
+    # Set up logging infrastructure
+    logs_dir = get_logs_dir()
+    log_path = setup_logging(logs_dir, verbose=verbose)
 
-    # Prompt user for resume
-    last_stage = state.last_completed_stage
-    prompt = (
-        f"[yellow]Found checkpoint at stage '{last_stage}'. "
-        f"Resume from '{resume_stage}'?[/yellow]\n"
-        "[dim](Note: Stage will restart from the beginning, not mid-execution)[/dim]"
+    # Initialize fresh context with objective
+    reset_workflow_ctx()
+    ctx = get_workflow_ctx()
+    ctx.objective = objective
+
+    # Get orchestrator options and extend with MCP workflow tools
+    options = get_orchestrator_options(cwd=get_project_root())
+    options.mcp_servers = {"workflow": workflow_server}
+    options.allowed_tools += WORKFLOW_TOOLS
+
+    # Enable structured output - forces schema compliance
+    # The orchestrator MUST call tools to fill required fields
+    options.output_format = {
+        "type": "json_schema",
+        "schema": WorkflowOutput.model_json_schema(),
+    }
+
+    # Create observers: Live display + File logging
+    system_prompt = str(options.system_prompt) if options.system_prompt else None
+    log_observer = LoggingObserver(
+        log_path,
+        system_prompt=system_prompt,
+        objective=objective,
     )
-    if Confirm.ask(prompt, default=True):
-        console.print(
-            f"[muted]Resuming from stage:[/muted] [success]{resume_stage}[/success]"
-        )
-        return state
+    live_observer = LiveObserver()
+    observer = CompositeObserver([live_observer, log_observer])
 
-    checkpoint.clear()
-    console.print("[muted]Starting fresh workflow[/muted]")
-    return None
+    # Store observer in context for stage agents to use
+    ctx.observer = observer
 
+    workflow_result: WorkflowOutput | None = None
 
-def run_workflow_mode(
-    objective: str,
-    *,
-    tier: Tier = Tier.HIGH,
-    max_iters: int = 5,
-    max_retries: int = 3,
-    checkpoint_path: Path | None = None,
-    no_resume: bool = False,
-) -> None:
-    """Execute objective using StagedWorkflow pipeline."""
-    checkpoint = CheckpointManager(
-        checkpoint_path=checkpoint_path,
-        max_retries=max_retries,
-    )
-    resume_state = None
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query(objective)
+        with live_observer:  # Only LiveObserver needs context manager for Rich
+            async for message in client.receive_response():
+                dispatch_message(message, observer)
 
-    # Check for existing checkpoint
-    if not no_resume and checkpoint.has_checkpoint():
-        resume_state = _check_resume(checkpoint, objective)
+                # Capture structured output from ResultMessage
+                if isinstance(message, ResultMessage) and message.structured_output:
+                    try:
+                        workflow_result = WorkflowOutput.model_validate(
+                            message.structured_output
+                        )
+                        logger.info(
+                            "Structured output received: status=%s, commit=%s",
+                            workflow_result.status,
+                            workflow_result.commit_hash,
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to validate structured output: %s", e)
 
-    lm = get_lm(tier)
-    workflow = StagedWorkflow(lm=lm, checkpoint=checkpoint, max_iters=max_iters)
+    # Log final context state
+    ctx = get_workflow_ctx()
+    if ctx.session_ids or ctx.doc_paths:
+        live_observer.console.print("\n[dim]Session IDs:[/dim]", ctx.session_ids)
+        live_observer.console.print("[dim]Doc Paths:[/dim]", ctx.doc_paths)
 
-    display = LiveArtifactDisplay()
-    speech = SpeechNotifier()
-    display.start()
-    speech.start()
-    try:
-        result = workflow(objective=objective, resume_state=resume_state)
-    finally:
-        speech.stop()
-        display.stop()
+    # Log structured output summary
+    if workflow_result:
+        live_observer.console.print("\n[bold]Workflow Output:[/bold]")
+        live_observer.console.print(f"  Status: {workflow_result.status}")
+        live_observer.console.print(f"  Research: {workflow_result.research_doc_path}")
+        if workflow_result.plan_doc_path:
+            live_observer.console.print(f"  Plan: {workflow_result.plan_doc_path}")
+        if workflow_result.commit_hash:
+            live_observer.console.print(f"  Commit: {workflow_result.commit_hash}")
+        live_observer.console.print(f"  Summary: {workflow_result.summary}")
 
-    # Build summary content
-    lines = [f"[success]Status:[/success] {result.status}"]
-    if reason := getattr(result, "reason", None):
-        lines.append(f"[muted]Reason:[/muted] {reason}")
-    if research := getattr(result, "research_doc_path", None):
-        lines.append(f"[muted]Research:[/muted] [path]{research}[/]")
-    if plan := getattr(result, "plan_doc_path", None):
-        lines.append(f"[muted]Plan:[/muted] [path]{plan}[/]")
-    if files := getattr(result, "files_changed", None):
-        lines.append(f"[muted]Files:[/muted] {files}")
-    if commit := getattr(result, "commit_hash", None):
-        lines.append(f"[muted]Commit:[/muted] [path]{commit}[/]")
+    # Show log path
+    logging.shutdown()  # Ensure all handlers flushed
+    if log_path.exists():
+        live_observer.console.print(f"\n[dim]Debug log:[/dim] {log_path}")
 
-    console.print(
-        Panel(
-            "\n".join(lines),
-            title="[success]Workflow Complete[/success]",
-            border_style="green",
-        )
-    )
+    return workflow_result
 
 
 @prevent_sleep
@@ -176,16 +153,6 @@ def main(argv: list[str] | None = None) -> None:
 
     logger.info(f"π (v{VERSION})")
     console.print(f"[heading]π[/heading] [muted](v{VERSION})[/muted]")
-
-    # Handle --clear-checkpoint before anything else
-    if args.clear_checkpoint:
-        checkpoint = CheckpointManager()
-        if checkpoint.has_checkpoint():
-            checkpoint.clear()
-            console.print("[success]Checkpoint cleared[/success]")
-        else:
-            console.print("[muted]No checkpoint to clear[/muted]")
-        return
 
     # Use positional arg if provided, otherwise try stdin if piped
     if args.objective:
@@ -202,33 +169,8 @@ def main(argv: list[str] | None = None) -> None:
         parser.print_help()
         return
 
-    logs_dir = get_logs_dir()
-    cleanup_old_logs(logs_dir)  # Clean old logs first
-    archive_old_documents()  # Archive old research/plan documents
-
-    # Enable verbose LM logging when --verbose flag set
-    if args.verbose:
-        os.environ["PI_LM_DEBUG"] = "1"
-
-    log_path = setup_logging(logs_dir, verbose=args.verbose)
-
-    logger.info("Objective: %s", objective)
-
-    run_workflow_mode(
-        objective,
-        tier=Tier(args.tier),
-        max_iters=args.max_iters,
-        max_retries=args.max_retries,
-        checkpoint_path=args.checkpoint_path,
-        no_resume=args.no_resume,
-    )
-
-    speak("π complete")
-
-    # Only show log path if file was actually created
-    logging.shutdown()  # Ensure all handlers flushed/closed
-    if log_path.exists():
-        console.print(f"\n[muted]Debug log:[/muted] [path]{log_path}[/path]")
+    asyncio.run(run(objective, verbose=args.verbose))
+    speak("workflow complete")
 
 
 if __name__ == "__main__":

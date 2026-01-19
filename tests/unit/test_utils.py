@@ -1,9 +1,8 @@
-"""Tests for π.utils module."""
+"""Tests for π.config module - logging setup."""
 
 import logging
 
-from π.support import get_logs_dir
-from π.utils import setup_logging
+from π.config import get_logs_dir, setup_logging
 
 
 class TestSetupLogging:

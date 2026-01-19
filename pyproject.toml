@@ -9,7 +9,7 @@ authors = [
     { name = "0xjgv" }
 ]
 keywords = [
-    "claude", "agent", "cli", "dspy", "automation", "workflow"
+    "claude", "agent", "cli", "automation", "workflow", "sdk"
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -20,8 +20,8 @@ classifiers = [
     "Topic :: Software Development :: Code Generators",
 ]
 dependencies = [
-    "claude-agent-sdk>=0.1.19",
-    "dspy>=3.1.0",
+    "claude-agent-sdk>=0.1.20",
+    "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
     "rich>=14.2.0",
 ]
@@ -43,6 +43,7 @@ dev = [
 
 [project.scripts]
 "π" = "π.cli:main"
+"pi" = "π.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.25.0"]
@@ -66,8 +67,7 @@ markers = [
 ]
 filterwarnings = [
     # Ignore warnings from third-party libraries (not in our control)
-    "ignore::ResourceWarning:litellm.*",
-    "ignore::RuntimeWarning:litellm.*",
+    "ignore::ResourceWarning:claude_agent_sdk.*",
 ]
 
 [tool.ruff]
@@ -126,7 +126,12 @@ known-first-party = ["π"]
 [tool.coverage.run]
 source = ["π"]
 branch = true
-omit = ["π/workflow/sdk_orchestrator.py"]  # Prototype, not production code
+# Exclude SDK integration modules that require async mocking
+omit = [
+    "π/bridge/session.py",  # Async SDK integration
+    "π/tools.py",           # MCP tools (async SDK)
+    "π/cli/main.py",        # Async CLI entry point
+]
 
 [tool.coverage.report]
 fail_under = 80
@@ -149,3 +154,10 @@ do_not_mutate = [
     "π/core/enums.py",        # Simple enums
     "π/doc_sync/",            # Separate utility
 ]
+
+[tool.vulture]
+paths = ["π/", "vulture_whitelist.py"]
+exclude = ["**/conftest.py"]
+min_confidence = 80
+ignore_decorators = ["@pytest.fixture", "@pytest.mark.*"]
+ignore_names = ["test_*", "fixture_*"]

@@ -1,8 +1,8 @@
-"""Tests for shared state module."""
+"""Tests for π.workflow.state module."""
 
 from __future__ import annotations
 
-from π.state import (
+from π.workflow.state import (
     ArtifactEvent,
     ArtifactStatus,
     emit_artifact_event,

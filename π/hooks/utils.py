@@ -3,7 +3,7 @@
 import subprocess
 from pathlib import Path
 
-from π.support.directory import get_project_root
+from π.utils import get_project_root
 
 _home_dir = Path.home()
 

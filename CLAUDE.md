@@ -1,11 +1,11 @@
 # π
 
-CLI orchestrating Claude agents via DSPy ReAct for autonomous research → design → execute workflows.
+CLI orchestrating Claude agents via SDK tools for autonomous research → design → execute workflows.
 
 ## Stack (pyproject.toml)
 
 - Python 3.13+ with uv, hatchling
-- claude-agent-sdk, dspy, rich
+- claude-agent-sdk, pydantic, python-dotenv, rich
 - pytest + pytest-asyncio, ruff, vulture, mutmut
 
 ## Commands
@@ -31,24 +31,24 @@ CLI orchestrating Claude agents via DSPy ReAct for autonomous research → desig
 
 **Modules:**
 
-- `core/` — Leaf layer: enums, models, errors, constants, env (no internal deps)
+- `core/` — Leaf layer: enums, models, errors, constants (no internal deps)
 - `cli/` — Entry point, live display, logging setup
-- `config.py` — Stage/tool config, re-exports from core
-- `bridge/` — ClaudeCodeLM: DSPy ↔ Claude SDK integration
-- `workflow/` — DSPy ReAct agents, orchestrator, checkpoint, sync→async bridge
-- `support/` — Directory management, permissions, AITL
+- `config.py` — Agent options, command mapping, logging configuration
+- `bridge/` — Claude SDK async session integration
 - `hooks/` — PreToolUse (bash safety), PostToolUse (linting)
+- `tools.py` — MCP workflow tools
+- `context.py` — Workflow context management
+- `observer.py` — Event observers for stage agents
+- `models.py`, `state.py` — Workflow models and state
 - `doc_sync/` — Documentation synchronization utility
-- Root: `console.py`, `utils.py`, `state.py` — shared utilities
-
-**AITL**: Agent-in-the-loop — workflow agents ask questions answered autonomously by a codebase-aware agent (Read/Glob/Grep). No human intervention.
+- Root: `console.py`, `utils.py` — shared utilities (project root detection, system helpers)
 
 ## Conventions
 
 - **Type hints**: `str | None`, `dict[str, T]` (PEP 604, built-in generics)
 - **Docstrings**: Google-style
 - **Functions**: `*,` for keyword-only args
-- **Async**: Nested `async def` with `get_event_loop().run_until_complete()` wrapper
+- **Async**: `async def` with `asyncio.run()` wrapper
 - **Logging**: `logger = logging.getLogger(__name__)`
 - **Tests**: Class-based `TestFeature`, `@pytest.mark.asyncio`
 
