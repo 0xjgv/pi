@@ -35,14 +35,13 @@ CLI orchestrating Claude agents via SDK tools for autonomous research → design
 - `cli/` — Entry point, live display, logging setup
 - `config.py` — Agent options, command mapping, logging configuration
 - `bridge/` — Claude SDK async session integration
-- `support/` — Directory management, permissions callback
 - `hooks/` — PreToolUse (bash safety), PostToolUse (linting)
 - `tools.py` — MCP workflow tools
 - `context.py` — Workflow context management
 - `observer.py` — Event observers for stage agents
 - `models.py`, `state.py` — Workflow models and state
 - `doc_sync/` — Documentation synchronization utility
-- Root: `console.py`, `utils.py` — shared utilities
+- Root: `console.py`, `utils.py` — shared utilities (project root detection, system helpers)
 
 ## Conventions
 

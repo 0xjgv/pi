@@ -23,7 +23,7 @@ from claude_agent_sdk.types import (
 
 from π.config import COMMAND_MAP, get_stage_agent_options
 from π.core.enums import Command, DocType
-from π.support.directory import get_project_root
+from π.utils import get_project_root
 from π.workflow.observer import dispatch_message
 
 if TYPE_CHECKING:

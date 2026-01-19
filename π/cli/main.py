@@ -18,8 +18,7 @@ from dotenv import load_dotenv
 from π.cli.display import LiveObserver
 from π.config import get_logs_dir, get_orchestrator_options, setup_logging
 from π.console import console
-from π.support.directory import get_project_root
-from π.utils import prevent_sleep, speak
+from π.utils import get_project_root, prevent_sleep, speak
 from π.workflow import (
     CompositeObserver,
     LoggingObserver,

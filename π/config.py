@@ -14,12 +14,13 @@ from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
 from π.core.enums import Command
 from π.hooks import check_bash_command, check_file_format
-from π.support.directory import get_project_root
+from π.utils import get_project_root
 
 logger = logging.getLogger(__name__)
 
 # Default logs directory (relative to project root)
 LOGS_DIR_NAME = ".π/logs"
+PI_GITIGNORE_ENTRY = ".π/\n"
 
 # Project root for command discovery
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -184,14 +185,33 @@ def get_stage_agent_options(*, cwd: Path | None = None) -> ClaudeAgentOptions:
     return options
 
 
-def get_logs_dir() -> Path:
+def _ensure_gitignore(root: Path) -> None:
+    """Add .π/ to root .gitignore if not already present."""
+    gitignore = root / ".gitignore"
+    if gitignore.exists():
+        content = gitignore.read_text()
+        lines = content.splitlines()
+        if ".π/" not in lines and ".π" not in lines:
+            gitignore.write_text(content.rstrip("\n") + "\n" + PI_GITIGNORE_ENTRY)
+    else:
+        gitignore.write_text(PI_GITIGNORE_ENTRY)
+
+
+def get_logs_dir(root: Path | None = None) -> Path:
     """Get the logs directory, creating it if necessary.
+
+    Also adds `.π/` to the root .gitignore if not already present.
+
+    Args:
+        root: Project root path. Defaults to detected project root.
 
     Returns:
         Path to the logs directory.
     """
-    logs_dir = get_project_root() / LOGS_DIR_NAME
+    root = root or get_project_root()
+    logs_dir = root / LOGS_DIR_NAME
     logs_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_gitignore(root)
     return logs_dir
 
 
@@ -213,7 +233,7 @@ def setup_logging(log_dir: Path, *, verbose: bool = False) -> Path:
     pi_logger.handlers.clear()
 
     timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-    log_path = log_dir / f"workflow-{timestamp}.log"
+    log_path = log_dir / f"{timestamp}.log"
 
     # File handler for DEBUG-level logging
     file_handler = logging.FileHandler(log_path, delay=True)

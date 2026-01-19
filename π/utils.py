@@ -1,59 +1,55 @@
 """Utility functions for the π CLI."""
 
 import logging
+import subprocess
 from collections.abc import Callable
-from datetime import datetime
 from functools import wraps
 from os import getenv, getpid, system
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
 
-def setup_logging(log_dir: Path, *, verbose: bool = False) -> Path:
-    """Configure logging for the π CLI.
+PROJECT_MARKERS = {
+    ".git",
+    "CLAUDE.md",
+    "pyproject.toml",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+}
 
-    Uses delayed file creation - log file only created when first message written.
+
+def get_project_root(start_path: Path | None = None) -> Path:
+    """Detect project root: CWD if has markers, else git root, else CWD.
 
     Args:
-        log_dir: Directory to store log files.
-        verbose: If True, also log DEBUG messages to console.
+        start_path: Starting path for detection. Defaults to CWD.
 
     Returns:
-        Path to the log file (may not exist until first log message).
+        Detected project root path.
     """
-    logger = logging.getLogger("π")
-    logger.handlers.clear()
+    cwd = start_path or Path.cwd()
 
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
-    log_path = log_dir / f"{timestamp}.log"
+    # Check if CWD has project markers
+    if any((cwd / m).exists() for m in PROJECT_MARKERS):
+        return cwd
 
-    file_handler = logging.FileHandler(log_path, delay=True)
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            datefmt="%H:%M:%S",
+    # Fallback: git root
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=True,
         )
-    )
-    logger.addHandler(file_handler)
+        return Path(result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
 
-    # Add console handler when verbose
-    if verbose:
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.DEBUG)
-        console_handler.setFormatter(
-            logging.Formatter("[%(levelname)s] %(name)s: %(message)s")
-        )
-        logger.addHandler(console_handler)
-
-    # Always capture DEBUG to file; logger must allow messages through
-    logger.setLevel(logging.DEBUG)
-
-    # Silence noisy third-party loggers
-    for name in ("httpcore", "httpx", "claude_agent_sdk"):
-        logging.getLogger(name).setLevel(logging.WARNING)
-
-    return log_path
+    # Final fallback: CWD
+    return cwd
 
 
 def prevent_sleep(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -73,8 +69,3 @@ def speak(text: str) -> None:
     if getenv("PYTEST_CURRENT_TEST"):
         return
     system(f"say '{text}'")
-
-
-def truncate(s: str, length: int = 100, suffix: str = "...") -> str:
-    """Truncate string to length, adding suffix if truncated."""
-    return s[:length] + suffix if len(s) > length else s
