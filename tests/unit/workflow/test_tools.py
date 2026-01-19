@@ -15,6 +15,8 @@ from π.workflow.tools import (
     write_claude_md,
 )
 
+pytestmark = pytest.mark.no_api
+
 
 class TestResearchCodebase:
     """Tests for research_codebase tool."""
