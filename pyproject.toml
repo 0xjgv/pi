@@ -154,3 +154,10 @@ do_not_mutate = [
     "π/core/enums.py",        # Simple enums
     "π/doc_sync/",            # Separate utility
 ]
+
+[tool.vulture]
+paths = ["π/", "vulture_whitelist.py"]
+exclude = ["**/conftest.py"]
+min_confidence = 80
+ignore_decorators = ["@pytest.fixture", "@pytest.mark.*"]
+ignore_names = ["test_*", "fixture_*"]
