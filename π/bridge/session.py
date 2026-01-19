@@ -7,7 +7,6 @@ No context access - all inputs are explicit parameters.
 from __future__ import annotations
 
 import logging
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -51,48 +50,6 @@ _PLANNING_COMMANDS = frozenset({
 
 # Module-level options cache (config, not workflow state)
 _cached_options: ClaudeAgentOptions | None = None
-
-
-def get_git_commit_hash(*, cwd: Path | None = None) -> str | None:
-    """Get the latest commit hash from git.
-
-    Args:
-        cwd: Working directory for git command.
-
-    Returns:
-        Short commit hash or None if git fails.
-    """
-    cwd = cwd or get_project_root()
-    result = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"],
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        check=False,
-    )
-    return result.stdout.strip() if result.returncode == 0 else None
-
-
-def get_git_changed_files(*, cwd: Path | None = None) -> list[str]:
-    """Get files changed in the latest commit.
-
-    Args:
-        cwd: Working directory for git command.
-
-    Returns:
-        List of changed file paths.
-    """
-    cwd = cwd or get_project_root()
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "HEAD~1"],
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        check=False,
-    )
-    if result.returncode != 0:
-        return []
-    return [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
 
 
 def _get_default_options() -> ClaudeAgentOptions:
