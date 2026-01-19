@@ -1,7 +1,7 @@
-"""Tests for π.context module."""
+"""Tests for π.workflow.context module."""
 
-from π.context import WorkflowContext, get_workflow_ctx, reset_workflow_ctx
 from π.core.enums import Command, DocType
+from π.workflow.context import WorkflowContext, get_workflow_ctx, reset_workflow_ctx
 
 
 class TestWorkflowContext:

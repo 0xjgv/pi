@@ -5,14 +5,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 
-CLI orchestrating Claude agents via DSPy ReAct for autonomous research → design → execute workflows.
+CLI orchestrating Claude agents via SDK tools for autonomous research → design → execute workflows.
 
 ## Highlights
 
-- **DSPy ReAct orchestration** — automatic tool selection and multi-step reasoning
+- **Claude SDK orchestration** — automatic tool selection and multi-step reasoning
 - **Full Claude Agent SDK tooling** — files, shell commands, web search, task management
 - **Three-stage pipeline** — Research → Design → Execute with early exit capability
-- **Agent-in-the-loop (AITL)** — autonomous question answering via codebase-aware agent
+- **Observer pattern** — real-time event tracking and display updates
 - **Safety hooks** — blocks dangerous commands, runs linters on file changes
 - **Sub-agent system** — parallel specialized agents for codebase exploration
 
@@ -44,7 +44,7 @@ User Objective
 └─────────────────────────────────────────────────┘
 ```
 
-Each stage uses a dedicated DSPy ReAct agent with configurable model tier.
+Each stage uses a dedicated Claude SDK session with MCP workflow tools.
 
 ## Prerequisites
 
@@ -103,68 +103,57 @@ echo "Analyze the test coverage" | π
 | Flag | Description |
 |------|-------------|
 | `-v, --verbose` | Enable debug logging (sets `PI_LM_DEBUG=1`) |
-| `--tier low\|med\|high` | Model tier: haiku / sonnet / opus (default: high) |
-| `--max-iters N` | ReAct iterations per stage (default: 5) |
-| `--max-retries N` | Stage retry attempts (default: 3) |
-| `--checkpoint-path PATH` | Custom checkpoint file path |
-| `--no-resume` | Ignore existing checkpoint, start fresh |
-| `--clear-checkpoint` | Delete checkpoint and exit |
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLIPROXY_API_BASE` | `http://localhost:8317` | DSPy LM endpoint |
-| `CLIPROXY_API_KEY` | — | API authentication key (required) |
 | `PI_LM_DEBUG` | `0` | Verbose LM logging (set by `--verbose`) |
 
 ## Model Tiers
 
-| Tier | Model | Use Case |
-|------|-------|----------|
-| `low` | Haiku 4.5 | Fast iteration, simple tasks |
-| `med` | Sonnet 4.5 | Balanced speed/capability |
-| `high` | Opus 4.5 | Complex reasoning (default) |
+All stages currently use **Opus 4.5** (HIGH tier) for maximum capability. The tier system exists in code for future flexibility:
+
+| Tier | Model |
+|------|-------|
+| `LOW` | Haiku 4.5 |
+| `MED` | Sonnet 4.5 |
+| `HIGH` | Opus 4.5 (current default) |
 
 ## Project Structure
 
 ```markdown
 π/                              # Main package
 ├── cli/
-│   └── main.py                 # CLI entry point
-├── config.py                   # Agent options, available tools
-├── console.py                  # Rich console singleton
-├── state.py                    # Spinner state management
-├── utils.py                    # Utilities (logging, speech, sleep prevention)
+│   ├── main.py                 # CLI entry point
+│   └── display.py              # Rich Live display observer
+├── bridge/
+│   └── session.py              # SDK async session integration
 ├── core/                       # Leaf layer (no internal deps)
-│   ├── enums.py                # Provider, Stage, Tier
+│   ├── constants.py            # Config dataclasses
+│   ├── enums.py                # Tier, WorkflowStage, Command
 │   ├── errors.py               # Package exceptions
-│   └── models.py               # LM factory, tier mappings
-├── workflow/                   # Core workflow execution
-│   ├── orchestrator.py         # StagedWorkflow (3-stage pipeline)
-│   ├── staged.py               # Stage functions (research, design, execute)
-│   ├── module.py               # DSPy signatures
-│   ├── tools.py                # Workflow tools (research, plan, implement)
-│   ├── bridge.py               # Sync-async bridge to Claude SDK
-│   ├── context.py              # Execution context (session, paths)
-│   ├── callbacks.py            # ReAct logging callback
-│   └── types.py                # Type validation (doc paths, results)
-├── support/                    # Supporting infrastructure
-│   ├── aitl.py                 # Agent-in-the-loop question answering
-│   ├── directory.py            # Log/document management
-│   └── permissions.py          # Tool permissions callback
+│   └── models.py               # Tier mappings
 ├── hooks/                      # Pre/PostToolUse validation
 │   ├── safety.py               # Dangerous command blocking
 │   ├── linting.py              # Post-write linting hook
 │   ├── checkers.py             # Language-specific linters
 │   ├── registry.py             # Checker registration
+│   ├── result.py               # HookResult dataclasses
 │   └── utils.py                # Hook utilities
-└── doc_sync/                   # Documentation synchronization
-    └── core.py                 # CLAUDE.md sync utility
+├── support/                    # Supporting infrastructure
+│   ├── directory.py            # Log/document management
+│   └── permissions.py          # Tool permissions callback
+├── config.py                   # Agent options, command mapping
+├── context.py                  # Workflow context state
+├── models.py                   # WorkflowOutput structured schema
+├── observer.py                 # Event observers for agents
+├── tools.py                    # MCP workflow tools
+├── state.py                    # Spinner state management
+├── console.py                  # Rich console singleton
+└── utils.py                    # Logging, speech utilities
 
-.claude/
-├── agents/                     # Sub-agent definitions
-└── commands/                   # Slash commands (stages 1-6)
+.claude/commands/               # Slash commands (stages 1-7)
 ```
 
 ## Sub-Agents
@@ -188,8 +177,9 @@ Specialized agents spawned in parallel for codebase exploration:
 | `/1_research_codebase` | Research codebase patterns and architecture |
 | `/2_create_plan` | Create implementation plan from research |
 | `/3_review_plan` | Review plan for completeness |
-| `/4_implement_plan` | Execute implementation from plan |
-| `/5_commit` | Create git commit with changes |
+| `/4_iterate_plan` | Refine plan based on feedback |
+| `/5_implement_plan` | Execute implementation from plan |
+| `/6_commit` | Create git commit with changes |
 | `/write-claude-md` | Create or update CLAUDE.md |
 
 ## Safety & Quality Hooks
@@ -217,8 +207,6 @@ Specialized agents spawned in parallel for codebase exploration:
 - Working directory is wherever you launch the CLI
 - Logs stored in `.π/logs/` (7-day retention)
 - Research/plan documents archived after 5 days
-- Checkpoint saves after each stage to `.π/checkpoint.json`
-- Re-run same objective to resume; use `--no-resume` to start fresh
 
 ## Development
 

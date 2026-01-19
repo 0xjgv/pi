@@ -1,9 +1,9 @@
-"""Tests for π.observer module."""
+"""Tests for π.workflow.observer module."""
 
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from π.observer import CompositeObserver, LoggingObserver
+from π.workflow.observer import CompositeObserver, LoggingObserver
 
 
 class TestLoggingObserver:

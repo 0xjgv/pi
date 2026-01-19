@@ -14,7 +14,6 @@ from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
 from π.core.enums import Command
 from π.hooks import check_bash_command, check_file_format
-from π.support import can_use_tool
 from π.support.directory import get_project_root
 
 logger = logging.getLogger(__name__)
@@ -139,7 +138,6 @@ def _get_base_options(*, cwd: Path | None = None) -> ClaudeAgentOptions:
             ],
         },
         permission_mode="acceptEdits",
-        can_use_tool=can_use_tool,
         cwd=cwd,
     )
 

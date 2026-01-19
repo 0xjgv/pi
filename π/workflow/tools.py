@@ -25,8 +25,8 @@ from π.bridge.session import (
     COMMAND_DOC_TYPE,
     run_claude_session,
 )
-from π.context import get_workflow_ctx
 from π.core.enums import Command
+from π.workflow.context import get_workflow_ctx
 
 # --- Tool Definitions ---
 

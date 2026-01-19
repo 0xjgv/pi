@@ -18,12 +18,17 @@ from dotenv import load_dotenv
 from π.cli.display import LiveObserver
 from π.config import get_logs_dir, get_orchestrator_options, setup_logging
 from π.console import console
-from π.context import get_workflow_ctx, reset_workflow_ctx
-from π.models import WorkflowOutput
-from π.observer import CompositeObserver, LoggingObserver, dispatch_message
 from π.support.directory import get_project_root
-from π.tools import WORKFLOW_TOOLS, workflow_server
 from π.utils import prevent_sleep, speak
+from π.workflow import (
+    CompositeObserver,
+    LoggingObserver,
+    WorkflowOutput,
+    dispatch_message,
+    get_workflow_ctx,
+    reset_workflow_ctx,
+)
+from π.workflow.tools import WORKFLOW_TOOLS, workflow_server
 
 logger = logging.getLogger(__name__)
 VERSION = get_version("pi-rpi")
