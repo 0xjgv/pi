@@ -74,3 +74,71 @@ class TestLiveObserver:
 
         # Should not create tool state for stage agent
         assert observer.current_tool is None
+
+    def test_on_tool_start_finishes_previous(self):
+        """Should finish previous tool when new one starts without on_tool_end."""
+        observer = LiveObserver()
+        observer.on_tool_start("FirstTool", {"key": "value"})
+        observer.on_tool_start("SecondTool", {"other": "data"})
+
+        # First tool should be in completed list with done status
+        assert len(observer.completed_tools) == 1
+        assert observer.completed_tools[0].name == "FirstTool"
+        assert observer.completed_tools[0].status == "done"
+
+        # Current tool should be the second one
+        assert observer.current_tool is not None
+        assert observer.current_tool.name == "SecondTool"
+
+    def test_on_text_filters_stage_agents(self):
+        """Should ignore text from stage agents."""
+        observer = LiveObserver()
+        observer.on_text("Stage agent text", agent_id="stage:research")
+
+        assert observer.last_text == ""
+
+    def test_on_complete_finishes_current_tool(self):
+        """Should finish current tool on completion."""
+        observer = LiveObserver()
+        observer.on_tool_start("TestTool", {})
+
+        observer.on_complete(turns=3, cost=0.01, duration_ms=1000)
+
+        assert observer.current_tool is None
+        assert len(observer.completed_tools) == 1
+        assert observer.completed_tools[0].status == "done"
+
+    def test_on_complete_ignores_stage_agents(self):
+        """Should ignore completion from stage agents."""
+        observer = LiveObserver()
+        observer.on_tool_start("TestTool", {})
+
+        observer.on_complete(
+            turns=3, cost=0.01, duration_ms=1000, agent_id="stage:impl"
+        )
+
+        # Should not finish the tool for stage agent completion
+        assert observer.current_tool is not None
+
+    def test_render_returns_panel(self):
+        """Should return a Panel with table structure."""
+        from rich.panel import Panel
+
+        observer = LiveObserver()
+        observer.on_tool_start("TestTool", {"file": "test.py"})
+
+        panel = observer._render()
+
+        assert isinstance(panel, Panel)
+        assert panel.title is not None
+
+    def test_context_manager_enter_exit(self):
+        """Should manage live display lifecycle."""
+        from unittest.mock import patch
+
+        observer = LiveObserver()
+
+        with patch.object(observer, "console"), observer:
+            assert observer.live is not None
+
+        assert observer.live is None

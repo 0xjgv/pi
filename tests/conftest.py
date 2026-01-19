@@ -312,7 +312,7 @@ def fresh_workflow_context():
     - Sets it as the current context
     - Cleans up after the test
     """
-    from π.context import get_workflow_ctx, reset_workflow_ctx
+    from π.workflow.context import get_workflow_ctx, reset_workflow_ctx
 
     reset_workflow_ctx()
     ctx = get_workflow_ctx()
@@ -346,3 +346,19 @@ def workflow_context_with_docs(
     fresh_workflow_context.doc_paths[DocType.PLAN] = str(plan_doc)
 
     return fresh_workflow_context
+
+
+@pytest.fixture
+def mock_run_claude_session():
+    """Mock run_claude_session to avoid API calls.
+
+    Returns:
+        A mock that can be configured with side_effect for different return values.
+        Default returns ("Result", "session-123", "/path/doc.md", ["file.py"]).
+    """
+    with patch("π.workflow.tools.run_claude_session") as mock:
+        async def default_impl(**_kwargs):
+            return ("Result", "session-123", "/path/doc.md", ["file.py"])
+
+        mock.side_effect = default_impl
+        yield mock
